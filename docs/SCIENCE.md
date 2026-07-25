@@ -62,7 +62,10 @@ Nobody wrote any of these numbers:
 - The plastochron (time between leaves)
 - Every vein in every leaf, and the vein hierarchy
 - Each leaf's silhouette, and how many teeth it has
-- How many petals a flower opens with (however many convergence points fit)
+- How many petals a flower opens with, and how many organs the flower makes at
+  all — the apex consumes itself founding them and stops when it runs out
+- Which whorl a floral organ belongs to (read off how far the apex had contracted
+  by the time it was founded)
 - When the plant flowers (when enough leaf area has made enough florigen)
 - Where branches appear (apical dominance = auxin competition)
 - Stem thickness (Murray's law on the traffic it carries)
@@ -78,7 +81,11 @@ Keep this list short. Every entry is a debt.
    Implemented as `comp[i]` scaling *gradient sharpness only* — see PITFALLS.
 2. **Floral organ identity by founding radius.** A continuous coordinate `q` read
    off the radius at which the organ was founded, not the ABC model. Softer than
-   naming four whorls, but still a positional rule.
+   naming four whorls, but still a positional rule. `q` is measured against the
+   radius the apex had when it converted; measuring it against the apex's *current*
+   radius is scale-invariant and reports zero forever, which is what it did until
+   2026-07-25. Where the identity boundary sits on `q` (`petalQ`) is chosen, and
+   with it the petal:stamen ratio — that number is part of this imposition.
 3. **Enclosing growth at high `q`.** That inner floral organs curve inward rather
    than flattening is asserted, not derived.
 4. **The florigen threshold.** That a tip converts at all is a modelled switch,

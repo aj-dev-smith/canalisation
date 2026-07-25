@@ -45,6 +45,7 @@ node test/fruit.mjs                                # grow fruits, ASCII radius m
 node test/flower2.mjs                              # full life cycle incl. axillary flowers
 node test/vein.mjs                                 # vein network + hierarchy ratios, ASCII
 node test/species.mjs                              # grow every species, print what each one does
+node test/whorl.mjs                                # floral organ identity — does q span its range?
 ```
 
 **Always test the science headlessly before touching the renderer.** A visual bug

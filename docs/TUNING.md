@@ -111,10 +111,54 @@ elongation 0.0052   internode 0.0072  internodeSpan 2.6   minInternode 0.18
 thicken 0.00030     nutation 0.0135   nutAmp 0.16
 organGrow 190       florigenRate 0.0016  florigenThresh 12  floralOrgans 9
 maxFlowers 6  organBudget 96  fruitScale 0.55
+floralGrace 320     floralCZ 0.42     petalQ 0.28
 ```
 Most stem length should come from **subapical elongation**, not tip extension —
 that is what spreads leaves apart and reads as growth rather than extrusion.
 Organs are born crowded (`minInternode` small) and stretch apart afterwards.
+
+### The flower: apex contraction and organ identity
+
+A determinate apex is a finite resource. Each floral organ recruits `organR` worth
+of tissue that is never replaced, so the competent flank contracts, later organs are
+founded further in, and `q` (identity) rises. Three constants govern it. **All were
+set by measurement — see JOURNAL.md for the full tables.**
+
+`floralCZ` — fraction of `rCZ` surviving conversion. Swept over the catalogue; the
+intuition that a *retained* central zone sharpens the radial gradient is wrong,
+because it pushes every organ outward:
+
+| `floralCZ` | organs | inner | mean q |
+|---|---|---|---|
+| **0.42** | **261** | **20** | **0.173** | ← in use
+| 0.70 | 252 | 9 | 0.152 |
+| 1.00 | 243 | 1 | 0.125 |
+
+`petalQ` — where the identity boundary sits on `q`, and therefore the petal:stamen
+ratio. The measured `q` distribution is heavily skewed (p50 0.06, p75 0.29, p90 0.53,
+max 0.94), so a high threshold produces no inner whorl at all:
+
+| `petalQ` | petals | inner | flowers with ≥2 inner | flowers all-petal |
+|---|---|---|---|---|
+| 0.62 | 241 | 20 (8%) | 2/42 | 24/42 |
+| 0.40 | 219 | 42 (16%) | 11/42 | 16/42 |
+| **0.28** | **~200** | **~61 (25%)** | **~19/42** | **~11/42** | ← in use
+| 0.15 | 163 | 98 (38%) | 28/42 | 10/42 |
+
+This is the one number here that is a *choice* rather than a measurement, and
+SCIENCE.md lists it as such. It sat at 0.62 for as long as `q` was stuck at zero,
+where its value could not matter.
+
+`floralGrace` — idle steps before an apex with room left counts as spent. Set from
+the measured waits (conversion→first organ max 127; organ→next organ p99 238, max
+579): 320 is above every first-organ wait, so no flower is aborted before it starts,
+and above the p99 gap, so it costs ~1% of organs at the tail. **Do not lower it
+below ~130** or flowers abort with zero organs and become bare ovaries.
+
+Do not tune apex contraction itself to hit a target organ count. Its magnitude comes
+from `organR` against the apex area, which is physics already in the model; if you
+want more organs per flower the honest lever is a larger apex at conversion, not a
+gentler contraction.
 
 ## Species (`70_app.js` SPECIES)
 

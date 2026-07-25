@@ -83,11 +83,33 @@ threshold and never flowered at any seed.
 
 **A floral axis that never reaches `floralOrgans` never sets fruit — and never
 arrests, so it elongates forever.** On screen: a bare whip shooting out of the top
-of an otherwise finished plant. It bites hardest where the floral meristem patterns
-slowly (long wavelength, small central zone), because `goFloral` shrinks the
-meristem and a long-wavelength field then fits almost no maxima on it.
-`test/species.mjs` reports this as the `stuck` column. **It is catalogue-wide, not
-specific to any one preset** — see ROADMAP.
+of an otherwise finished plant. `test/species.mjs` reports this as the `stuck`
+column. **Fixed 2026-07-25** by making "the apex is spent" a physical condition and
+`floralOrgans` merely a ceiling on top of it (12 of 16 runs affected → 0 of 16). The
+trap generalises: **an organ budget expressed as a count can only terminate a process
+that reliably reaches the count.** If the process can stop early for physical
+reasons, the counter is not a terminating condition, and the failure shows up as
+something that never stops rather than as an error.
+
+**A coordinate measured against a shrinking reference does not change.** Floral organ
+identity `q` was `1 - prim.r / meristem.rPZ` — the founding radius over the apex's
+*current* radius. Organs are founded at the rim, so it read ~0 for every organ of
+every flower, for as long as floral organs have existed: 291 of 294 organs came out
+petals and the inner-whorl code path had never once executed. The comment above it
+described the intended mechanism ("the meristem shrinks as it consumes itself, so
+later organs start further in") accurately enough that it read as working code.
+**A ratio is only a measurement if its denominator is fixed** — `q` is now measured
+against the radius the apex had when it converted. Two lessons: a self-referential
+normaliser silently reports a constant, and *a code path that has never executed has
+never been seen*, so its output can be arbitrarily wrong (these organs were rendering
+with the foliage palette).
+
+**A cache that is only filled while something is polling hides the data loss.** The
+plant holds the last divergence reading so the display does not blank when every
+apex has retired. The app polls `stats()` every frame, so the cache was always warm
+and the hole was invisible; a headless run calls `stats()` once at the end, by which
+time the reading is gone. It only surfaced when apices *started* retiring reliably.
+**If a cache exists to survive teardown, fill it at teardown, not on read.**
 
 ## Rendering
 
