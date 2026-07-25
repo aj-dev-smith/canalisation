@@ -16,6 +16,17 @@ import {
 // --- species ---------------------------------------------------------------
 // Each is a parameter set, not a shape. Nothing here says what the plant will
 // look like; it says how its chemistry is tuned.
+//
+//   prm  the auxin engine — T/D set the patterning wavelength, so they set how
+//        crowded the leaves are before anything else does
+//   mo   the meristem — how big the growing point is and how fast it expands
+//   sp   the organism — elongation, branching, tropism, when it flowers
+//   marginBias  multipliers on the leaf margin's own chemistry. A species scales
+//        it; the per-leaf draw still varies inside that. See LeafPool._make.
+//   pal  colour only. Never geometry.
+//
+// `test/species.mjs` grows all of them headlessly and prints the numbers. Run it
+// before and after touching anything here.
 export const SPECIES = {
   'Cathedral Fern': {
     prm: { T: 40, D: 6.0, mu: 0.30, rho: 0.60, b: 3.0 },
@@ -23,7 +34,8 @@ export const SPECIES = {
     sp: {
       elongation: 0.0044, organLen: 4.3, organTilt: 0.86, droop: 0.5,
       maxOrgans: 52, branching: 0.5, maxAxes: 5,
-      leafOpts: { fenestrate: 0, aspect: 0.40 },
+      leafOpts: { fenestrate: 0 },
+      marginBias: { ay: 0.86, g1: 1.10 },
     },
     pal: {
       blade0: [0.06, 0.21, 0.21], blade1: [0.10, 0.36, 0.32],
@@ -46,7 +58,8 @@ export const SPECIES = {
     sp: {
       elongation: 0.0036, organLen: 3.2, organTilt: 0.66, droop: 0.24,
       maxOrgans: 60, branching: 0.30, maxAxes: 3,
-      leafOpts: { fenestrate: 0, aspect: 0.30 },
+      leafOpts: { fenestrate: 0 },
+      marginBias: { ay: 0.62, g1: 1.25, D: 0.80 },
     },
     pal: {
       blade0: [0.26, 0.24, 0.20], blade1: [0.50, 0.47, 0.40],
@@ -69,7 +82,8 @@ export const SPECIES = {
     sp: {
       elongation: 0.0050, organLen: 5.0, organTilt: 1.02, droop: 0.95,
       maxOrgans: 44, branching: 0.62, maxAxes: 6,
-      leafOpts: { fenestrate: 0.052, aspect: 0.52 },
+      leafOpts: { fenestrate: 0.052 },
+      marginBias: { ay: 1.12, D: 1.15 },
     },
     pal: {
       blade0: [0.10, 0.04, 0.16], blade1: [0.20, 0.08, 0.29],
@@ -92,7 +106,8 @@ export const SPECIES = {
     sp: {
       elongation: 0.0032, organLen: 3.0, organTilt: 0.5, droop: 0.15,
       maxOrgans: 64, branching: 0.72, maxAxes: 7, maxGen: 3,
-      leafOpts: { fenestrate: 0.040, aspect: 0.58 },
+      leafOpts: { fenestrate: 0.040 },
+      marginBias: { ay: 1.20, g1: 0.90 },
     },
     pal: {
       blade0: [0.30, 0.10, 0.04], blade1: [0.56, 0.24, 0.08],
@@ -107,6 +122,130 @@ export const SPECIES = {
       pin: [1.0, 0.85, 0.50], spark: [1.0, 1.0, 0.80],
       fruit0: [0.22, 0.10, 0.04], fruit1: [1.0, 0.72, 0.15],
       petal0: [0.44, 0.18, 0.06], petal1: [1.0, 0.78, 0.30], petalVein: [1.0, 0.9, 0.5],
+    },
+  },
+  // A bramble. Weak apical dominance and a short bud-release delay mean almost
+  // every axil wakes up, so the specimen is mostly stem — and because branching
+  // spends the shared organ budget, each shoot is left with small, narrow leaves.
+  'Hoarfrost Thicket': {
+    prm: { T: 44, D: 5.0, mu: 0.30, rho: 0.60, b: 3.4 },
+    mo: { R: 9.0, rCZ: 2.0, rPZ: 5.8, G: 0.0046 },
+    sp: {
+      elongation: 0.0022, internode: 0.0032, organLen: 2.6, organTilt: 0.62,
+      droop: 0.10, maxOrgans: 34, branching: 0.92, maxAxes: 9, maxGen: 3,
+      budRelease: 210, dominance: 3.2, nutation: 0.024, nutAmp: 0.42,
+      wander: 0.62, tropism: 0.016, tipRadius: 0.042,
+      leafOpts: { fenestrate: 0 },
+      marginBias: { ay: 0.55, g1: 1.25, D: 0.75 },
+    },
+    pal: {
+      blade0: [0.16, 0.20, 0.26], blade1: [0.42, 0.52, 0.62],
+      veinTint: [0.10, 0.16, 0.30], vein: [0.72, 0.90, 1.0],
+      stem0: [0.18, 0.22, 0.28], stem1: [0.46, 0.55, 0.66],
+      cell0: [0.12, 0.16, 0.24], cell1: [0.80, 0.92, 1.0],
+      bgTop: [0.020, 0.028, 0.042], bgBot: [0.005, 0.007, 0.012],
+      bgGlow: [0.05, 0.07, 0.12], fog: [0.035, 0.045, 0.065], fogD: 0.070,
+      key: [0.42, 0.78, 0.38], keyCol: [0.82, 0.90, 1.0],
+      ambTop: [0.18, 0.22, 0.30], ambBot: [0.04, 0.05, 0.075],
+      glow: 1.05, spore: [0.75, 0.88, 1.0],
+      pin: [0.70, 0.88, 1.0], spark: [0.95, 0.99, 1.0],
+      fruit0: [0.14, 0.18, 0.24], fruit1: [0.55, 0.80, 1.0],
+      petal0: [0.30, 0.36, 0.46], petal1: [0.90, 0.95, 1.0], petalVein: [0.85, 0.95, 1.0],
+    },
+  },
+  // A climber. Long internodes that keep stretching far below the tip, a fast
+  // circumnutation and a weak upward tropism: the axis writes a helix instead of
+  // a column. It flowers on less leaf area than the others, so it fruits early.
+  'Ember Creeper': {
+    prm: { T: 38, D: 6.8, mu: 0.30, rho: 0.60, b: 2.9 },
+    mo: { R: 10.5, rCZ: 2.6, rPZ: 7.0, G: 0.0038 },
+    sp: {
+      elongation: 0.0058, internode: 0.0090, internodeSpan: 3.6,
+      organLen: 3.6, organTilt: 1.16, droop: 0.62, maxOrgans: 30,
+      branching: 0.22, maxAxes: 3, wander: 0.55, nutation: 0.030,
+      nutAmp: 0.52, tropism: 0.030, florigenThresh: 8, maxFlowers: 8,
+      fruitScale: 0.78,
+      leafOpts: { fenestrate: 0 },
+      marginBias: { ay: 1.35, g1: 0.85, D: 1.25 },
+    },
+    pal: {
+      blade0: [0.26, 0.05, 0.06], blade1: [0.58, 0.11, 0.12],
+      veinTint: [0.32, 0.04, 0.03], vein: [1.0, 0.42, 0.24],
+      stem0: [0.16, 0.06, 0.05], stem1: [0.34, 0.14, 0.10],
+      cell0: [0.18, 0.04, 0.04], cell1: [1.0, 0.45, 0.30],
+      bgTop: [0.030, 0.010, 0.010], bgBot: [0.006, 0.002, 0.003],
+      bgGlow: [0.060, 0.014, 0.014], fog: [0.035, 0.012, 0.012], fogD: 0.075,
+      key: [0.38, 0.72, 0.50], keyCol: [1.0, 0.72, 0.62],
+      ambTop: [0.18, 0.08, 0.08], ambBot: [0.04, 0.016, 0.016],
+      glow: 1.0, spore: [1.0, 0.45, 0.30],
+      pin: [1.0, 0.55, 0.40], spark: [1.0, 0.85, 0.70],
+      fruit0: [0.20, 0.04, 0.05], fruit1: [1.0, 0.24, 0.16],
+      petal0: [0.42, 0.08, 0.10], petal1: [1.0, 0.50, 0.42], petalVein: [1.0, 0.80, 0.70],
+    },
+  },
+  // A cushion. Nothing here shortens the plant. Its internodes simply never
+  // open, so every leaf the meristem makes is left stacked where it was born and
+  // the phyllotactic spiral stays on the ground where you can read it directly.
+  // The meristem itself is run slow and long-wavelength (low G, D near 7) because
+  // that is the regime that keeps emitting for thousands of steps instead of
+  // locking up after a few dozen organs — see TUNING.md.
+  'Sulphur Rosette': {
+    prm: { T: 42, D: 6.8, mu: 0.30, rho: 0.60, b: 3.2 },
+    mo: { R: 10, rCZ: 2.4, rPZ: 6.8, G: 0.0034 },
+    sp: {
+      elongation: 0.0016, internode: 0.0011, internodeSpan: 1.4,
+      minInternode: 0.015, organLen: 2.6, organTilt: 1.34, droop: 0.18,
+      maxOrgans: 78, organBudget: 84,
+      branching: 0.0, maxAxes: 1, nutation: 0.006, nutAmp: 0.05,
+      wander: 0.10, florigenThresh: 46, floralOrgans: 12, organRoll: 0.20,
+      leafOpts: { fenestrate: 0 },
+      marginBias: { ay: 0.78, g1: 1.20, gExp: 1.15 },
+    },
+    pal: {
+      blade0: [0.10, 0.13, 0.02], blade1: [0.26, 0.32, 0.04],
+      veinTint: [0.26, 0.30, 0.02], vein: [0.85, 1.0, 0.25],
+      stem0: [0.18, 0.22, 0.05], stem1: [0.40, 0.48, 0.10],
+      cell0: [0.14, 0.17, 0.04], cell1: [0.90, 1.0, 0.40],
+      bgTop: [0.018, 0.020, 0.007], bgBot: [0.004, 0.005, 0.002],
+      bgGlow: [0.045, 0.050, 0.010], fog: [0.028, 0.032, 0.011], fogD: 0.072,
+      key: [0.30, 0.80, 0.52], keyCol: [0.92, 1.0, 0.70],
+      ambTop: [0.14, 0.17, 0.07], ambBot: [0.03, 0.035, 0.014],
+      glow: 0.95, spore: [0.90, 1.0, 0.35],
+      pin: [0.85, 1.0, 0.45], spark: [1.0, 1.0, 0.75],
+      fruit0: [0.16, 0.19, 0.04], fruit1: [0.95, 0.95, 0.20],
+      petal0: [0.34, 0.38, 0.10], petal1: [0.95, 1.0, 0.45], petalVein: [1.0, 1.0, 0.70],
+    },
+  },
+  // The opposite extreme: a big meristem run slow, so it patterns rarely and
+  // the plant flowers off a dozen leaves instead of fifty. Each of those leaves
+  // gets an enormous share of the organ budget, and fenestration opens the blade
+  // up where the veins are far apart. maxOrgans is deliberately well above the
+  // leaf count it actually reaches — an axis that hits maxOrgans arrests, and an
+  // arrested apex can never convert to a flower. See PITFALLS.md.
+  'Nightglass Parasol': {
+    prm: { T: 38, D: 6.4, mu: 0.30, rho: 0.60, b: 2.8 },
+    mo: { R: 11.5, rCZ: 2.8, rPZ: 7.8, G: 0.0030 },
+    sp: {
+      elongation: 0.0040, internode: 0.0052, organLen: 6.8, organTilt: 1.06,
+      droop: 0.30, maxOrgans: 24, branching: 0.12, maxAxes: 2,
+      internodeSpan: 3.4, radiusScale: 1.45, thicken: 0.00048, organFlow: 0.00050,
+      florigenThresh: 4, floralOrgans: 6, fruitScale: 0.70,
+      leafOpts: { fenestrate: 0.100 },
+      marginBias: { ay: 1.45, g1: 0.90, D: 1.35 },
+    },
+    pal: {
+      blade0: [0.04, 0.05, 0.12], blade1: [0.11, 0.13, 0.28],
+      veinTint: [0.10, 0.12, 0.26], vein: [0.88, 0.94, 1.0],
+      stem0: [0.05, 0.06, 0.13], stem1: [0.12, 0.14, 0.28],
+      cell0: [0.04, 0.05, 0.13], cell1: [0.85, 0.92, 1.0],
+      bgTop: [0.010, 0.012, 0.030], bgBot: [0.002, 0.003, 0.008],
+      bgGlow: [0.02, 0.03, 0.09], fog: [0.015, 0.020, 0.050], fogD: 0.088,
+      key: [0.25, 0.86, 0.44], keyCol: [0.70, 0.78, 1.0],
+      ambTop: [0.08, 0.10, 0.24], ambBot: [0.02, 0.02, 0.06],
+      glow: 1.10, spore: [0.80, 0.88, 1.0],
+      pin: [0.75, 0.85, 1.0], spark: [1.0, 1.0, 1.0],
+      fruit0: [0.05, 0.06, 0.14], fruit1: [0.75, 0.85, 1.0],
+      petal0: [0.12, 0.14, 0.30], petal1: [0.70, 0.80, 1.0], petalVein: [0.95, 0.98, 1.0],
     },
   },
 };

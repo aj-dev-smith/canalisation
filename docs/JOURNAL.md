@@ -223,6 +223,45 @@ the petals have finished opening.
   view) was hidden behind a button most people would never press, so it became the
   cold open.
 
+## Four species that all had the same leaf
+
+Expanding the catalogue from four species to eight started with what looked like a
+palette job and turned into a measurement. `test/species.mjs` grows every preset
+headlessly and prints what each one does; the first run of it reported blade aspect
+0.44, 0.45, 0.44, 0.45 for four species whose presets differed by nearly 2x on
+`leafOpts.aspect`.
+
+The field had been dead since the margin engine replaced the drawn silhouette.
+`Leaf.step()` sets `o.aspect = margin.aspect` the moment the outline matures, which
+is before `_build()` reads it — so every species wore the generic leaf and the
+presets had been documenting an intent the code no longer honoured. Nobody would
+have caught this by looking, because a leaf that is 0.45 wide when you asked for
+0.30 still looks like a leaf.
+
+The replacement is `marginBias`: per-species **multipliers on the margin's own
+chemistry**, applied over the per-leaf random draw rather than instead of it. So a
+Spiral Ossuary leaf still differs from the next Spiral Ossuary leaf, and both are
+narrower than anything a Nightglass Parasol grows. Measured aspect now runs 0.32 to
+0.57 across the catalogue. It matters that the knob is a rate constant on
+mediolateral growth and not a width: nothing in the preset knows what shape will
+come out, which is the only version of this that is allowed.
+
+Two other preset fields turned out to be traps rather than settings, both found the
+same way — by growing the thing and reading a number that would not move.
+`minInternode` silently **discards** primordia rather than queueing them, so the
+first rosette attempt starved at 12 leaves out of 42 primordia and looked like a
+patterning failure. And `maxOrgans` is a kill switch, not a leaf count: an axis that
+reaches it arrests, and an arrested apex can never convert to a flower, so the first
+Nightglass Parasol never flowered at any seed. Both are in PITFALLS now.
+
+The same harness surfaced something worth not fixing on that branch. An axis that
+converts to a flower but never makes its complement of floral organs never calls
+`setFruit`, so it never arrests, so it elongates for as long as the simulation runs
+— the bare whip out of the top of a finished plant. It is in 12 of 16 runs across
+the catalogue **including all four species that predate it**, so it is not a
+property of the new presets and it does not belong in a branch about presets. It is
+ROADMAP 4b with the numbers attached.
+
 ## Bugs that cost the most
 
 1. Depth mask blocking `glClear` — presented as a shading bug, was stale depth.

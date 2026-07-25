@@ -418,12 +418,19 @@ class LeafPool {
     // variety now comes from the margin's chemistry, not from shape numbers:
     // how slender it grows, how hard a convergence point pushes, and how far
     // apart those convergence points sit.
+    //
+    // A species scales that chemistry rather than replacing it (`marginBias`),
+    // so every leaf on one plant still differs from its neighbours while the
+    // whole plant differs from another species. The bias is a multiplier on a
+    // rate constant, never a width or a tooth count — nothing here knows what
+    // the silhouette will be.
+    const mb = this.sp.marginBias;
     o.margin = {
-      ay: lerp(0.34, 0.86, r()),
-      g1: lerp(0.00070, 0.00170, r()),
-      gExp: lerp(1.6, 3.0, r()),
-      D: lerp(4.5, 11.0, r()),
-      tipBias: lerp(0.25, 0.85, r()),
+      ay: lerp(0.34, 0.86, r()) * (mb.ay ?? 1),
+      g1: lerp(0.00070, 0.00170, r()) * (mb.g1 ?? 1),
+      gExp: lerp(1.6, 3.0, r()) * (mb.gExp ?? 1),
+      D: clamp(lerp(4.5, 11.0, r()) * (mb.D ?? 1), 2.0, 16.0),
+      tipBias: clamp(lerp(0.25, 0.85, r()) * (mb.tipBias ?? 1), 0, 1),
       mature: Math.round(lerp(1100, 1700, r())),
     };
     o.maxSources = Math.floor(lerp(30, 64, r()));
@@ -514,6 +521,10 @@ export const SPECIES_DEFAULTS = {
   leafBudget: 60,
   leafLibrary: 5,
   leafOpts: {},
+  // per-species multipliers on the leaf margin's own chemistry (see LeafPool).
+  // ay slenderness, g1/gExp how hard a convergence point pushes, D how far
+  // apart those points can sit. Empty means "the generic leaf".
+  marginBias: {},
 };
 
 export class Plant {

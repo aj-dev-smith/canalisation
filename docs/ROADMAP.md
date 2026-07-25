@@ -25,6 +25,18 @@ Leaf outlines are rougher than real leaves because only the boundary is simulate
 a real lamina tensions its own edge. Would need a 2D tissue with a free boundary.
 Meaningful quality jump, meaningful work.
 
+## 4b. Floral axes that never finish
+A shoot converts to a flower, makes fewer than `floralOrgans` floral organs, and so
+never calls `setFruit`. It therefore never arrests, and an unarrested axis
+elongates for as long as the simulation runs — a bare whip out of the top of a
+finished plant. Measured with `node test/species.mjs`: at 5000 steps, 12 of 16
+runs across the eight species leave at least one axis in this state, including
+every species that predates the current catalogue. The fix is probably not a bigger
+`floralOrgans` budget but a second trigger: an apex whose floral meristem has
+stopped emitting is spent, whatever it managed to make, and what is left is an
+ovary. That changes petal counts on existing species, so it wants its own branch
+and its own before/after table.
+
 ## 5. Smaller things
 - Flowers do not announce themselves against heavy foliage; make them larger and open wider
 - Fruit is a little small against the plant (`fruitScale`)

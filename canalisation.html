@@ -8,6 +8,9 @@
   :root{
     --ink:#e8f2f0; --dim:#7f9a99; --line:rgba(150,220,215,.16);
     --panel:rgba(6,14,17,.72); --accent:#6ff0dc;
+    /* height of the bottom bar. The species rail lives inside it now, so every
+       element that floats above the bar is positioned off this, not off 52px. */
+    --bar:88px;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%;overflow:hidden;background:#03070a;color:var(--ink);
@@ -43,10 +46,24 @@
     padding:6px 12px;cursor:pointer;transition:.15s}
   .btn:hover{background:rgba(111,240,220,.14)}
   .btn.off{opacity:.45}
-  #species{display:flex;gap:6px;flex-wrap:wrap;margin:11px 0 4px}
-  .chip{font:inherit;font-size:11px;padding:5px 10px;border-radius:999px;cursor:pointer;
-    background:transparent;border:1px solid var(--line);color:var(--dim);transition:.15s}
+  #species{display:flex;gap:6px;align-items:center;overflow-x:auto;max-width:100%;
+    padding:1px 2px;scrollbar-width:none;-ms-overflow-style:none;scroll-behavior:smooth}
+  #species::-webkit-scrollbar{display:none}
+  /* once the rail is wider than the window it has to look scrollable, so the
+     ends fade out. Above that width every chip fits and the fade would just be
+     dimming two of them for no reason. */
+  @media(max-width:1130px){
+    #species{-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 16px,#000 calc(100% - 16px),transparent 100%);
+      mask-image:linear-gradient(90deg,transparent 0,#000 16px,#000 calc(100% - 16px),transparent 100%)}
+  }
+  .chip{font:inherit;font-size:11px;padding:5px 10px 5px 8px;border-radius:999px;cursor:pointer;
+    background:rgba(3,7,10,.5);border:1px solid var(--line);color:var(--dim);transition:.15s;
+    flex:0 0 auto;white-space:nowrap;display:flex;align-items:center;gap:6px}
+  .chip:hover{color:var(--ink)}
+  /* the dot is the species' own vein colour, taken straight off its palette */
+  .chip i{width:7px;height:7px;border-radius:50%;flex:0 0 auto;opacity:.65;transition:.15s}
   .chip.on{background:rgba(111,240,220,.16);color:var(--ink);border-color:rgba(111,240,220,.45)}
+  .chip.on i{opacity:1;box-shadow:0 0 7px currentColor}
   #sliders{margin-top:8px;display:grid;grid-template-columns:1fr;gap:7px}
   @media(min-width:520px){#sliders{grid-template-columns:1fr 1fr;gap:7px 16px}}
   .row label{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);
@@ -62,7 +79,9 @@
   #stats{font-size:10.5px;color:var(--dim);margin-left:auto;font-variant-numeric:tabular-nums}
   #stats b{color:var(--ink)}
   .btn.urge{border-color:rgba(111,240,220,.6);background:rgba(111,240,220,.16)}
-  @media(max-width:560px){#card{right:10px}#card table{font-size:10px}#bar{gap:6px}
+  @media(max-width:560px){#card{right:10px}#card table{font-size:10px}
+    #bar{gap:6px;padding-left:8px;padding-right:8px}
+    #barActions{gap:6px}
     .btn{padding:6px 10px;font-size:11px}}
   #about{position:fixed;inset:0;z-index:20;background:rgba(3,7,10,.93);
     backdrop-filter:blur(12px);padding:28px 22px;overflow:auto;display:none}
@@ -92,11 +111,11 @@
     align-items:center;justify-content:center;color:var(--dim);font-size:15px;line-height:1}
   body.cinema #exitCine{display:flex}
   #legend{position:fixed;left:16px;z-index:6;
-    bottom:calc(max(14px,env(safe-area-inset-bottom)) + 150px);
+    bottom:calc(max(14px,env(safe-area-inset-bottom)) + var(--bar) + 98px);
     width:min(320px,calc(100% - 32px));padding:10px 12px;border-radius:12px;
     background:rgba(6,14,17,.74);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
     border:1px solid var(--line);opacity:0;transition:opacity .5s;pointer-events:none}
-  body.collapsed #legend{bottom:calc(max(14px,env(safe-area-inset-bottom)) + 66px)}
+  body.collapsed #legend{bottom:calc(max(14px,env(safe-area-inset-bottom)) + var(--bar) + 14px)}
   body.cinema #legend{bottom:max(22px,env(safe-area-inset-bottom))}
   @media(max-width:560px){#legend{left:8px;width:calc(100% - 16px)}}
   #legend.on{opacity:1}
@@ -114,7 +133,7 @@
   #card td.v{color:var(--ink);font-weight:520}
   #card .em{color:var(--accent)}
   /* stage bar */
-  #stage{position:fixed;left:0;right:0;bottom:calc(max(10px,env(safe-area-inset-bottom)) + 52px);
+  #stage{position:fixed;left:0;right:0;bottom:calc(max(10px,env(safe-area-inset-bottom)) + var(--bar));
     z-index:5;display:flex;justify-content:center;gap:0;pointer-events:none}
   #stage span{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(160,190,188,.30);
     padding:0 9px;transition:color .6s}
@@ -122,22 +141,25 @@
   #stage span+span::before{content:"";display:inline-block;width:3px;height:3px;border-radius:50%;
     background:rgba(160,190,188,.22);margin-right:11px;vertical-align:middle}
   /* slim bar + sheet */
-  #bar{position:fixed;left:0;right:0;bottom:0;z-index:8;background:linear-gradient(to top,rgba(3,7,10,.75),transparent);display:flex;align-items:center;
-    justify-content:center;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+  #bar{position:fixed;left:0;right:0;bottom:0;z-index:8;
+    background:linear-gradient(to top,rgba(3,7,10,.82) 55%,transparent);
+    display:flex;flex-direction:column;align-items:center;gap:8px;
+    padding:8px 12px calc(10px + env(safe-area-inset-bottom))}
+  #barActions{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}
   #sheet{position:fixed;left:50%;transform:translateX(-50%) translateY(110%);
-    bottom:calc(52px + env(safe-area-inset-bottom));z-index:7;width:min(560px,calc(100% - 20px));
+    bottom:calc(var(--bar) + env(safe-area-inset-bottom));z-index:7;width:min(560px,calc(100% - 20px));
     background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
     border:1px solid var(--line);border-radius:16px;padding:14px 16px 16px;
     transition:transform .32s cubic-bezier(.3,.8,.3,1);max-height:70vh;overflow:auto}
   #sheet{transform:translateX(-50%) translateY(calc(100% + 90px))}
   body.sheet #sheet{transform:translateX(-50%) translateY(0)}
   #handover{position:fixed;left:50%;transform:translateX(-50%);z-index:6;
-    bottom:calc(max(10px,env(safe-area-inset-bottom)) + 92px);display:none;
+    bottom:calc(max(10px,env(safe-area-inset-bottom)) + var(--bar) + 40px);display:none;
     font-size:11px;letter-spacing:.04em}
   body.driving #handover{display:block;animation:pulse 2.6s ease-in-out infinite}
   @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
   #tip{position:fixed;left:50%;transform:translateX(-50%);z-index:8;
-    bottom:calc(52px + env(safe-area-inset-bottom) + 12px);width:min(430px,calc(100% - 28px));
+    bottom:calc(var(--bar) + env(safe-area-inset-bottom) + 12px);width:min(430px,calc(100% - 28px));
     background:rgba(6,14,17,.86);border:1px solid var(--line);border-radius:10px;
     padding:9px 12px;font-size:11.5px;color:#b9cecd;line-height:1.4;
     opacity:0;transition:opacity .3s;pointer-events:none}
@@ -193,14 +215,16 @@
 <button class="btn" id="handover">you have the camera · <b>resume</b></button>
 
 <div id="bar">
-  <button class="btn" id="sheetBtn">controls</button>
-  <button class="btn" id="cellsBtn">into the cells</button>
-  <button class="btn" id="newBtn">new specimen</button>
-  <button class="btn" id="aboutBtn">what is this?</button>
+  <div id="species"></div>
+  <div id="barActions">
+    <button class="btn" id="sheetBtn">controls</button>
+    <button class="btn" id="cellsBtn">into the cells</button>
+    <button class="btn" id="newBtn">new specimen</button>
+    <button class="btn" id="aboutBtn">what is this?</button>
+  </div>
 </div>
 
 <div id="sheet">
-  <div id="species"></div>
   <div id="sliders"></div>
   <div id="actions">
     <button class="btn" id="regrowBtn">regrow with these</button>
@@ -2404,12 +2428,19 @@ class LeafPool {
     // variety now comes from the margin's chemistry, not from shape numbers:
     // how slender it grows, how hard a convergence point pushes, and how far
     // apart those convergence points sit.
+    //
+    // A species scales that chemistry rather than replacing it (`marginBias`),
+    // so every leaf on one plant still differs from its neighbours while the
+    // whole plant differs from another species. The bias is a multiplier on a
+    // rate constant, never a width or a tooth count — nothing here knows what
+    // the silhouette will be.
+    const mb = this.sp.marginBias;
     o.margin = {
-      ay: lerp(0.34, 0.86, r()),
-      g1: lerp(0.00070, 0.00170, r()),
-      gExp: lerp(1.6, 3.0, r()),
-      D: lerp(4.5, 11.0, r()),
-      tipBias: lerp(0.25, 0.85, r()),
+      ay: lerp(0.34, 0.86, r()) * (mb.ay ?? 1),
+      g1: lerp(0.00070, 0.00170, r()) * (mb.g1 ?? 1),
+      gExp: lerp(1.6, 3.0, r()) * (mb.gExp ?? 1),
+      D: clamp(lerp(4.5, 11.0, r()) * (mb.D ?? 1), 2.0, 16.0),
+      tipBias: clamp(lerp(0.25, 0.85, r()) * (mb.tipBias ?? 1), 0, 1),
       mature: Math.round(lerp(1100, 1700, r())),
     };
     o.maxSources = Math.floor(lerp(30, 64, r()));
@@ -2500,6 +2531,10 @@ const SPECIES_DEFAULTS = {
   leafBudget: 60,
   leafLibrary: 5,
   leafOpts: {},
+  // per-species multipliers on the leaf margin's own chemistry (see LeafPool).
+  // ay slenderness, g1/gExp how hard a convergence point pushes, D how far
+  // apart those points can sit. Empty means "the generic leaf".
+  marginBias: {},
 };
 
 class Plant {
@@ -3480,6 +3515,17 @@ class Renderer {
 // --- species ---------------------------------------------------------------
 // Each is a parameter set, not a shape. Nothing here says what the plant will
 // look like; it says how its chemistry is tuned.
+//
+//   prm  the auxin engine — T/D set the patterning wavelength, so they set how
+//        crowded the leaves are before anything else does
+//   mo   the meristem — how big the growing point is and how fast it expands
+//   sp   the organism — elongation, branching, tropism, when it flowers
+//   marginBias  multipliers on the leaf margin's own chemistry. A species scales
+//        it; the per-leaf draw still varies inside that. See LeafPool._make.
+//   pal  colour only. Never geometry.
+//
+// `test/species.mjs` grows all of them headlessly and prints the numbers. Run it
+// before and after touching anything here.
 const SPECIES = {
   'Cathedral Fern': {
     prm: { T: 40, D: 6.0, mu: 0.30, rho: 0.60, b: 3.0 },
@@ -3487,7 +3533,8 @@ const SPECIES = {
     sp: {
       elongation: 0.0044, organLen: 4.3, organTilt: 0.86, droop: 0.5,
       maxOrgans: 52, branching: 0.5, maxAxes: 5,
-      leafOpts: { fenestrate: 0, aspect: 0.40 },
+      leafOpts: { fenestrate: 0 },
+      marginBias: { ay: 0.86, g1: 1.10 },
     },
     pal: {
       blade0: [0.06, 0.21, 0.21], blade1: [0.10, 0.36, 0.32],
@@ -3510,7 +3557,8 @@ const SPECIES = {
     sp: {
       elongation: 0.0036, organLen: 3.2, organTilt: 0.66, droop: 0.24,
       maxOrgans: 60, branching: 0.30, maxAxes: 3,
-      leafOpts: { fenestrate: 0, aspect: 0.30 },
+      leafOpts: { fenestrate: 0 },
+      marginBias: { ay: 0.62, g1: 1.25, D: 0.80 },
     },
     pal: {
       blade0: [0.26, 0.24, 0.20], blade1: [0.50, 0.47, 0.40],
@@ -3533,7 +3581,8 @@ const SPECIES = {
     sp: {
       elongation: 0.0050, organLen: 5.0, organTilt: 1.02, droop: 0.95,
       maxOrgans: 44, branching: 0.62, maxAxes: 6,
-      leafOpts: { fenestrate: 0.052, aspect: 0.52 },
+      leafOpts: { fenestrate: 0.052 },
+      marginBias: { ay: 1.12, D: 1.15 },
     },
     pal: {
       blade0: [0.10, 0.04, 0.16], blade1: [0.20, 0.08, 0.29],
@@ -3556,7 +3605,8 @@ const SPECIES = {
     sp: {
       elongation: 0.0032, organLen: 3.0, organTilt: 0.5, droop: 0.15,
       maxOrgans: 64, branching: 0.72, maxAxes: 7, maxGen: 3,
-      leafOpts: { fenestrate: 0.040, aspect: 0.58 },
+      leafOpts: { fenestrate: 0.040 },
+      marginBias: { ay: 1.20, g1: 0.90 },
     },
     pal: {
       blade0: [0.30, 0.10, 0.04], blade1: [0.56, 0.24, 0.08],
@@ -3571,6 +3621,130 @@ const SPECIES = {
       pin: [1.0, 0.85, 0.50], spark: [1.0, 1.0, 0.80],
       fruit0: [0.22, 0.10, 0.04], fruit1: [1.0, 0.72, 0.15],
       petal0: [0.44, 0.18, 0.06], petal1: [1.0, 0.78, 0.30], petalVein: [1.0, 0.9, 0.5],
+    },
+  },
+  // A bramble. Weak apical dominance and a short bud-release delay mean almost
+  // every axil wakes up, so the specimen is mostly stem — and because branching
+  // spends the shared organ budget, each shoot is left with small, narrow leaves.
+  'Hoarfrost Thicket': {
+    prm: { T: 44, D: 5.0, mu: 0.30, rho: 0.60, b: 3.4 },
+    mo: { R: 9.0, rCZ: 2.0, rPZ: 5.8, G: 0.0046 },
+    sp: {
+      elongation: 0.0022, internode: 0.0032, organLen: 2.6, organTilt: 0.62,
+      droop: 0.10, maxOrgans: 34, branching: 0.92, maxAxes: 9, maxGen: 3,
+      budRelease: 210, dominance: 3.2, nutation: 0.024, nutAmp: 0.42,
+      wander: 0.62, tropism: 0.016, tipRadius: 0.042,
+      leafOpts: { fenestrate: 0 },
+      marginBias: { ay: 0.55, g1: 1.25, D: 0.75 },
+    },
+    pal: {
+      blade0: [0.16, 0.20, 0.26], blade1: [0.42, 0.52, 0.62],
+      veinTint: [0.10, 0.16, 0.30], vein: [0.72, 0.90, 1.0],
+      stem0: [0.18, 0.22, 0.28], stem1: [0.46, 0.55, 0.66],
+      cell0: [0.12, 0.16, 0.24], cell1: [0.80, 0.92, 1.0],
+      bgTop: [0.020, 0.028, 0.042], bgBot: [0.005, 0.007, 0.012],
+      bgGlow: [0.05, 0.07, 0.12], fog: [0.035, 0.045, 0.065], fogD: 0.070,
+      key: [0.42, 0.78, 0.38], keyCol: [0.82, 0.90, 1.0],
+      ambTop: [0.18, 0.22, 0.30], ambBot: [0.04, 0.05, 0.075],
+      glow: 1.05, spore: [0.75, 0.88, 1.0],
+      pin: [0.70, 0.88, 1.0], spark: [0.95, 0.99, 1.0],
+      fruit0: [0.14, 0.18, 0.24], fruit1: [0.55, 0.80, 1.0],
+      petal0: [0.30, 0.36, 0.46], petal1: [0.90, 0.95, 1.0], petalVein: [0.85, 0.95, 1.0],
+    },
+  },
+  // A climber. Long internodes that keep stretching far below the tip, a fast
+  // circumnutation and a weak upward tropism: the axis writes a helix instead of
+  // a column. It flowers on less leaf area than the others, so it fruits early.
+  'Ember Creeper': {
+    prm: { T: 38, D: 6.8, mu: 0.30, rho: 0.60, b: 2.9 },
+    mo: { R: 10.5, rCZ: 2.6, rPZ: 7.0, G: 0.0038 },
+    sp: {
+      elongation: 0.0058, internode: 0.0090, internodeSpan: 3.6,
+      organLen: 3.6, organTilt: 1.16, droop: 0.62, maxOrgans: 30,
+      branching: 0.22, maxAxes: 3, wander: 0.55, nutation: 0.030,
+      nutAmp: 0.52, tropism: 0.030, florigenThresh: 8, maxFlowers: 8,
+      fruitScale: 0.78,
+      leafOpts: { fenestrate: 0 },
+      marginBias: { ay: 1.35, g1: 0.85, D: 1.25 },
+    },
+    pal: {
+      blade0: [0.26, 0.05, 0.06], blade1: [0.58, 0.11, 0.12],
+      veinTint: [0.32, 0.04, 0.03], vein: [1.0, 0.42, 0.24],
+      stem0: [0.16, 0.06, 0.05], stem1: [0.34, 0.14, 0.10],
+      cell0: [0.18, 0.04, 0.04], cell1: [1.0, 0.45, 0.30],
+      bgTop: [0.030, 0.010, 0.010], bgBot: [0.006, 0.002, 0.003],
+      bgGlow: [0.060, 0.014, 0.014], fog: [0.035, 0.012, 0.012], fogD: 0.075,
+      key: [0.38, 0.72, 0.50], keyCol: [1.0, 0.72, 0.62],
+      ambTop: [0.18, 0.08, 0.08], ambBot: [0.04, 0.016, 0.016],
+      glow: 1.0, spore: [1.0, 0.45, 0.30],
+      pin: [1.0, 0.55, 0.40], spark: [1.0, 0.85, 0.70],
+      fruit0: [0.20, 0.04, 0.05], fruit1: [1.0, 0.24, 0.16],
+      petal0: [0.42, 0.08, 0.10], petal1: [1.0, 0.50, 0.42], petalVein: [1.0, 0.80, 0.70],
+    },
+  },
+  // A cushion. Nothing here shortens the plant. Its internodes simply never
+  // open, so every leaf the meristem makes is left stacked where it was born and
+  // the phyllotactic spiral stays on the ground where you can read it directly.
+  // The meristem itself is run slow and long-wavelength (low G, D near 7) because
+  // that is the regime that keeps emitting for thousands of steps instead of
+  // locking up after a few dozen organs — see TUNING.md.
+  'Sulphur Rosette': {
+    prm: { T: 42, D: 6.8, mu: 0.30, rho: 0.60, b: 3.2 },
+    mo: { R: 10, rCZ: 2.4, rPZ: 6.8, G: 0.0034 },
+    sp: {
+      elongation: 0.0016, internode: 0.0011, internodeSpan: 1.4,
+      minInternode: 0.015, organLen: 2.6, organTilt: 1.34, droop: 0.18,
+      maxOrgans: 78, organBudget: 84,
+      branching: 0.0, maxAxes: 1, nutation: 0.006, nutAmp: 0.05,
+      wander: 0.10, florigenThresh: 46, floralOrgans: 12, organRoll: 0.20,
+      leafOpts: { fenestrate: 0 },
+      marginBias: { ay: 0.78, g1: 1.20, gExp: 1.15 },
+    },
+    pal: {
+      blade0: [0.10, 0.13, 0.02], blade1: [0.26, 0.32, 0.04],
+      veinTint: [0.26, 0.30, 0.02], vein: [0.85, 1.0, 0.25],
+      stem0: [0.18, 0.22, 0.05], stem1: [0.40, 0.48, 0.10],
+      cell0: [0.14, 0.17, 0.04], cell1: [0.90, 1.0, 0.40],
+      bgTop: [0.018, 0.020, 0.007], bgBot: [0.004, 0.005, 0.002],
+      bgGlow: [0.045, 0.050, 0.010], fog: [0.028, 0.032, 0.011], fogD: 0.072,
+      key: [0.30, 0.80, 0.52], keyCol: [0.92, 1.0, 0.70],
+      ambTop: [0.14, 0.17, 0.07], ambBot: [0.03, 0.035, 0.014],
+      glow: 0.95, spore: [0.90, 1.0, 0.35],
+      pin: [0.85, 1.0, 0.45], spark: [1.0, 1.0, 0.75],
+      fruit0: [0.16, 0.19, 0.04], fruit1: [0.95, 0.95, 0.20],
+      petal0: [0.34, 0.38, 0.10], petal1: [0.95, 1.0, 0.45], petalVein: [1.0, 1.0, 0.70],
+    },
+  },
+  // The opposite extreme: a big meristem run slow, so it patterns rarely and
+  // the plant flowers off a dozen leaves instead of fifty. Each of those leaves
+  // gets an enormous share of the organ budget, and fenestration opens the blade
+  // up where the veins are far apart. maxOrgans is deliberately well above the
+  // leaf count it actually reaches — an axis that hits maxOrgans arrests, and an
+  // arrested apex can never convert to a flower. See PITFALLS.md.
+  'Nightglass Parasol': {
+    prm: { T: 38, D: 6.4, mu: 0.30, rho: 0.60, b: 2.8 },
+    mo: { R: 11.5, rCZ: 2.8, rPZ: 7.8, G: 0.0030 },
+    sp: {
+      elongation: 0.0040, internode: 0.0052, organLen: 6.8, organTilt: 1.06,
+      droop: 0.30, maxOrgans: 24, branching: 0.12, maxAxes: 2,
+      internodeSpan: 3.4, radiusScale: 1.45, thicken: 0.00048, organFlow: 0.00050,
+      florigenThresh: 4, floralOrgans: 6, fruitScale: 0.70,
+      leafOpts: { fenestrate: 0.100 },
+      marginBias: { ay: 1.45, g1: 0.90, D: 1.35 },
+    },
+    pal: {
+      blade0: [0.04, 0.05, 0.12], blade1: [0.11, 0.13, 0.28],
+      veinTint: [0.10, 0.12, 0.26], vein: [0.88, 0.94, 1.0],
+      stem0: [0.05, 0.06, 0.13], stem1: [0.12, 0.14, 0.28],
+      cell0: [0.04, 0.05, 0.13], cell1: [0.85, 0.92, 1.0],
+      bgTop: [0.010, 0.012, 0.030], bgBot: [0.002, 0.003, 0.008],
+      bgGlow: [0.02, 0.03, 0.09], fog: [0.015, 0.020, 0.050], fogD: 0.088,
+      key: [0.25, 0.86, 0.44], keyCol: [0.70, 0.78, 1.0],
+      ambTop: [0.08, 0.10, 0.24], ambBot: [0.02, 0.02, 0.06],
+      glow: 1.10, spore: [0.80, 0.88, 1.0],
+      pin: [0.75, 0.85, 1.0], spark: [1.0, 1.0, 1.0],
+      fruit0: [0.05, 0.06, 0.14], fruit1: [0.75, 0.85, 1.0],
+      petal0: [0.12, 0.14, 0.30], petal1: [0.70, 0.80, 1.0], petalVein: [0.95, 0.98, 1.0],
     },
   },
 };
@@ -4218,19 +4392,32 @@ function loop(now) {
 requestAnimationFrame(loop);
 
 // --- species ---------------------------------------------------------------
+// The rail lives in the bottom bar, not behind the controls sheet: the catalogue
+// is the first thing worth trying, so it should not need a menu opened first.
 const chips = $('species');
+const rgb = (c) => 'rgb(' + c.map(v => Math.round(Math.min(1, v) * 255)).join(',') + ')';
 for (const name of Object.keys(SPECIES)) {
   const b = document.createElement('button');
   b.className = 'chip' + (name === app.speciesName ? ' on' : '');
-  b.textContent = name;
+  b.title = name;
+  // the swatch is the species' own vein colour, read off its palette — the same
+  // number the renderer uses, so the chip cannot drift from the plant
+  const dot = document.createElement('i');
+  dot.style.background = dot.style.color = rgb(SPECIES[name].pal.vein);
+  b.append(dot, document.createTextNode(name));
   b.onclick = () => {
     app.newSpecimen(name);
     [...chips.children].forEach(x => x.classList.remove('on'));
     b.classList.add('on');
+    b.scrollIntoView({ block: 'nearest', inline: 'center' });
     syncSliders();
+    $('regrowBtn').classList.remove('urge');
   };
   chips.appendChild(b);
 }
+// a fresh specimen of the same species leaves the rail alone; a species change
+// is the only thing that moves it
+chips.querySelector('.chip.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 
 // --- controls that show you their own effect -------------------------------
 let tipT = 0;
