@@ -228,16 +228,33 @@ export class Leaf {
         if (f < o.veinFrac || mag < maxPi * o.veinFloor) continue;
         segs.push({
           x0: F.x[i], y0: F.y[i], x1: F.x[j], y1: F.y[j],
-          // order of the vein: how much traffic it carries, log-compressed
-          w: Math.min(1, Math.log(1 + mag) / Math.log(1 + maxPi)),
+          mag,   // raw traffic; turned into a drawn order below
           f,
         });
       }
     }
     // Keep the network that carries the traffic. Drawing every lopsided wall
     // turns a leaf into a solid sheet of light; the hierarchy is the point.
-    segs.sort((a, b) => b.w - a.w);
+    segs.sort((a, b) => b.mag - a.mag);
     this.veins = segs.slice(0, o.veinMax);
+    // Order of a vein: how much traffic it carries, log-compressed — traffic
+    // spans three orders of magnitude across a blade, and vein calibre goes
+    // like its logarithm (the same Murray's-law reasoning as the stem taper).
+    //
+    // Normalise against the range the SURVIVING veins actually occupy, not
+    // against maxPi. maxPi is the maximum over every wall in the tissue,
+    // including the ones that never became veins at all, so dividing by it
+    // leaves the bottom of the 0..1 range unreachable by construction and
+    // squashes a genuine 15x hierarchy into about 1.5x of drawn width. The
+    // engine finds the hierarchy; this is only what stops it being thrown
+    // away on the way to the screen. See TUNING.md.
+    let lo = Infinity, hi = 0;
+    for (const s of this.veins) { if (s.mag < lo) lo = s.mag; if (s.mag > hi) hi = s.mag; }
+    const l0 = Math.log(1 + lo), l1 = Math.log(1 + hi);
+    const span = l1 - l0;
+    for (const s of this.veins) {
+      s.w = span > 1e-6 ? clamp((Math.log(1 + s.mag) - l0) / span, 0, 1) : 1;
+    }
     this.maxPi = maxPi;
     this.mature = true;
   }

@@ -33,6 +33,16 @@ between walls*, not the absolute level. `Jsat: 1e6` keeps it in regime.
 **Threshold veins on per-cell polarity SHARE, not absolute PIN.** Absolute
 thresholding only ever shows the trunk, where all flux funnels.
 
+**Normalise a display mapping against the range that SURVIVES, not the global
+max.** Vein width was `log(1+mag)/log(1+maxPi)`, where `maxPi` is the maximum
+over every wall in the tissue — including the ones filtered out as non-veins. The
+kept veins never reach the bottom of that range, so the lower 44% of the output
+was unreachable and a real 15x hierarchy was drawn at 1.5x. The engine was right
+the whole time; the presentation step was lossy. **When a filtered subset is
+mapped to a visual channel, normalise against the subset.** Nothing looks broken
+when this happens — it just quietly looks bland, which is far harder to spot than
+a crash.
+
 **A primordium must stay a local MAXIMUM.** Model it as a strong decay sink and it
 becomes a pit; the up-the-gradient vectors around it then point *away*, and you get
 a ring of satellite maxima. How hard a maximum can drain is capped by what the
