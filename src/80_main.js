@@ -35,7 +35,6 @@ function hud(now) {
   for (const el of document.querySelectorAll('#stage span'))
     el.classList.toggle('on', el.dataset.s === st);
   $('fps').textContent = app.fps.toFixed(0);
-  $('legend').classList.toggle('on', app.detail > 0.35);
   document.body.classList.toggle('driving', !!app.userDriving);
 }
 

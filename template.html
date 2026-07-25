@@ -110,19 +110,6 @@
     border:1px solid var(--line);background:rgba(6,14,17,.5);display:none;cursor:pointer;
     align-items:center;justify-content:center;color:var(--dim);font-size:15px;line-height:1}
   body.cinema #exitCine{display:flex}
-  #legend{position:fixed;left:16px;z-index:6;
-    bottom:calc(max(14px,env(safe-area-inset-bottom)) + var(--bar) + 98px);
-    width:min(320px,calc(100% - 32px));padding:10px 12px;border-radius:12px;
-    background:rgba(6,14,17,.74);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-    border:1px solid var(--line);opacity:0;transition:opacity .5s;pointer-events:none}
-  body.collapsed #legend{bottom:calc(max(14px,env(safe-area-inset-bottom)) + var(--bar) + 14px)}
-  body.cinema #legend{bottom:max(22px,env(safe-area-inset-bottom))}
-  @media(max-width:560px){#legend{left:8px;width:calc(100% - 16px)}}
-  #legend.on{opacity:1}
-  #legend h3{margin:0 0 6px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
-  #legend p{margin:0 0 5px;font-size:11px;color:#b9cecd;line-height:1.4}
-  #legend .k{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;
-    vertical-align:baseline;position:relative;top:1px}
   /* specimen label */
   #card{position:fixed;top:max(14px,env(safe-area-inset-top));right:16px;z-index:5;
     text-align:right;pointer-events:none;font-variant-numeric:tabular-nums}
@@ -197,18 +184,6 @@
 
 <div id="stage">
   <span data-s="seedling">seedling</span><span data-s="leafing">leafing</span><span data-s="flowering">flowering</span><span data-s="fruiting">fruiting</span><span data-s="ripe">ripe</span>
-</div>
-
-<div id="legend">
-  <h3>the growing tip, cell by cell</h3>
-  <p><span class="k" style="background:#8fe8ff"></span>Each dot is one cell. The brighter it
-  glows, the more auxin it is holding.</p>
-  <p><span class="k" style="background:#9fd8ff"></span>Each needle is the direction that cell
-  has aimed its pumps. That single choice, per cell, is the whole mechanism.</p>
-  <p><span class="k" style="background:#fff8dc"></span>Each spark is auxin actually moving,
-  travelling at the speed of the real flux through that wall.</p>
-  <p style="color:#7f9a99">Watch a bright spot: every needle around it swings to point
-  inward. That agreement <i>is</i> a leaf being decided.</p>
 </div>
 
 <div id="tip"></div>
