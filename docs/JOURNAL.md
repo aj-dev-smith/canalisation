@@ -204,6 +204,126 @@ Note also that fruit sets almost immediately, so there is barely a petals-withou
 ovary moment to shoot. Worth deciding whether the ovary should stay small until
 the petals have finished opening.
 
+## The flower had one whorl, and the mechanism for more was already there (2026-07-25)
+
+Asked how complex a flower this engine could grow. The answer turned out to be a
+measurement rather than an opinion: **every floral organ was a petal**, and had
+been since floral organs existed.
+
+`q` — the continuous coordinate that is the *only* thing distinguishing one floral
+organ from another — was read as `1 - prim.r / meristem.rPZ`. Organs are founded at
+the rim of the competent flank, so `prim.r ≈ rPZ` and `q ≈ 0` always. Measured over
+42 flowers across the catalogue, two seeds each:
+
+```
+                 floral organs   petals   inner   mean q   q rises through the flower
+  before                   294      291       3    0.028   no (noise around zero)
+  after                    261      193      68    0.173   85-89% of steps
+```
+
+Three petals out of 294 ever cleared `petalQ`, and those three were organs that
+happened to found near the centre, not a whorl. `petalQ 0.62` had never fired in
+anger; SCIENCE.md's imposition 3 ("enclosing growth at high `q`") had never once
+executed.
+
+**The bug is that a coordinate measured against a shrinking reference is
+scale-invariant.** The code comment said "the floral meristem shrinks as it
+consumes itself, so later organs start further in" — a correct description of a
+mechanism nobody had written. Two things were missing: the apex never contracted,
+and even if it had, `q` measured against the *current* `rPZ` would have reported
+the same value forever. So: contract the apex by the tissue each organ recruits
+(`consumeApex`), and measure `q` against `floralR0`, the radius the apex had when
+it converted.
+
+### The apex has to be big enough to spend
+
+`goFloral` shrank the apex at conversion (`R ×0.66, rPZ ×0.62`). With contraction
+switched on that left room for 2-5 organs before the apex ran out, against a
+`floralOrgans` ceiling of 9 — so no flower ever reached the ceiling and none ever
+set fruit. Conversion is now a loss of stem-cell *renewal*, not of size: `rCZ`
+shrinks, `G` rises, and the dome keeps its radius, because everything the flower
+will make has to fit in it and nothing replaces what gets used.
+
+### Falsified: keeping more of the central zone does not help
+
+Reasoning that a collapsed `rCZ` lets organs found anywhere and so muddies the
+radial gradient, I predicted that keeping more central zone would sharpen it.
+**Backwards.** Sweeping `floralCZ` (the fraction of `rCZ` surviving conversion)
+over the catalogue:
+
+```
+  floralCZ   organs   inner   mean q   q rises
+      0.42      261      20    0.173      85%   ← original value, kept
+      0.70      252       9    0.152      85%
+      0.85      229       4    0.115      87%
+      1.00      243       1    0.125      89%
+```
+
+A retained central zone pushes every organ *outward*, which is the opposite of
+what identity needs. The monotonicity improves slightly and the identity range
+collapses — the wrong trade. `floralCZ` stays at 0.42 and is now a named parameter
+so the sweep is repeatable.
+
+### ROADMAP 4b fell out of it, because it had to
+
+Once the apex is a finite resource, "spent" is a physical state rather than a
+counter, so `floralOrgans` became a ceiling on top of a real terminal condition.
+That closes the bare-whip bug: **stuck floral axes went from 12 of 16 runs to 0 of
+16**, and specimen heights stopped running away with it (Cathedral Fern 78.8 → 16.4,
+Spiral Ossuary 76.6 → 24.0, Nightglass Parasol 73.8 → 10.5 — those were whips, not
+plants). Seeds per specimen roughly doubled, because flowers that used to hang
+never-fruiting now fruit.
+
+**Detecting "spent" needs two rules and geometry alone is not enough.** An apex can
+stall with 40-70 cells still in the dome, having merely lost the room to sharpen
+another maximum: measured stalls at competent-annulus areas of 27.0 and 15.7 against
+one founder patch of 11.3, while another apex successfully founded an organ at 15.7.
+Near the wavelength limit whether one more organ appears is stochastic, so there is
+no clean threshold to find. The geometric rule (flank narrower than one founder
+patch) catches the deeply contracted ones; an idleness rule catches the rest. Both
+waits were measured with the grace disabled, over 57 conversions and 345 organs:
+
+```
+  conversion -> first organ   p50 25   p90 73   p99 125   max 127
+  organ -> next organ         p50 10   p90 65   p99 238   max 579
+```
+
+`floralGrace 320` sits above the first-organ wait everywhere (so no flower is
+aborted before it starts) and above the p99 gap (so it costs about 1% of organs at
+the tail). It is the same kind of rule as the meristem's own `spotGrace` — how you
+notice something has stopped, not a statement about what a flower should be.
+
+### The divergence angle was being thrown away with the apex
+
+Retiring meristems properly exposed a latent hole: `divergenceStats` only exists on
+a live meristem, and the plant's `_lastDiv` cache is only filled when `stats()` is
+polled. The app polls every frame so it never noticed; a headless run ends with
+every apex retired and reported `—±—` for the project's headline number. A growing
+point now hands its reading to the organism before being dropped, keeping the
+fullest one rather than the last to retire.
+
+### What it actually looks like, and what is still wrong
+
+Verified in a real GPU path (`tools/flower_shot.mjs`; the swiftshader tools write
+black PNGs on this machine while reporting a full triangle count). The whorls read:
+an outer ring of broad pale petals, an inner cluster of short erect organs. Two
+things are worth fixing and are not in this branch:
+
+- **Inner organs had no appearance at all**, because that render path had never
+  executed — they fell through to the *foliage* palette and read as green stem-stubs
+  in the middle of a flower. They now grade from the petal colour toward the
+  species' own vein colour as `q` rises. Graded, not switched: `q` is continuous.
+- **The petioles dominate the composition.** At flower scale the organ stalks are
+  fat opaque tubes and the petals read as blades stuck to scaffolding. Pre-existing
+  — it was equally true when every organ was a petal — but a flower close-up is
+  where it hurts, and nothing had ever pointed a camera here.
+
+On the ovary that JOURNAL previously recorded as dominating the frame: there *is* a
+window where the flower stands alone, and it is not as narrow as the earlier note
+implied. In 39 of 39 flowers the petals reach full development **before** the shell
+is first drawn, by 21-504 steps (median ~154). It is short, not absent — about a
+second of wall time at 4x, which is why polling from outside the page steps over it.
+
 ## Design forks and why
 
 - **Cell-based CPU sim, not GPU.** The tissue divides and rewires its topology every

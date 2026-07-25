@@ -68,6 +68,7 @@ class Axis {
     this.floral = false;
     this.fruit = null;
     this.floralCount = 0;
+    this.lastFloralAt = 0;
   }
 
   tipPos() { return this.pts[this.pts.length - 1]; }
@@ -142,21 +143,17 @@ class Axis {
         this.goFloral(sp);
       }
     }
-    if (this.floral && this.floralCount >= sp.floralOrgans && !this.fruit) {
-      this.setFruit(sp);
-    }
-
     // A determinate shoot: once it has made its complement of organs the apex
     // arrests. The specimen finishes instead of growing off the top of the
     // frame forever — and the meristem stops costing anything.
     const budgetLeft = sp.organBudget - this.plant.vegOrganCount();
     if ((!this.floral && (this.organs.length >= sp.maxOrgans || budgetLeft <= 0))) {
       this.alive = false; this.arrested = true;
-      this.meristem = null;   // an arrested shoot has no growing point to pay for
+      this.retireMeristem();  // an arrested shoot has no growing point to pay for
     }
 
     // --- harvest whatever the meristem decided --------------------------------
-    while (m.emitted.length) {
+    while (m.emitted.length && !this.fruit) {
       const prim = m.emitted.shift();
       if (this.organs.length >= sp.maxOrgans) break;
       // two organs cannot share an internode, however fast the tip patterns
@@ -164,6 +161,17 @@ class Axis {
       if (this.length - this.lastOrganLen < mi) continue;
       this.lastOrganLen = this.length;
       this.addOrgan(prim);
+    }
+
+    // A determinate apex ends one of two ways: it hits the species' ceiling, or
+    // it runs out of itself. `floralOrgans` used to be the only trigger, which
+    // is why an apex that spent itself early never set fruit and elongated as a
+    // bare whip for the rest of the run (ROADMAP 4b). It is now a ceiling on top
+    // of a physical condition, so how many organs a flower makes is something
+    // the apex decides rather than something the preset states.
+    if (this.floral && !this.fruit &&
+      (this.floralCount >= sp.floralOrgans || this.apexSpent(sp))) {
+      this.setFruit(sp);
     }
 
     // --- organs mature --------------------------------------------------------
@@ -207,9 +215,65 @@ class Axis {
     this.floral = true;
     this.pedicel = !!immediate;   // a bud that became a flower sits on a stalk
     const m = this.meristem.o;
-    m.R *= 0.66; m.rCZ *= 0.42; m.rPZ *= 0.62; m.G *= 2.3;
+    // Conversion is a loss of stem-cell renewal, not a loss of size: the central
+    // zone stops being maintained, so most of the dome becomes competent at once
+    // and organs crowd in instead of spiralling apart. The dome itself keeps the
+    // radius it had — it has to, because everything the flower is going to make
+    // has to fit in it, and from here nothing replaces what gets used.
+    m.rCZ *= sp.floralCZ; m.G *= 2.3;
+    // The scale the apex had at the moment it converted. Organ identity is read
+    // against this fixed reference and not against the apex's current size — a
+    // meristem that contracts self-similarly reports the same q forever if you
+    // measure it against itself, which is why q used to be stuck at zero.
+    this.floralR0 = m.rPZ;
+    this.lastFloralAt = this.age;
     this.meristem.candidates = [];
     this.meristem.emitted.length = 0;
+  }
+
+  // A determinate apex has no renewing stem-cell pool. Every organ it founds
+  // recruits a patch of tissue that is never replaced, so the competent flank
+  // contracts by the area it just lost, and the next organ has nowhere to be
+  // founded but further in. That contraction is the whole of floral organ
+  // identity here — nothing anywhere names a whorl or counts one.
+  consumeApex() {
+    const m = this.meristem.o;
+    const comp = Math.PI * (m.rPZ * m.rPZ - m.rCZ * m.rCZ);
+    const lost = Math.PI * m.organR * m.organR;
+    const k = Math.sqrt(clamp(1 - lost / Math.max(1e-3, comp), 0.35, 1));
+    m.R *= k; m.rPZ *= k; m.rCZ *= k;
+  }
+
+  // `organR` is a patch of tissue a fixed few cells across, so as the apex
+  // contracts each organ costs a larger share of what is left. Two ways that
+  // ends, and it needs both — measured, because the geometric one alone misses
+  // half of them: an apex can stall with 40–70 cells still in the dome, having
+  // simply lost the room to sharpen another maximum.
+  apexSpent(sp) {
+    const m = this.meristem;
+    if (!m) return true;
+    // no room left: the competent flank is narrower than one founder patch
+    if (m.o.rPZ - m.o.rCZ < m.o.organR) return true;
+    // stopped: room but no organ in far longer than the last one took. Same kind
+    // of rule as the meristem's own `spotGrace` — how you notice something has
+    // stopped, not a statement about what the flower should be.
+    return this.age - this.lastFloralAt > sp.floralGrace;
+  }
+
+  // A growing point is about to be discarded. It is the only thing that ever
+  // measured the divergence angle, so hand that reading to the organism before
+  // dropping it — keeping the fullest one, not the last to retire. Until apices
+  // actually retired this never mattered: something was always still patterning.
+  retireMeristem() {
+    const m = this.meristem;
+    if (m) {
+      const st = m.divergenceStats(24);
+      const prev = this.plant._lastDiv;
+      if (st && (!prev || st.n >= prev.n)) this.plant._lastDiv = st;
+      this.plant._lastCells = m.F.n;
+      this.plant._lastPl = m.plastochron;
+    }
+    this.meristem = null;
   }
 
   // The apex has spent itself. What is left becomes an ovary.
@@ -218,7 +282,7 @@ class Axis {
     this.fruit = new Fruit(this.plant.prm, this.plant.sp.fruitOpts || {}, seed);
     this.alive = false;
     this.arrested = true;
-    this.meristem = null;      // the apex is spent; stop paying for it
+    this.retireMeristem();     // the apex is spent; stop paying for it
   }
 
   addOrgan(prim) {
@@ -240,7 +304,7 @@ class Axis {
       // identity read off the radius the organ was founded at: the floral
       // meristem shrinks as it consumes itself, so later organs start further
       // in, and that gradient is the only thing distinguishing them
-      org.q = clamp(1 - (prim.r / Math.max(1e-3, this.meristem.o.rPZ)), 0, 1);
+      org.q = clamp(1 - (prim.r / Math.max(1e-3, this.floralR0 || this.meristem.o.rPZ)), 0, 1);
       org.floral = true;
       // the outer ones are petals — leaves whose margin was told to grow broad
       // and smooth instead of long and toothed
@@ -251,6 +315,8 @@ class Axis {
         : sp.organTilt * 0.30;
       org.roll *= 0.25;
       org.droopScale = org.petal ? 0.12 : 0.05;
+      this.lastFloralAt = this.age;
+      this.consumeApex();
     }
     this.organs.push(org);
   }
@@ -495,12 +561,19 @@ export const SPECIES_DEFAULTS = {
   nutAmp: 0.16,
   florigenRate: 0.0016, // how fast leaves make the flowering signal
   florigenThresh: 12,    // how much has to reach the tip before it converts
-  floralOrgans: 9,      // organs the flower makes before the apex is spent
+  floralOrgans: 9,      // ceiling on floral organs; the apex usually stops first
+  floralGrace: 320,     // idle steps before a floral apex counts as spent
+  floralCZ: 0.42,       // how much of the central zone survives conversion
   fruitFlow: 0.0060,     // a swelling fruit is a huge sink; the stem answers
   fruitScale: 0.55,
   fruitOpts: {},
   maxFlowers: 6,
-  petalQ: 0.62,      // organs founded outside this are petals
+  // Where the identity boundary sits on `q`, and so the petal:stamen ratio. This
+  // number is chosen, not derived — it is the imposition SCIENCE.md lists. It sat
+  // at 0.62 for as long as q was stuck at zero, where it could never fire; the
+  // measured q distribution is skewed (p50 0.06, p90 0.53), so 0.62 left 24 of 42
+  // flowers with no inner organs at all. See TUNING.md for the threshold sweep.
+  petalQ: 0.28,      // organs founded outside this are petals
   petalTilt: 1.45,   // petals reflex past perpendicular as they open
   tropism: 0.02,
   wander: 0.35,

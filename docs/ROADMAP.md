@@ -25,19 +25,22 @@ Leaf outlines are rougher than real leaves because only the boundary is simulate
 a real lamina tensions its own edge. Would need a 2D tissue with a free boundary.
 Meaningful quality jump, meaningful work.
 
-## 4b. Floral axes that never finish
-A shoot converts to a flower, makes fewer than `floralOrgans` floral organs, and so
-never calls `setFruit`. It therefore never arrests, and an unarrested axis
-elongates for as long as the simulation runs — a bare whip out of the top of a
-finished plant. Measured with `node test/species.mjs`: at 5000 steps, 12 of 16
-runs across the eight species leave at least one axis in this state, including
-every species that predates the current catalogue. The fix is probably not a bigger
-`floralOrgans` budget but a second trigger: an apex whose floral meristem has
-stopped emitting is spent, whatever it managed to make, and what is left is an
-ovary. That changes petal counts on existing species, so it wants its own branch
-and its own before/after table.
+## 4b. Floral axes that never finish — DONE (2026-07-25)
+Fixed as a consequence of giving the floral apex whorls: once the apex genuinely
+consumes itself, "spent" is a physical state and `floralOrgans` is only a ceiling
+over it. 12 of 16 runs affected → 0 of 16; heights stopped running away (Cathedral
+Fern 78.8 → 16.4). Petal counts did change, as predicted, and are now emergent —
+before/after in JOURNAL.md. The guessed fix ("an apex that has stopped emitting is
+spent") was right but insufficient on its own: idleness alone cannot be distinguished
+from slow patterning near the wavelength limit, so it takes a geometric condition
+too. Details in JOURNAL.md and TUNING.md.
 
 ## 5. Smaller things
+- **Organ petioles dominate a flower close-up.** At flower scale the stalks are fat
+  opaque tubes and the petals read as blades bolted to scaffolding. Pre-existing and
+  unrelated to whorls, but the flower shot is where it shows — reproduce with
+  `node tools/flower_shot.mjs shots/f.png 'Sulphur Rosette' 424242`. Probably wants
+  petiole radius to scale with the organ it carries rather than with the stem.
 - Flowers do not announce themselves against heavy foliage; make them larger and open wider
 - Fruit is a little small against the plant (`fruitScale`)
 - Fenestrated species get blocky holes at low blade LOD

@@ -27,6 +27,9 @@ import {
 //
 // `test/species.mjs` grows all of them headlessly and prints the numbers. Run it
 // before and after touching anything here.
+// how finely the inner-organ palette is graded across q (cached, not per-frame)
+const INNER_STEPS = 5;
+
 export const SPECIES = {
   'Cathedral Fern': {
     prm: { T: 40, D: 6.0, mu: 0.30, rho: 0.60, b: 3.0 },
@@ -307,6 +310,23 @@ export class App {
     this.petalPal = { ...this.pal, blade0: this.pal.petal0.map(v => v * m),
       blade1: this.pal.petal1.map(v => v * m), vein: this.pal.petalVein,
       veinTint: this.pal.petal1.map(v => v * 0.25) };
+    // Inner floral organs. Until the apex started consuming itself, `q` never
+    // rose above `petalQ`, so no organ ever took this path and it fell through to
+    // the foliage palette — a whorl of stamens rendered as green stem-stubs the
+    // first time it was looked at. They grade from the petal colour toward the
+    // species' own vein colour, which is its bright accent, so an inner organ
+    // reads as catching light rather than as a leaf that failed to open. Graded
+    // on `q` and not switched on identity: q is continuous, and nothing here
+    // should know how many whorls there are.
+    this.innerPals = [];
+    for (let i = 0; i < INNER_STEPS; i++) {
+      const t = 0.30 + 0.62 * (i / (INNER_STEPS - 1));
+      const mix = (c, d) => c.map((v, k) => lerp(v, d[k], t));
+      this.innerPals.push({ ...this.petalPal,
+        blade0: mix(this.petalPal.blade0, this.pal.vein.map(v => v * m * 0.55)),
+        blade1: mix(this.petalPal.blade1, this.pal.vein.map(v => v * m)),
+        glow: this.petalPal.glow * (1 + 0.5 * t) });
+    }
     if (this.ringWidth) this.mo.rOut = this.mo.rCZ + this.ringWidth;
     const fr = mulberry32(seed ^ 0x51ed270b);
     this.sp.fruitOpts = {
@@ -780,7 +800,11 @@ export class App {
         const dev = clamp((org.dev || 0) * 1.06 - 0.03, 0, 1);
         const bl = org.len * 0.80;
         if (bl < 0.02) continue;
-        const bp = org.petal ? this.petalPal : pal;
+        const bp = org.petal ? this.petalPal
+          : org.floral ? this.innerPals[clamp(
+            Math.round(((org.q - this.sp.petalQ) / Math.max(1e-3, 1 - this.sp.petalQ)) * (INNER_STEPS - 1)),
+            0, INNER_STEPS - 1)]
+            : pal;
         blade(B, L, fr, bl, bl, bp, -bl * (org.petal ? 0.05 : 0.16), bl * 0.014,
           bp.glow, this.bladeMU, this.bladeMV, dev);
       }
