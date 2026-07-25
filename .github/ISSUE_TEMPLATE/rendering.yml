@@ -1,0 +1,39 @@
+name: Rendering or performance issue
+description: It looks wrong on screen, fails to start, or runs slowly
+labels: [rendering]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        A visual bug and a simulation bug look identical on screen. If the shape
+        itself is wrong rather than its appearance, please use the simulation
+        template and include harness output.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: OS and GPU
+      description: WebGL2 issues are usually driver-specific.
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: Any errors or shader compilation warnings.
+      render: text

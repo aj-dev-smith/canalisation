@@ -37,6 +37,7 @@ one shared scope — name collisions are silent otherwise and cost a debugging c
 Tests are headless Node, no browser:
 
 ```bash
+node test/smoke.mjs                                # structural invariants; the CI gate
 node test/pattern.mjs '{"T":40,"D":6}' '{"G":0}'   # is the tissue patterning at all?
 node test/phyllo.mjs                               # divergence angle stats
 node test/margin.mjs                               # grow a leaf outline, ASCII silhouette
