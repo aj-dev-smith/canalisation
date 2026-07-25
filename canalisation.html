@@ -1,0 +1,4145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Canalisation — a xenobotany engine</title>
+<style>
+  :root{
+    --ink:#e8f2f0; --dim:#7f9a99; --line:rgba(150,220,215,.16);
+    --panel:rgba(6,14,17,.72); --accent:#6ff0dc;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:#03070a;color:var(--ink);
+    font:13px/1.45 ui-sans-serif,-apple-system,"SF Pro Text",Inter,system-ui,sans-serif}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  .ui{position:fixed;z-index:5}
+  #title{top:max(14px,env(safe-area-inset-top));left:16px;pointer-events:none}
+  #title h1{margin:0;font-size:15px;font-weight:560;letter-spacing:.14em;text-transform:uppercase}
+  #title p{margin:3px 0 0;font-size:11.5px;color:var(--dim);max-width:20em;letter-spacing:.02em}
+  #readout{top:max(14px,env(safe-area-inset-top));right:16px;text-align:right;pointer-events:none}
+  #divVal{font-size:30px;font-weight:300;letter-spacing:-.01em;display:block;
+    font-variant-numeric:tabular-nums;color:var(--accent);line-height:1}
+  #divLbl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+  #divSd{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+  #divBar{--p:38%;--sd:6%;position:relative;height:3px;width:132px;margin:8px 0 0 auto;
+    background:rgba(255,255,255,.09);border-radius:2px;overflow:hidden}
+  #divBar::before{content:"";position:absolute;left:calc(var(--p) - var(--sd)/2);width:var(--sd);
+    top:0;bottom:0;background:rgba(111,240,220,.35)}
+  #divBar::after{content:"";position:absolute;left:var(--p);width:2px;top:0;bottom:0;background:var(--accent)}
+  #golden{position:absolute;left:38.19%;top:-3px;bottom:-3px;width:1px;background:rgba(255,255,255,.45)}
+  #goldenLbl{font-size:9.5px;color:rgba(255,255,255,.4);letter-spacing:.08em;margin-top:4px}
+  #panel{left:16px;right:16px;bottom:max(14px,env(safe-area-inset-bottom));
+    background:var(--panel);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--line);border-radius:14px;padding:12px 14px 13px;max-width:560px}
+  body.collapsed #panelBody{display:none}
+  body.collapsed #panel{padding-bottom:10px}
+  #panelHead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  #stats{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--dim);
+    font-variant-numeric:tabular-nums}
+  #stats b{color:var(--ink);font-weight:520}
+  .btn{font:inherit;font-size:11.5px;letter-spacing:.03em;color:var(--ink);
+    background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:999px;
+    padding:6px 12px;cursor:pointer;transition:.15s}
+  .btn:hover{background:rgba(111,240,220,.14)}
+  .btn.off{opacity:.45}
+  #species{display:flex;gap:6px;flex-wrap:wrap;margin:11px 0 4px}
+  .chip{font:inherit;font-size:11px;padding:5px 10px;border-radius:999px;cursor:pointer;
+    background:transparent;border:1px solid var(--line);color:var(--dim);transition:.15s}
+  .chip.on{background:rgba(111,240,220,.16);color:var(--ink);border-color:rgba(111,240,220,.45)}
+  #sliders{margin-top:8px;display:grid;grid-template-columns:1fr;gap:7px}
+  @media(min-width:520px){#sliders{grid-template-columns:1fr 1fr;gap:7px 16px}}
+  .row label{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);
+    letter-spacing:.05em;text-transform:uppercase;margin-bottom:2px}
+  .row label span{color:var(--ink);font-variant-numeric:tabular-nums;text-transform:none;letter-spacing:0}
+  input[type=range]{width:100%;height:16px;-webkit-appearance:none;background:transparent;margin:0}
+  input[type=range]::-webkit-slider-runnable-track{height:2px;background:rgba(255,255,255,.16);border-radius:2px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;margin-top:-5.5px;
+    border-radius:50%;background:var(--accent);border:none;cursor:pointer}
+  input[type=range]::-moz-range-track{height:2px;background:rgba(255,255,255,.16)}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--accent);border:none}
+  #actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;align-items:center}
+  #stats{font-size:10.5px;color:var(--dim);margin-left:auto;font-variant-numeric:tabular-nums}
+  #stats b{color:var(--ink)}
+  .btn.urge{border-color:rgba(111,240,220,.6);background:rgba(111,240,220,.16)}
+  @media(max-width:560px){#card{right:10px}#card table{font-size:10px}#bar{gap:6px}
+    .btn{padding:6px 10px;font-size:11px}}
+  #about{position:fixed;inset:0;z-index:20;background:rgba(3,7,10,.93);
+    backdrop-filter:blur(12px);padding:28px 22px;overflow:auto;display:none}
+  #about.show{display:block}
+  #about .inner{max-width:640px;margin:0 auto}
+  #about h2{font-size:13px;letter-spacing:.16em;text-transform:uppercase;margin:0 0 14px;color:var(--accent)}
+  #about p{color:#b9cecd;font-size:13px;margin:0 0 12px}
+  #about code{color:var(--accent);font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  #about .eq{background:rgba(255,255,255,.04);border-left:2px solid rgba(111,240,220,.35);
+    padding:10px 12px;margin:14px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:11.5px;color:#cfe6e4;white-space:pre-wrap;overflow-x:auto;border-radius:0 6px 6px 0}
+  #aboutClose{position:sticky;top:0;float:right}
+  #fatal{display:none;position:fixed;inset:0;z-index:99;background:#03070a;color:#f88;
+    padding:30px;font-family:ui-monospace,monospace;font-size:13px;white-space:pre-wrap}
+  @media(max-width:560px){
+    #title p{display:none}
+    #title h1{font-size:12.5px}
+    #divVal{font-size:23px}
+    #readout{top:calc(max(14px,env(safe-area-inset-top)) + 22px)}
+    #divBar{width:104px}
+    #panel{left:8px;right:8px;padding:10px 12px 11px}
+    #stats{gap:10px;font-size:10.5px}
+  }
+  body.cinema .ui, body.cinema #panel{opacity:0;pointer-events:none;transition:opacity .6s}
+  #exitCine{position:fixed;right:14px;bottom:14px;z-index:9;width:34px;height:34px;border-radius:50%;
+    border:1px solid var(--line);background:rgba(6,14,17,.5);display:none;cursor:pointer;
+    align-items:center;justify-content:center;color:var(--dim);font-size:15px;line-height:1}
+  body.cinema #exitCine{display:flex}
+  #legend{position:fixed;left:16px;z-index:6;
+    bottom:calc(max(14px,env(safe-area-inset-bottom)) + 150px);
+    width:min(320px,calc(100% - 32px));padding:10px 12px;border-radius:12px;
+    background:rgba(6,14,17,.74);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border:1px solid var(--line);opacity:0;transition:opacity .5s;pointer-events:none}
+  body.collapsed #legend{bottom:calc(max(14px,env(safe-area-inset-bottom)) + 66px)}
+  body.cinema #legend{bottom:max(22px,env(safe-area-inset-bottom))}
+  @media(max-width:560px){#legend{left:8px;width:calc(100% - 16px)}}
+  #legend.on{opacity:1}
+  #legend h3{margin:0 0 6px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+  #legend p{margin:0 0 5px;font-size:11px;color:#b9cecd;line-height:1.4}
+  #legend .k{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;
+    vertical-align:baseline;position:relative;top:1px}
+  /* specimen label */
+  #card{position:fixed;top:max(14px,env(safe-area-inset-top));right:16px;z-index:5;
+    text-align:right;pointer-events:none;font-variant-numeric:tabular-nums}
+  #cardHead{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);
+    border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:6px}
+  #card table{border-collapse:collapse;margin-left:auto;font-size:11px}
+  #card td{padding:1.5px 0 1.5px 14px;color:var(--dim);white-space:nowrap}
+  #card td.v{color:var(--ink);font-weight:520}
+  #card .em{color:var(--accent)}
+  /* stage bar */
+  #stage{position:fixed;left:0;right:0;bottom:calc(max(10px,env(safe-area-inset-bottom)) + 52px);
+    z-index:5;display:flex;justify-content:center;gap:0;pointer-events:none}
+  #stage span{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(160,190,188,.30);
+    padding:0 9px;transition:color .6s}
+  #stage span.on{color:var(--accent)}
+  #stage span+span::before{content:"";display:inline-block;width:3px;height:3px;border-radius:50%;
+    background:rgba(160,190,188,.22);margin-right:11px;vertical-align:middle}
+  /* slim bar + sheet */
+  #bar{position:fixed;left:0;right:0;bottom:0;z-index:8;background:linear-gradient(to top,rgba(3,7,10,.75),transparent);display:flex;align-items:center;
+    justify-content:center;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+  #sheet{position:fixed;left:50%;transform:translateX(-50%) translateY(110%);
+    bottom:calc(52px + env(safe-area-inset-bottom));z-index:7;width:min(560px,calc(100% - 20px));
+    background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border:1px solid var(--line);border-radius:16px;padding:14px 16px 16px;
+    transition:transform .32s cubic-bezier(.3,.8,.3,1);max-height:70vh;overflow:auto}
+  #sheet{transform:translateX(-50%) translateY(calc(100% + 90px))}
+  body.sheet #sheet{transform:translateX(-50%) translateY(0)}
+  #handover{position:fixed;left:50%;transform:translateX(-50%);z-index:6;
+    bottom:calc(max(10px,env(safe-area-inset-bottom)) + 92px);display:none;
+    font-size:11px;letter-spacing:.04em}
+  body.driving #handover{display:block;animation:pulse 2.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+  #tip{position:fixed;left:50%;transform:translateX(-50%);z-index:8;
+    bottom:calc(52px + env(safe-area-inset-bottom) + 12px);width:min(430px,calc(100% - 28px));
+    background:rgba(6,14,17,.86);border:1px solid var(--line);border-radius:10px;
+    padding:9px 12px;font-size:11.5px;color:#b9cecd;line-height:1.4;
+    opacity:0;transition:opacity .3s;pointer-events:none}
+  #tip.on{opacity:1}
+  body.cinema #card,body.cinema #stage,body.cinema #bar,body.cinema #handover{opacity:0;pointer-events:none;transition:opacity .6s}
+  #hint{position:fixed;left:0;right:0;top:calc(max(14px,env(safe-area-inset-top)) + 96px);
+    text-align:center;font-size:10.5px;color:var(--dim);letter-spacing:.1em;
+    text-transform:uppercase;pointer-events:none;opacity:.75;transition:opacity 1s}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="ui" id="title">
+  <h1>Canalisation</h1>
+  <p>A plant grown from its own chemistry. Nothing here is drawn — the shape is what the auxin does.</p>
+</div>
+
+<div id="card">
+  <div id="cardHead"><span id="cardName">specimen</span></div>
+  <table>
+    <tr><td>leaves</td><td class="v" id="cLeaves">—</td></tr>
+    <tr><td>teeth, last leaf</td><td class="v" id="cTeeth">—</td></tr>
+    <tr><td>flowers</td><td class="v" id="cFlowers">—</td></tr>
+    <tr><td>petals</td><td class="v" id="cPetals">—</td></tr>
+    <tr><td>seeds</td><td class="v" id="cSeeds">—</td></tr>
+    <tr><td>flowered after</td><td class="v" id="cFlowered">—</td></tr>
+    <tr><td>divergence</td><td class="v em" id="cDiv">—</td></tr>
+  </table>
+</div>
+
+<div id="stage">
+  <span data-s="seedling">seedling</span><span data-s="leafing">leafing</span><span data-s="flowering">flowering</span><span data-s="fruiting">fruiting</span><span data-s="ripe">ripe</span>
+</div>
+
+<div id="legend">
+  <h3>the growing tip, cell by cell</h3>
+  <p><span class="k" style="background:#8fe8ff"></span>Each dot is one cell. The brighter it
+  glows, the more auxin it is holding.</p>
+  <p><span class="k" style="background:#9fd8ff"></span>Each needle is the direction that cell
+  has aimed its pumps. That single choice, per cell, is the whole mechanism.</p>
+  <p><span class="k" style="background:#fff8dc"></span>Each spark is auxin actually moving,
+  travelling at the speed of the real flux through that wall.</p>
+  <p style="color:#7f9a99">Watch a bright spot: every needle around it swings to point
+  inward. That agreement <i>is</i> a leaf being decided.</p>
+</div>
+
+<div id="tip"></div>
+<button class="btn" id="handover">you have the camera · <b>resume</b></button>
+
+<div id="bar">
+  <button class="btn" id="sheetBtn">controls</button>
+  <button class="btn" id="cellsBtn">into the cells</button>
+  <button class="btn" id="newBtn">new specimen</button>
+  <button class="btn" id="aboutBtn">what is this?</button>
+</div>
+
+<div id="sheet">
+  <div id="species"></div>
+  <div id="sliders"></div>
+  <div id="actions">
+    <button class="btn" id="regrowBtn">regrow with these</button>
+    <button class="btn" id="pruneBtn">cut the apex</button>
+    <button class="btn" id="cineBtn">cinema</button>
+    <span id="stats"><span>fps <b id="fps">60</b></span></span>
+  </div>
+</div>
+
+<div id="about"><div class="inner">
+  <button class="btn" id="aboutClose">close</button>
+  <h2>What this actually is</h2>
+  <p>Every plant in this window is grown by simulating one molecule: <b>auxin</b>, the
+  hormone that tells plant cells where to become things. Cells pump it at each other
+  through PIN proteins sitting in their walls. That is the entire mechanism.</p>
+  <div class="eq">da_i/dt = ρ − μ·a_i + Σ_j [ T (P_ji φ(a_j) − P_ij φ(a_i)) + D w_ij (a_j − a_i) ]
+
+φ(a) = a / (Km + a)          saturating carrier kinetics
+P_ij = p_i · q_ij / Σ_k q_ik   PIN split across a cell's walls</div>
+  <p>The trick is that a cell has two ways to decide which wall to put its pumps on,
+  and it chooses between them based on how much auxin it is holding:</p>
+  <div class="eq">q_ij = (1−s_i)·<b>a_j^b</b> / Σ  +  s_i·<b>π_ij</b> / Σ
+s_i  = a_i^h / (ath^h + a_i^h)
+
+low auxin  → point at your richest neighbour   (up-the-gradient)
+high auxin → point where flux already goes     (with-the-flux)
+dπ_ij/dt = α·J_ij² − β·π_ij</div>
+  <p>Up-the-gradient polarisation makes auxin pile into isolated <b>maxima</b>. On the
+  growing tip, each maximum becomes a leaf — and because each one drains the tissue
+  around it, the next can only appear in the gap left over. That competition, not any
+  rule, is what produces the divergence angle in the top right. It is measured off the
+  plant while you watch, never assigned.</p>
+  <p>With-the-flux polarisation does the opposite: flux begets more flux, so diffuse
+  flow collapses into narrow <b>canals</b>. Run it in a leaf blade with sources near the
+  margin and a sink at the stalk, and it carves a vein network. The bright filaments in
+  every frond were canalised, edge by edge, from a blank sheet of cells.</p>
+  <p>Two shapes, one mechanism, separated by a threshold. That unification is the claim
+  made by Bayer and colleagues (2009) and Cieslak and colleagues (2019); the
+  up-the-gradient half follows Smith and colleagues (2006), the canalisation half goes
+  back to Sachs (1969) and Mitchison (1980).</p>
+  <p>Things worth trying: push <code>meristem growth</code> up and watch the phyllotaxis
+  reorganise; drop <code>transport</code> until the maxima stop forming and the plant
+  runs out of leaves; cut the apex and watch a dormant bud take over, because the auxin
+  that was suppressing it is gone.</p>
+  <h2 style="margin-top:26px">Where it falls short, and what I tried</h2>
+  <p>Real shoot meristems settle onto 137.5° far more tightly than this one does. Here the
+  angle wanders — the readout shows the spread, and it is the number this tissue is actually
+  producing, not one it has been nudged toward. Two experiments went looking for the reason.</p>
+  <p><b>Was the inhibition too short-ranged?</b> An organ's inhibition reaches about
+  <code>√(D/μ)</code> ≈ 4.5 cells, while the pattern's own spacing is ~5.8 — so only about two
+  previous organs get a say, and a Fibonacci spiral needs four or five to carry the phase. I
+  added a second, slower signal made by organ founder cells with its own diffusion and decay,
+  so its reach could be tuned independently, and swept it from 4 to 17 cell diameters. It
+  changed nothing: the spread stayed flat across every range and every strength. The reason is
+  worth keeping — a field with a long enough reach to remember the last five organs is also
+  nearly <i>uniform</i> across a meristem this size, so it has no idea which direction to point.
+  Range and positional information trade against each other.</p>
+  <p><b>Could a new organ be slotting in at a different radius instead of waiting for a gap?</b>
+  The band that can found an organ is several cells deep, so yes, in principle. Narrowing it to a
+  thin generative ring did tighten things — spread fell by about a third and the fraction of
+  organs landing near the mean roughly tripled — but the shoot then made almost no leaves at all.
+  That control is the <code>generative ring</code> slider: turn it down and watch the angle
+  sharpen while the plant starves. The trade-off is the finding.</p>
+  <p style="color:#7f9a99;font-size:11.5px;margin-top:18px">Both results are negative, and both
+  point the same way: in a single reaction–transport field on an idealised disc, the rate at which
+  sites become available and the sharpness with which one is chosen are governed by overlapping
+  constants. You can have a crisp angle or a productive shoot, not both. Which is presumably why
+  the published models spend their effort on the tissue — real meristem geometry, layered
+  epidermis, mechanical feedback — rather than on the chemistry alone.</p>
+</div></div>
+
+<button id="exitCine" title="show controls">&#9678;</button>
+<div id="fatal"></div>
+<script type="module">
+
+// ===================== 00_math.js =====================
+// ---------------------------------------------------------------------------
+// minimal linear algebra
+// ---------------------------------------------------------------------------
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const smoothstep = (e0, e1, x) => {
+  const t = clamp((x - e0) / (e1 - e0), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+// deterministic PRNG so a "species" seed reproduces exactly
+function mulberry32(seed) {
+  let t = seed >>> 0;
+  return function () {
+    t = (t + 0x6d2b79f5) >>> 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const v3 = (x = 0, y = 0, z = 0) => new Float32Array([x, y, z]);
+function v3set(o, x, y, z) { o[0] = x; o[1] = y; o[2] = z; return o; }
+function v3copy(o, a) { o[0] = a[0]; o[1] = a[1]; o[2] = a[2]; return o; }
+function v3add(o, a, b) { o[0] = a[0] + b[0]; o[1] = a[1] + b[1]; o[2] = a[2] + b[2]; return o; }
+function v3sub(o, a, b) { o[0] = a[0] - b[0]; o[1] = a[1] - b[1]; o[2] = a[2] - b[2]; return o; }
+function v3scale(o, a, s) { o[0] = a[0] * s; o[1] = a[1] * s; o[2] = a[2] * s; return o; }
+function v3addScaled(o, a, b, s) { o[0] = a[0] + b[0] * s; o[1] = a[1] + b[1] * s; o[2] = a[2] + b[2] * s; return o; }
+function v3dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+function v3len(a) { return Math.hypot(a[0], a[1], a[2]); }
+function v3cross(o, a, b) {
+  const x = a[1] * b[2] - a[2] * b[1];
+  const y = a[2] * b[0] - a[0] * b[2];
+  const z = a[0] * b[1] - a[1] * b[0];
+  o[0] = x; o[1] = y; o[2] = z; return o;
+}
+function v3norm(o, a) {
+  const l = Math.hypot(a[0], a[1], a[2]) || 1;
+  o[0] = a[0] / l; o[1] = a[1] / l; o[2] = a[2] / l; return o;
+}
+function v3lerp(o, a, b, t) {
+  o[0] = a[0] + (b[0] - a[0]) * t;
+  o[1] = a[1] + (b[1] - a[1]) * t;
+  o[2] = a[2] + (b[2] - a[2]) * t; return o;
+}
+
+// rotate vector v around unit axis k by angle t (Rodrigues)
+function v3rotAxis(o, v, k, t) {
+  const c = Math.cos(t), s = Math.sin(t);
+  const d = v3dot(k, v);
+  const cx = k[1] * v[2] - k[2] * v[1];
+  const cy = k[2] * v[0] - k[0] * v[2];
+  const cz = k[0] * v[1] - k[1] * v[0];
+  o[0] = v[0] * c + cx * s + k[0] * d * (1 - c);
+  o[1] = v[1] * c + cy * s + k[1] * d * (1 - c);
+  o[2] = v[2] * c + cz * s + k[2] * d * (1 - c);
+  return o;
+}
+
+const m4 = () => new Float32Array(16);
+function m4identity(o) {
+  o.fill(0); o[0] = o[5] = o[10] = o[15] = 1; return o;
+}
+function m4mul(o, a, b) {
+  for (let c = 0; c < 4; c++) {
+    const b0 = b[c * 4], b1 = b[c * 4 + 1], b2 = b[c * 4 + 2], b3 = b[c * 4 + 3];
+    o[c * 4 + 0] = a[0] * b0 + a[4] * b1 + a[8] * b2 + a[12] * b3;
+    o[c * 4 + 1] = a[1] * b0 + a[5] * b1 + a[9] * b2 + a[13] * b3;
+    o[c * 4 + 2] = a[2] * b0 + a[6] * b1 + a[10] * b2 + a[14] * b3;
+    o[c * 4 + 3] = a[3] * b0 + a[7] * b1 + a[11] * b2 + a[15] * b3;
+  }
+  return o;
+}
+function m4perspective(o, fovy, aspect, near, far) {
+  const f = 1 / Math.tan(fovy / 2);
+  o.fill(0);
+  o[0] = f / aspect; o[5] = f; o[11] = -1;
+  o[10] = (far + near) / (near - far);
+  o[14] = (2 * far * near) / (near - far);
+  return o;
+}
+function m4lookAt(o, eye, center, up) {
+  const z = v3(); v3norm(z, v3sub(z, eye, center));
+  const x = v3(); v3norm(x, v3cross(x, up, z));
+  const y = v3(); v3cross(y, z, x);
+  o[0] = x[0]; o[1] = y[0]; o[2] = z[0]; o[3] = 0;
+  o[4] = x[1]; o[5] = y[1]; o[6] = z[1]; o[7] = 0;
+  o[8] = x[2]; o[9] = y[2]; o[10] = z[2]; o[11] = 0;
+  o[12] = -v3dot(x, eye); o[13] = -v3dot(y, eye); o[14] = -v3dot(z, eye); o[15] = 1;
+  return o;
+}
+function m4invert(o, m) {
+  const a00=m[0],a01=m[1],a02=m[2],a03=m[3], a10=m[4],a11=m[5],a12=m[6],a13=m[7],
+        a20=m[8],a21=m[9],a22=m[10],a23=m[11], a30=m[12],a31=m[13],a32=m[14],a33=m[15];
+  const b00=a00*a11-a01*a10, b01=a00*a12-a02*a10, b02=a00*a13-a03*a10,
+        b03=a01*a12-a02*a11, b04=a01*a13-a03*a11, b05=a02*a13-a03*a12,
+        b06=a20*a31-a21*a30, b07=a20*a32-a22*a30, b08=a20*a33-a23*a30,
+        b09=a21*a32-a22*a31, b10=a21*a33-a23*a31, b11=a22*a33-a23*a32;
+  let det = b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06;
+  if (!det) return m4identity(o);
+  det = 1 / det;
+  o[0]=(a11*b11-a12*b10+a13*b09)*det;  o[1]=(a02*b10-a01*b11-a03*b09)*det;
+  o[2]=(a31*b05-a32*b04+a33*b03)*det;  o[3]=(a22*b04-a21*b05-a23*b03)*det;
+  o[4]=(a12*b08-a10*b11-a13*b07)*det;  o[5]=(a00*b11-a02*b08+a03*b07)*det;
+  o[6]=(a32*b02-a30*b05-a33*b01)*det;  o[7]=(a20*b05-a22*b02+a23*b01)*det;
+  o[8]=(a10*b10-a11*b08+a13*b06)*det;  o[9]=(a01*b08-a00*b10-a03*b06)*det;
+  o[10]=(a30*b04-a31*b02+a33*b00)*det; o[11]=(a21*b02-a20*b04-a23*b00)*det;
+  o[12]=(a11*b07-a10*b09-a12*b06)*det; o[13]=(a00*b09-a01*b07+a02*b06)*det;
+  o[14]=(a31*b01-a30*b03-a32*b00)*det; o[15]=(a20*b03-a21*b01+a22*b00)*det;
+  return o;
+}
+
+// signed smallest difference between two angles, in (-PI, PI]
+function angDelta(a, b) {
+  let d = (b - a) % TAU;
+  if (d > Math.PI) d -= TAU;
+  if (d <= -Math.PI) d += TAU;
+  return d;
+}
+
+// ===================== 10_auxin.js =====================
+// ---------------------------------------------------------------------------
+// AUXIN TRANSPORT ENGINE
+//
+// One solver, two polarisation regimes, switched by local auxin concentration.
+// This is the unification proposed by Bayer et al. (2009) and Cieslak et al.
+// (2019): the same PIN feedback loop produces convergence points (phyllotaxis,
+// leaf serration) where auxin is low, and canals (vasculature) where auxin is
+// high.
+//
+//   da_i/dt = rho_i - mu_i a_i
+//           + sum_j [ T (P_ji phi(a_j) - P_ij phi(a_i)) + D w_ij (a_j - a_i) ]
+//
+//   phi(a) = a / (Km + a)                       saturating carrier kinetics
+//
+//   P_ij  = p_i * q_ij / sum_k q_ik             PIN allocated over membranes
+//
+//   q_ij  = (1 - s_i) * G_ij  +  s_i * C_ij     the two regimes, blended
+//     G_ij = a_j^b / sum_k a_k^b                UP-THE-GRADIENT   (Smith 2006)
+//     C_ij = pi_ij / sum_k pi_ik                WITH-THE-FLUX     (Mitchison 1980)
+//        d pi_ij/dt = alpha * J_ij^2/(1 + J_ij^2/Jsat) - beta * pi_ij
+//     s_i  = a_i^h / (ath^h + a_i^h)            the concentration switch
+//
+//   dp_i/dt = rhoP * a_i^n/(kP^n + a_i^n) - muP * p_i    auxin up-regulates PIN
+//
+// Nothing in here knows what a leaf or a stem is. Geometry decides the rest.
+// ---------------------------------------------------------------------------
+
+const MAXNB = 8;
+
+const DEFAULT_PRM = {
+  rho: 0.60,       // baseline auxin production
+  mu: 0.30,        // baseline auxin turnover
+  D: 6.0,          // passive diffusion across a wall
+  T: 40.0,         // active transport strength
+  Km: 1.2,         // Michaelis constant of the efflux carrier
+  b: 3.0,          // up-the-gradient sharpness
+  ath: 0.60,       // auxin concentration at which canalisation takes over
+  hSwitch: 2.5,    // steepness of that switch — a real sigmoid, not a step
+  alpha: 0.08,     // flux -> PIN feedback gain
+  beta: 0.15,      // PIN turnover on the flux branch
+  // The feedback must stay in its quadratic regime. If pi saturates, every wall
+  // of a cell ends up equal and the cell has no polarity at all — the canal is
+  // the *contrast* between one wall and its neighbours, not the absolute level.
+  Jsat: 1e6,
+  piFloor: 0.002,  // residual PIN so a canal can always be re-routed
+  rhoP: 1.0,       // PIN synthesis
+  kP: 1.6,         // half-saturation of PIN synthesis by auxin
+  nP: 2.0,
+  muP: 0.55,       // PIN decay
+  pMin: 0.35,
+  // Explicit Euler is only stable while dt < 1/(2 D w deg). With D=6, w<=1 and
+  // six walls per cell that ceiling is about 0.014, so the step is held well
+  // under it and the work is made up with substeps.
+  // second signal: off by default (DI/muI give its reach, sqrt(DI/muI))
+  DI: 6.0,
+  muI: 0.06,
+  rhoI: 0.0,       // set > 0 to switch the long-range inhibitor on
+  kI: 1.0,         // inhibitor level at which competence is halved
+  dt: 0.014,
+  substeps: 3,
+};
+
+// A CellField is a bag of cells plus a symmetric neighbour graph in CSR form.
+// Every directed edge carries its own PIN state, which is what makes
+// canalisation possible at all.
+class CellField {
+  constructor(cap) {
+    this.cap = cap;
+    this.n = 0;
+    this.x = new Float32Array(cap);
+    this.y = new Float32Array(cap);
+    this.a = new Float32Array(cap);      // auxin
+    this.p = new Float32Array(cap);      // total PIN in the cell
+    this.rho = new Float32Array(cap);    // per-cell production
+    this.mu = new Float32Array(cap);     // per-cell turnover (sinks raise this)
+    this.flag = new Uint8Array(cap);     // bit0 alive, bit1 frozen, bit2 source
+    this.age = new Float32Array(cap);
+    this.id = new Int32Array(cap);       // stable identity across swap-removal
+    this.sz = new Float32Array(cap);     // cell area, in units of the target area
+    this.comp = new Float32Array(cap);   // PIN competence (0..1) — tissue identity
+    this.organ = new Int32Array(cap);    // id of the organ this cell was recruited to
+    this.inh = new Float32Array(cap);    // second, slower signal made by organs
+    this.nextId = 1;
+    this.aux0 = new Float32Array(cap);   // scratch
+    this.aux1 = new Float32Array(cap);   // scratch
+
+    this.deg = new Int32Array(cap);
+    this.nbr = new Int32Array(cap * MAXNB);
+    this.rev = new Int32Array(cap * MAXNB);   // index of the mirrored half-edge
+    this.w = new Float32Array(cap * MAXNB);   // wall conductance
+    this.pi = new Float32Array(cap * MAXNB);  // flux-mode PIN memory
+    this.P = new Float32Array(cap * MAXNB);   // allocated PIN, membrane i->j
+    this.J = new Float32Array(cap * MAXNB);   // last net flux i->j
+    this.q = new Float32Array(cap * MAXNB);   // scratch allocation weights
+  }
+
+  add(x, y, a = 0.1) {
+    if (this.n >= this.cap) return -1;
+    const i = this.n++;
+    this.x[i] = x; this.y[i] = y; this.a[i] = a;
+    this.p[i] = 1; this.rho[i] = 0; this.mu[i] = 0;
+    this.flag[i] = 1; this.age[i] = 0; this.deg[i] = 0;
+    this.id[i] = this.nextId++; this.sz[i] = 1; this.comp[i] = 1; this.organ[i] = 0;
+    this.inh[i] = 0;
+    const o = i * MAXNB;
+    for (let k = 0; k < MAXNB; k++) { this.pi[o + k] = 0.05; this.P[o + k] = 0; this.J[o + k] = 0; }
+    return i;
+  }
+
+  // swap-remove; caller must rebuild topology afterwards
+  remove(i) {
+    const last = --this.n;
+    if (i !== last) {
+      this.x[i] = this.x[last]; this.y[i] = this.y[last];
+      this.a[i] = this.a[last]; this.p[i] = this.p[last];
+      this.rho[i] = this.rho[last]; this.mu[i] = this.mu[last];
+      this.flag[i] = this.flag[last]; this.age[i] = this.age[last];
+      this.id[i] = this.id[last]; this.sz[i] = this.sz[last];
+      this.comp[i] = this.comp[last]; this.organ[i] = this.organ[last];
+      this.inh[i] = this.inh[last];
+    }
+  }
+
+  clearTopology() {
+    this.deg.fill(0, 0, this.n);
+  }
+
+  // adds the pair (i,j) once; caller guarantees i<j to avoid duplicates
+  link(i, j, w = 1) {
+    if (this.deg[i] >= MAXNB || this.deg[j] >= MAXNB) return;
+    const ei = i * MAXNB + this.deg[i];
+    const ej = j * MAXNB + this.deg[j];
+    this.nbr[ei] = j; this.w[ei] = w; this.rev[ei] = ej;
+    this.nbr[ej] = i; this.w[ej] = w; this.rev[ej] = ei;
+    this.deg[i]++; this.deg[j]++;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// one explicit Euler step of the whole system
+// ---------------------------------------------------------------------------
+// mode: 'grad' pins the tissue to up-the-gradient polarisation (a meristem),
+// 'flux' pins it to canalisation (a vein network), 'auto' lets each cell decide
+// from its own auxin level, which is the unified model.
+function stepAuxin(F, prm, mode = 'auto') {
+  const { n, a, p, rho, mu, deg, nbr, rev, w, pi, P, J, q, flag, comp } = F;
+  const { D, T, Km, b, ath, hSwitch, alpha, beta, Jsat, piFloor,
+    rhoP, kP, nP, muP, pMin } = prm;
+  const dt = prm.dt;
+  const athH = Math.pow(ath, hSwitch);
+
+  // --- 1. allocate each cell's PIN over its membranes -----------------------
+  for (let i = 0; i < n; i++) {
+    if (!(flag[i] & 1)) continue;
+    const d = deg[i], o = i * MAXNB;
+    if (d === 0) continue;
+
+    // concentration switch: how canalising is this cell right now?
+    const ai = a[i];
+    let s;
+    if (mode === 'grad') s = 0;
+    else if (mode === 'flux') s = 1;
+    else { const aH = Math.pow(ai, hSwitch); s = aH / (athH + aH); }
+
+    let sg = 0, sc = 0;
+    for (let k = 0; k < d; k++) {
+      const j = nbr[o + k];
+      const g = Math.pow(a[j] > 0 ? a[j] : 0, b);   // up-the-gradient weight
+      const c = pi[o + k] + piFloor;                 // with-the-flux weight
+      q[o + k] = g;                                  // stash gradient part
+      sg += g; sc += c;
+    }
+    if (sg <= 1e-9) sg = 1e-9;
+    if (sc <= 1e-9) sc = 1e-9;
+
+    // Competence is how *polarised* a cell's PIN can get, not how much of it
+    // there is. An incompetent cell still carries auxin — it just spreads its
+    // carriers evenly over every wall, so it cannot sharpen a gradient into a
+    // maximum. This is the only spatial prior in the model, and it is the
+    // documented difference between central-zone and peripheral-zone identity.
+    const pi_ = p[i];
+    const uni = 1 / d;
+    const cmp = comp[i];
+    for (let k = 0; k < d; k++) {
+      // competence gates gradient *sensing* only. Canalisation is a different
+      // feedback — a cell that is carrying a real flux can polarise to it
+      // whatever its identity, which is why veins can cross tissue that would
+      // never spontaneously form a maximum.
+      let g = q[o + k] / sg;
+      g = uni + (g - uni) * cmp;
+      const c = (pi[o + k] + piFloor) / sc;
+      P[o + k] = pi_ * ((1 - s) * g + s * c);
+    }
+  }
+
+  // --- 2. fluxes and the auxin update --------------------------------------
+  const da = F.aux0;
+  for (let i = 0; i < n; i++) da[i] = 0;
+
+  for (let i = 0; i < n; i++) {
+    if (!(flag[i] & 1)) continue;
+    const d = deg[i], o = i * MAXNB;
+    const ai = a[i];
+    const phi_i = ai / (Km + ai);
+    let acc = rho[i] - mu[i] * ai;
+    for (let k = 0; k < d; k++) {
+      const e = o + k;
+      const j = nbr[e];
+      const aj = a[j];
+      const phi_j = aj / (Km + aj);
+      const out = T * P[e] * phi_i;
+      const inn = T * P[rev[e]] * phi_j;
+      const dif = D * w[e] * (aj - ai);
+      acc += inn - out + dif;
+      // Total net flux, carrier-mediated plus diffusive. The diffusive part is
+      // what lets a canal nucleate at all: before any PIN is polarised the only
+      // thing pointing at the sink is the concentration gradient, and
+      // canalisation has to be able to hear it.
+      J[e] = out - inn - dif;
+    }
+    da[i] = acc;
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (!(flag[i] & 1) || (flag[i] & 2)) continue;
+    let v = a[i] + dt * da[i];
+    if (v < 0) v = 0; else if (v > 60) v = 60;
+    a[i] = v;
+  }
+
+  // --- 3. the canalisation feedback: flux begets transport capacity ---------
+  if (mode !== 'grad') {
+    for (let i = 0; i < n; i++) {
+      if (!(flag[i] & 1)) continue;
+      const d = deg[i], o = i * MAXNB;
+      for (let k = 0; k < d; k++) {
+        const e = o + k;
+        const jf = J[e] > 0 ? J[e] : 0;
+        const drive = (jf * jf) / (1 + (jf * jf) / Jsat);
+        let v = pi[e] + dt * (alpha * drive - beta * pi[e]);
+        if (v < 0) v = 0; else if (v > 1e4) v = 1e4;
+        pi[e] = v;
+      }
+    }
+  }
+
+  // --- 4. auxin up-regulates its own transporter ---------------------------
+  const kPn = Math.pow(kP, nP);
+  for (let i = 0; i < n; i++) {
+    if (!(flag[i] & 1)) continue;
+    const an = Math.pow(a[i], nP);
+    const prod = rhoP * an / (kPn + an);
+    let v = p[i] + dt * (prod - muP * p[i]);
+    if (v < pMin) v = pMin; else if (v > 6) v = 6;
+    p[i] = v;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// A SECOND SIGNAL
+//
+// The experiment this exists for: in the auxin-only model the reach of an
+// organ's inhibition is sqrt(D/mu), and D and mu are the same two constants
+// that set the spacing of the pattern. You cannot lengthen the memory without
+// coarsening the pattern. This field is made by organ founder cells, diffuses
+// with its OWN D and decays with its OWN mu, and suppresses polarisation
+// competence rather than auxin itself — so its length scale sqrt(DI/muI) is
+// free, and the auxin budget is untouched.
+//
+// Cells carry it, so it advects outward with the tissue exactly as the organs do.
+// ---------------------------------------------------------------------------
+function stepInhibitor(F, prm) {
+  const { n, inh, deg, nbr, w, flag, organ, aux1 } = F;
+  const { DI, muI, rhoI } = prm;
+  const dt = prm.dt;
+  for (let i = 0; i < n; i++) {
+    if (!(flag[i] & 1)) { aux1[i] = 0; continue; }
+    const d = deg[i], o = i * MAXNB;
+    const vi = inh[i];
+    let acc = (organ[i] > 0 ? rhoI : 0) - muI * vi;
+    for (let k = 0; k < d; k++) {
+      const e = o + k;
+      acc += DI * w[e] * (inh[nbr[e]] - vi);
+    }
+    aux1[i] = acc;
+  }
+  for (let i = 0; i < n; i++) {
+    let v = inh[i] + dt * aux1[i];
+    if (v < 0) v = 0; else if (v > 80) v = 80;
+    inh[i] = v;
+  }
+}
+
+// total outgoing active flux of a cell — used to size veins and to draw glow
+function fluxMagnitude(F, i) {
+  const d = F.deg[i], o = i * MAXNB;
+  let m = 0;
+  for (let k = 0; k < d; k++) { const v = F.J[o + k]; if (v > m) m = v; }
+  return m;
+}
+
+// ===================== 20_meristem.js =====================
+// ---------------------------------------------------------------------------
+// SHOOT APICAL MERISTEM
+//
+// A growing sheet of cells. Cells are displaced outward by v(r) = G r, they
+// divide to keep the epidermis at roughly constant density, and they leave the
+// meristem at the rim. The auxin engine runs on this sheet in gradient mode.
+//
+// Auxin maxima appear spontaneously. Each committed maximum becomes a
+// primordium, which then acts as a sink — that draining is the *only* source of
+// lateral inhibition in this model. The divergence angle is never written down
+// anywhere; it is measured.
+// ---------------------------------------------------------------------------
+
+
+
+class HashGrid {
+  constructor(cell, cap) {
+    this.cell = cell;
+    this.head = new Int32Array(4096).fill(-1);
+    this.next = new Int32Array(cap).fill(-1);
+    this.mask = 4095;
+  }
+  key(cx, cy) {
+    return ((cx * 73856093) ^ (cy * 19349663)) & this.mask;
+  }
+  build(x, y, n) {
+    this.head.fill(-1);
+    const c = this.cell;
+    for (let i = 0; i < n; i++) {
+      const k = this.key(Math.floor(x[i] / c), Math.floor(y[i] / c));
+      this.next[i] = this.head[k];
+      this.head[k] = i;
+    }
+  }
+  // calls cb(j) for every candidate within one cell ring of (px,py)
+  query(px, py, cb) {
+    const c = this.cell;
+    const cx = Math.floor(px / c), cy = Math.floor(py / c);
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dy = -1; dy <= 1; dy++) {
+        let j = this.head[this.key(cx + dx, cy + dy)];
+        while (j !== -1) { cb(j); j = this.next[j]; }
+      }
+  }
+}
+
+const MERISTEM_DEFAULTS = {
+  R: 10.0,          // radius at which cells leave the meristem
+  rCZ: 2.4,         // central zone: auxin-competent but organ-incompetent
+  rOut: 0,           // outer competence edge (0 = none)
+  rPZ: 6.8,         // beyond here auxin drains into the provasculature below
+  d0: 1.0,          // target cell spacing
+  G: 0.003,        // relative expansion rate per frame, v(r) = G r
+  linkR: 1.62,      // wall detection radius, in units of d0
+  spotGrace: 45,     // frames a maximum may go missing before it is written off
+  keepFrac: 0.45,    // survival threshold, as a fraction of the birth threshold
+  organR: 1.9,       // radius of tissue recruited as an organ's founder cells
+  organDrain: 0.3,   // export of auxin from founder cells into the stem below
+  rimDrain: 1.2,
+  czWidth: 0.9,      // how sharply competence switches on at the CZ boundary
+  detectA: 1.7,      // a maximum must stand this far above the field mean
+  persist: 8,       // frames a maximum must persist before it is committed
+  mergeR: 2.2,      // two maxima this close are the same maximum (numerics only)
+  noise: 0.05,      // per-cell variation in auxin production
+  maxCells: 3600,
+};
+
+class Meristem {
+  constructor(prm, opts = {}, seed = 1) {
+    this.o = { ...MERISTEM_DEFAULTS, ...opts };
+    this.prm = prm;
+    this.rnd = mulberry32(seed);
+    this.F = new CellField(this.o.maxCells);
+    this.grid = new HashGrid(this.o.d0 * this.o.linkR, this.o.maxCells);
+    this.primordia = [];     // live sinks inside the meristem
+    this.emitted = [];       // queue consumed by the plant
+    this.divergence = [];    // measured angles between successive primordia
+    this.lastAngle = null;
+    this.time = 0;
+    this.plastochron = 0;
+    this.lastEmit = 0;
+    this.candidates = [];    // persistent maxima, tracked by position not index
+    this.aMean = 1;
+    this._crowd = new Int32Array(this.o.maxCells);
+    this._seedTissue();
+    this.rebuild();
+  }
+
+  _seedTissue() {
+    const { R, d0 } = this.o;
+    const F = this.F;
+    // hexagonal-ish seeding with jitter, then let relaxation sort it out
+    const dy = d0 * 0.866;
+    for (let gy = -R / dy - 1; gy <= R / dy + 1; gy++) {
+      for (let gx = -R / d0 - 1; gx <= R / d0 + 1; gx++) {
+        const x = (gx + (gy & 1 ? 0.5 : 0)) * d0 + (this.rnd() - 0.5) * d0 * 0.25;
+        const y = gy * dy + (this.rnd() - 0.5) * d0 * 0.25;
+        if (Math.hypot(x, y) < R) {
+          const i = F.add(x, y, 0.4 + this.rnd() * 0.9);
+          // spread cells through the division cycle so they do not divide in lockstep
+          if (i >= 0) F.sz[i] = 1 + this.rnd() * 0.85;
+        }
+      }
+    }
+    for (let i = 0; i < F.n; i++) F.aux0[i] = 1 + (this.rnd() - 0.5) * 2 * this.o.noise;
+  }
+
+  // per-cell production jitter, keyed to stable ids so it does not flicker
+  _jitter(i) {
+    const h = Math.imul(this.F.id[i] ^ 0x9e3779b9, 0x85ebca6b) >>> 0;
+    return 1 + ((h & 0xffff) / 65535 - 0.5) * 2 * this.o.noise;
+  }
+
+  rebuild() {
+    const F = this.F, o = this.o;
+    const lim = o.d0 * o.linkR, lim2 = lim * lim;
+    this.grid.build(F.x, F.y, F.n);
+    F.clearTopology();
+    for (let i = 0; i < F.n; i++) {
+      const xi = F.x[i], yi = F.y[i];
+      this.grid.query(xi, yi, (j) => {
+        if (j <= i) return;
+        const dx = F.x[j] - xi, dy = F.y[j] - yi;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < lim2 && d2 > 1e-9) {
+          // wall conductance falls off with cell separation
+          F.link(i, j, 1.0 - 0.45 * (Math.sqrt(d2) / lim));
+        }
+      });
+    }
+  }
+
+  // Physical relaxation: cells push each other apart to a target spacing.
+  // The last pass also records how crowded each cell is, which is what decides
+  // division — measured space, not a clock, so the sheet cannot drift out of
+  // balance with its own division rate.
+  relax(iters = 2) {
+    const F = this.F, o = this.o, d0 = o.d0;
+    const crowdR = d0 * 1.25, crowdR2 = crowdR * crowdR;
+    for (let it = 0; it < iters; it++) {
+      const record = it === iters - 1;
+      this.grid.build(F.x, F.y, F.n);
+      for (let i = 0; i < F.n; i++) {
+        let px = 0, py = 0, cnt = 0;
+        const xi = F.x[i], yi = F.y[i];
+        this.grid.query(xi, yi, (j) => {
+          if (j === i) return;
+          const dx = xi - F.x[j], dy = yi - F.y[j];
+          const d2 = dx * dx + dy * dy;
+          if (d2 < crowdR2) cnt++;
+          const d = Math.sqrt(d2);
+          if (d > 1e-6 && d < d0) {
+            const f = (d0 - d) / d0;
+            px += (dx / d) * f; py += (dy / d) * f;
+          }
+        });
+        F.x[i] = xi + px * 0.42 * d0;
+        F.y[i] = yi + py * 0.42 * d0;
+        if (record) {
+          this._crowd[i] = cnt;
+          // remembered cell size, used only for drawing the mosaic
+          F.sz[i] = 0.9 * F.sz[i] + 0.1 * (cnt >= 6 ? 0.85 : cnt >= 4 ? 1.0 : 1.25);
+        }
+      }
+    }
+  }
+
+  // Cells grow with the tissue and divide at twice their target area; cells
+  // that reach the rim have left the meristem. Together these hold the
+  // epidermis at constant density while the sheet expands under it.
+  prune() {
+    const F = this.F, o = this.o;
+    for (let i = F.n - 1; i >= 0; i--) {
+      if (Math.hypot(F.x[i], F.y[i]) > o.R) F.remove(i);
+    }
+  }
+
+  // A cell whose neighbourhood has thinned out has, in effect, grown too large:
+  // it divides. Expansion opens the gaps; division fills them.
+  divide() {
+    const F = this.F, o = this.o;
+    const n0 = F.n;
+    const rimGuard = o.R - o.d0 * 1.3;
+    for (let i = 0; i < n0 && F.n < o.maxCells - 2; i++) {
+      if (this._crowd[i] >= 5) continue;
+      const r = Math.hypot(F.x[i], F.y[i]);
+      // low neighbour counts at the rim are geometry, not a gap
+      if (r > rimGuard && this._crowd[i] >= 3) continue;
+      const th = this.rnd() * TAU;
+      const off = 0.32 * o.d0;
+      const dx = Math.cos(th) * off, dy = Math.sin(th) * off;
+      const j = F.add(F.x[i] + dx, F.y[i] + dy, F.a[i]);
+      if (j < 0) break;
+      F.x[i] -= dx; F.y[i] -= dy;
+      F.p[j] = F.p[i];
+      F.sz[j] = F.sz[i];
+      F.organ[j] = F.organ[i];   // founder-cell identity is heritable
+      this._crowd[i] = 6; this._crowd[j] = 6;
+    }
+  }
+
+  // an organ's position is the centre of mass of its founder cells, so it moves
+  // only as fast as the tissue carries it
+  trackOrgans() {
+    const F = this.F;
+    const sx = new Map(), sy = new Map(), sn = new Map();
+    for (let i = 0; i < F.n; i++) {
+      const oid = F.organ[i];
+      if (!oid) continue;
+      sx.set(oid, (sx.get(oid) || 0) + F.x[i]);
+      sy.set(oid, (sy.get(oid) || 0) + F.y[i]);
+      sn.set(oid, (sn.get(oid) || 0) + 1);
+    }
+    for (let k = this.primordia.length - 1; k >= 0; k--) {
+      const p = this.primordia[k];
+      if (!p.emitted) continue;
+      const n = sn.get(p.id);
+      if (!n) { this.primordia.splice(k, 1); continue; }
+      p.x = sx.get(p.id) / n; p.y = sy.get(p.id) / n;
+      p.r = Math.hypot(p.x, p.y);
+      p.cells = n;
+      p.matched = true; p.miss = 0;
+      // Once the organ has cleared the peripheral zone it has left the
+      // meristem: it stops competing for the meristem's auxin and goes on
+      // being a leaf somewhere else.
+      if (p.r > this.o.R * 0.97) {
+        // released: it is leaving the meristem, so it stops being special
+        for (let i = 0; i < F.n; i++) if (F.organ[i] === p.id) F.organ[i] = 0;
+        this.primordia.splice(k, 1);
+      }
+    }
+  }
+
+  step(dt) {
+    const F = this.F, o = this.o, prm = this.prm;
+    this.time += dt;
+
+    // --- tissue growth: displace every cell down the velocity field v = G r
+    const g = 1 + o.G * dt;
+    for (let i = 0; i < F.n; i++) { F.x[i] *= g; F.y[i] *= g; F.age[i] += dt; }
+    for (const p of this.primordia) {
+      p.x *= g; p.y *= g;
+      p.r = Math.hypot(p.x, p.y);
+      p.age += dt;
+    }
+    this.trackOrgans();
+
+    this.prune();
+    this.relax(1);
+    this.divide();
+    this.rebuild();
+
+    // --- sources and sinks ---------------------------------------------------
+    // A primordium drains only the handful of cells it actually occupies. The
+    // inhibition field that spaces the next organ is not drawn here — it is the
+    // depletion halo that diffusion carves around that sink, and its reach is
+    // sqrt(D/mu), a real length scale of the tissue.
+    const cw = o.czWidth;
+    for (let i = 0; i < F.n; i++) {
+      F.rho[i] = prm.rho * this._jitter(i);
+      let m = prm.mu;
+      const xi = F.x[i], yi = F.y[i];
+      // PIN competence: the central zone's stem cells do not polarise the way
+      // peripheral-zone cells do, so patterning is confined to the flank.
+      const rr = Math.hypot(xi, yi);
+      let cmp = smoothstep(o.rCZ - cw, o.rCZ + cw, rr);
+      // outer edge of the competent ring: beyond it tissue is committed and no
+      // longer able to found an organ. Narrowing this ring is the experiment.
+      if (o.rOut > 0) cmp *= 1 - smoothstep(o.rOut - cw, o.rOut + cw, rr);
+      // where the long-range signal is strong, a cell can still carry auxin but
+      // can no longer sharpen a gradient into a new maximum
+      if (prm.rhoI > 0) {
+        const q = F.inh[i] / prm.kI;
+        cmp *= 1 / (1 + q * q);
+      }
+      F.comp[i] = cmp;
+      // Founder cells of an organ keep exporting auxin downward into the
+      // provasculature for as long as they exist. They are anchored in the
+      // tissue, so this drain travels outward with them — that is the memory
+      // that keeps the pattern from re-arranging itself into a jammed lattice.
+      if (F.organ[i] > 0) m += o.organDrain;
+      // Below the peripheral zone the tissue is already committed: auxin there
+      // is pulled down into the developing provasculature. That drain is what
+      // confines organ initiation to a ring, rather than any rule saying so.
+      const r = Math.hypot(xi, yi);
+      if (r > o.rPZ) {
+        const t = clamp((r - o.rPZ) / Math.max(1e-3, o.R - o.rPZ), 0, 1);
+        m += o.rimDrain * t * t * (3 - 2 * t);
+      }
+      F.mu[i] = m;
+    }
+
+    // --- solve ---------------------------------------------------------------
+    for (let s = 0; s < prm.substeps; s++) {
+      stepAuxin(F, prm, 'grad');
+      if (prm.rhoI > 0) stepInhibitor(F, prm);
+    }
+
+    if (!o.detectOff) this.detect();
+  }
+
+  // diagnostics: how spotty is the field, and at what wavelength?
+  patternStats() {
+    const F = this.F, o = this.o;
+    let sum = 0, mx = 0, mn = 1e9;
+    for (let i = 0; i < F.n; i++) { sum += F.a[i]; if (F.a[i] > mx) mx = F.a[i]; if (F.a[i] < mn) mn = F.a[i]; }
+    const mean = sum / (F.n || 1);
+    const peaks = [];
+    for (let i = 0; i < F.n; i++) {
+      const r = Math.hypot(F.x[i], F.y[i]);
+      if (r > o.R * 0.9) continue;
+      const d = F.deg[i], off = i * MAXNB;
+      if (d < 3) continue;
+      let isMax = true;
+      for (let k = 0; k < d; k++) if (F.a[F.nbr[off + k]] >= F.a[i]) { isMax = false; break; }
+      if (isMax && F.a[i] > mean * 1.2) peaks.push([F.x[i], F.y[i], F.a[i]]);
+    }
+    let spacing = 0;
+    if (peaks.length > 1) {
+      let s = 0;
+      for (const p of peaks) {
+        let best = 1e9;
+        for (const q of peaks) {
+          if (q === p) continue;
+          const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+          if (d < best) best = d;
+        }
+        s += best;
+      }
+      spacing = s / peaks.length;
+    }
+    return {
+      cells: F.n, mean: +mean.toFixed(3), min: +mn.toFixed(3), max: +mx.toFixed(3),
+      contrast: +(mx / (mean || 1)).toFixed(2), peaks: peaks.length,
+      spacing: +spacing.toFixed(2),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // ORGAN INITIATION
+  //
+  // There is no separate "primordium" object imposed on the field. An auxin
+  // maximum *is* a primordium: the up-the-gradient network around it is already
+  // pumping auxin into it, and that draining is already the lateral inhibition
+  // that keeps the next organ away. All this routine does is watch the maxima,
+  // give them identities as they persist, and report the angle at which each
+  // new one appeared.
+  // ---------------------------------------------------------------------------
+  detect() {
+    const F = this.F, o = this.o;
+    let sum = 0;
+    for (let i = 0; i < F.n; i++) sum += F.a[i];
+    this.aMean = F.n ? sum / F.n : 1;
+    // Hysteresis: it takes a strong maximum to declare a new organ, but only a
+    // weak one to keep an organ you already have. Without this a maximum that
+    // dips for a moment is buried and then "re-founded" as a second organ at
+    // the same angle, which corrupts the sequence.
+    const birthT = this.aMean * o.detectA;
+    const keepT = birthT * o.keepFrac;
+
+    // this frame's strict local maxima, in competent tissue
+    const found = [];
+    for (let i = 0; i < F.n; i++) {
+      const ai = F.a[i];
+      if (ai < keepT || F.comp[i] < 0.5) continue;
+      const d = F.deg[i], off = i * MAXNB;
+      if (d < 3) continue;
+      let isMax = true;
+      for (let k = 0; k < d; k++) if (F.a[F.nbr[off + k]] > ai) { isMax = false; break; }
+      if (isMax) found.push({ x: F.x[i], y: F.y[i], a: ai, r: Math.hypot(F.x[i], F.y[i]) });
+    }
+
+    // track them frame to frame; a spot is the same spot if it barely moved
+    for (const p of this.primordia) p.matched = false;
+    const fresh = [];
+    for (const f of found) {
+      let best = null, bd = o.mergeR;
+      for (const p of this.primordia) {
+        if (p.matched) continue;
+        const d = Math.hypot(p.x - f.x, p.y - f.y);
+        if (d < bd) { bd = d; best = p; }
+      }
+      if (best) {
+        best.x = f.x; best.y = f.y; best.r = f.r; best.a = f.a;
+        best.matched = true; best.miss = 0; best.run++;
+      } else if (f.a >= birthT) fresh.push(f);
+    }
+    for (let k = this.primordia.length - 1; k >= 0; k--) {
+      const p = this.primordia[k];
+      if (p.emitted) continue;
+      if (!p.matched && ++p.miss > o.spotGrace) this.primordia.splice(k, 1);
+    }
+
+    // a genuinely new maximum is a new organ
+    for (const f of fresh) {
+      // do not found an organ inside tissue already recruited to one
+      let taken = false;
+      for (let i = 0; i < F.n; i++) {
+        if (F.organ[i] === 0) continue;
+        if (Math.hypot(F.x[i] - f.x, F.y[i] - f.y) < o.organR * 1.4) { taken = true; break; }
+      }
+      if (taken) continue;
+      const ang = Math.atan2(f.y, f.x);
+      const prim = {
+        x: f.x, y: f.y, r: f.r, a: f.a, ang, strength: 1, age: 0, run: 1, miss: 0,
+        matched: true, emitted: false, t: this.time,
+        id: (this._nextId = (this._nextId || 0) + 1),
+      };
+      this.primordia.push(prim);
+    }
+
+    // Report an organ once its maximum has proved it is not a flicker. The
+    // angle recorded is the one it was born at, not where it has drifted to.
+    for (const p of this.primordia) {
+      if (p.emitted || p.run < o.persist) continue;
+      p.emitted = true;
+      // specify the founder cells: from here the organ is a place in the
+      // tissue, not a place in the field
+      for (let i = 0; i < F.n; i++) {
+        if (F.organ[i] !== 0) continue;
+        if (Math.hypot(F.x[i] - p.x, F.y[i] - p.y) < o.organR) F.organ[i] = p.id;
+      }
+      this.emitted.push(p);
+      if (this.lastAngle !== null) {
+        this.divergence.push(angDelta(this.lastAngle, p.ang));
+        this.plastochron = this.time - this.lastEmit;
+      }
+      this.lastAngle = p.ang;
+      this.lastEmit = this.time;
+    }
+  }
+
+  // The way you would measure a real plant: ignore the clock, sort the organs
+  // by how far they have travelled from the tip (which is their age), and read
+  // the angle from one to the next around the axis.
+  spatialDivergence() {
+    const ps = this.primordia.filter(p => p.emitted).slice().sort((a, b) => a.r - b.r);
+    if (ps.length < 4) return null;
+    const d = [];
+    for (let i = 1; i < ps.length; i++) d.push(angDelta(ps[i].ang, ps[i - 1].ang));
+    let pos = 0;
+    for (const v of d) if (v > 0) pos++;
+    const sign = pos >= d.length / 2 ? 1 : -1;
+    const vals = d.map(v => { let a = sign * v * 180 / Math.PI; if (a < -60) a += 360; return a; });
+    const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+    const sd = Math.sqrt(vals.reduce((s, v) => s + (v - mean) * (v - mean), 0) / vals.length);
+    return { mean, sd, n: vals.length, vals };
+  }
+
+  // --- measurement, not decoration ------------------------------------------
+  // Reports the angle between consecutive organs as the plant actually built
+  // them. Nothing here feeds back into the simulation.
+  divergenceStats(window = 40) {
+    const raw = this.divergence.slice(-window);
+    if (raw.length < 4) return null;
+    let pos = 0;
+    for (const v of raw) if (v > 0) pos++;
+    const sign = pos >= raw.length / 2 ? 1 : -1;
+    const vals = raw.map(v => {
+      let a = sign * v * 180 / Math.PI;
+      if (a < -60) a += 360;          // same rotation, other way round the circle
+      return a;
+    });
+    const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+    const sd = Math.sqrt(vals.reduce((s, v) => s + (v - mean) * (v - mean), 0) / vals.length);
+    const lock = vals.filter(v => Math.abs(v - mean) < 20).length / vals.length;
+    return {
+      mean, sd, n: vals.length, lock,
+      handed: sign > 0 ? 'counter-clockwise' : 'clockwise',
+    };
+  }
+}
+
+// ===================== 25_margin.js =====================
+// ---------------------------------------------------------------------------
+// THE LEAF MARGIN
+//
+// The last thing in this piece that was drawn rather than grown was the leaf
+// silhouette — a width function I wrote. This replaces it.
+//
+// The margin is a chain of epidermal cells running from the petiole, around the
+// tip, and back. The same auxin engine runs along that chain in up-the-gradient
+// mode, so it breaks into evenly spaced convergence points on its own. Each
+// convergence point drives outgrowth along the local outward normal: that is a
+// tooth. Between them the margin barely moves: that is a sinus.
+//
+// The feedback that matters is this — as the leaf grows the margin gets longer,
+// which makes room for more convergence points, which makes more teeth. Nobody
+// decides how many lobes a leaf has. It is however many fit.
+//
+// Bilsborough et al. (2011) is the paper this follows.
+// ---------------------------------------------------------------------------
+
+
+
+const MARGIN_DEFAULTS = {
+  maxPts: 620,
+  seedPts: 17,
+  seedR: 0.055,
+  dMax: 0.030,      // insert a cell when the margin stretches past this
+  dMin: 0.011,      // merge cells that crowd closer than this
+  baseGuard: 0.10,  // fraction of the chain nearest the petiole that is held
+  g0: 0.00030,      // baseline outgrowth of the whole margin
+  g1: 0.00115,      // extra outgrowth where auxin has converged
+  gExp: 2.2,        // how sharply outgrowth answers to auxin
+  ax: 1.00,         // proximodistal growth
+  ay: 0.62,         // mediolateral growth — the leaf's slenderness
+  smooth: 0.16,     // resistance of the margin to kinking
+  tipBias: 0.55,    // extra drive toward the distal end early on
+  mature: 1400,
+  // the chain's own chemistry
+  rho: 0.24, mu: 0.30, T: 26, D: 7.0, b: 3.0, sink: 7.0,
+};
+
+class Margin {
+  constructor(prm, opts = {}, seed = 1) {
+    const o = this.o = { ...MARGIN_DEFAULTS, ...opts };
+    this.rnd = mulberry32(seed);
+    this.prm = { ...prm, T: o.T, D: o.D, b: o.b, rho: 0, mu: 0 };
+    this.F = new CellField(o.maxPts);
+    this.age = 0;
+    this.teeth = [];      // convergence points, in material coordinates
+    this._seedChain();
+  }
+
+  _seedChain() {
+    const o = this.o, F = this.F;
+    for (let i = 0; i < o.seedPts; i++) {
+      const th = -Math.PI / 2 + Math.PI * i / (o.seedPts - 1);
+      F.add(Math.cos(th) * o.seedR * 1.25, Math.sin(th) * o.seedR,
+        0.25 + this.rnd() * 0.25);
+    }
+    this.link();
+  }
+
+  link() {
+    const F = this.F;
+    F.clearTopology();
+    for (let i = 0; i < F.n - 1; i++) F.link(i, i + 1, 1);
+  }
+
+  // outward normal of a counter-clockwise chain is (dy, -dx)
+  normalAt(i, out) {
+    const F = this.F, n = F.n;
+    const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
+    const dx = F.x[b] - F.x[a], dy = F.y[b] - F.y[a];
+    const L = Math.hypot(dx, dy) || 1e-6;
+    out[0] = dy / L; out[1] = -dx / L;
+    return out;
+  }
+
+  step(dt = 1) {
+    if (this.mature) return;
+    const F = this.F, o = this.o, prm = this.prm;
+    this.age += dt;
+
+    // --- chemistry along the chain -----------------------------------------
+    const n = F.n;
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += F.a[i];
+    const mean = sum / Math.max(1, n);
+    for (let i = 0; i < n; i++) {
+      const s = i / (n - 1);
+      F.rho[i] = o.rho;
+      F.mu[i] = o.mu;
+      F.comp[i] = 1;
+      // auxin drains out of both ends into the petiole
+      const edge = Math.min(s, 1 - s);
+      if (edge < 0.05) F.mu[i] += o.sink * (1 - edge / 0.05);
+    }
+    for (let k = 0; k < prm.substeps; k++) stepAuxin(F, prm, 'grad');
+
+    // --- outgrowth ----------------------------------------------------------
+    const nx = this._nx || (this._nx = new Float32Array(o.maxPts));
+    const ny = this._ny || (this._ny = new Float32Array(o.maxPts));
+    const nrm = [0, 0];
+    const early = 1 - smoothstep(0, o.mature * 0.45, this.age);
+    for (let i = 0; i < n; i++) {
+      const s = i / (n - 1);
+      const guard = smoothstep(0, o.baseGuard, Math.min(s, 1 - s));
+      // early on the whole thing pushes distally; later it is auxin that decides
+      const distal = 1 + o.tipBias * early * Math.sin(s * Math.PI);
+      const drive = Math.pow(Math.max(0, F.a[i] / Math.max(1e-4, mean)), o.gExp);
+      const rate = (o.g0 + o.g1 * drive) * guard * distal * dt;
+      this.normalAt(i, nrm);
+      nx[i] = nrm[0] * rate * o.ax;
+      ny[i] = nrm[1] * rate * o.ay;
+    }
+    for (let i = 0; i < n; i++) { F.x[i] += nx[i]; F.y[i] += ny[i]; }
+
+    // --- the margin resists kinking ----------------------------------------
+    const sm = o.smooth;
+    for (let i = 1; i < n - 1; i++) {
+      nx[i] = sm * (F.x[i - 1] + F.x[i + 1] - 2 * F.x[i]);
+      ny[i] = sm * (F.y[i - 1] + F.y[i + 1] - 2 * F.y[i]);
+    }
+    for (let i = 1; i < n - 1; i++) { F.x[i] += nx[i]; F.y[i] += ny[i]; }
+
+    this.resample();
+    this.link();
+    if (this.age > o.mature) this.finish();
+  }
+
+  // A growing margin needs more cells, and that lengthening is what lets new
+  // convergence points appear — which is where extra teeth come from.
+  resample() {
+    const F = this.F, o = this.o;
+    for (let i = F.n - 2; i >= 0; i--) {
+      const dx = F.x[i + 1] - F.x[i], dy = F.y[i + 1] - F.y[i];
+      const d = Math.hypot(dx, dy);
+      if (d > o.dMax && F.n < o.maxPts - 2) this._insert(i, 0.5);
+      else if (d < o.dMin && F.n > 24 && i > 1 && i < F.n - 3) this._merge(i);
+    }
+  }
+
+  _insert(i, t) {
+    const F = this.F;
+    const x = lerp(F.x[i], F.x[i + 1], t), y = lerp(F.y[i], F.y[i + 1], t);
+    const a = lerp(F.a[i], F.a[i + 1], t), p = lerp(F.p[i], F.p[i + 1], t);
+    const j = F.add(x, y, a);
+    if (j < 0) return;
+    F.p[j] = p;
+    // shift the tail up by one to keep the chain in order
+    for (let k = F.n - 1; k > i + 1; k--) {
+      F.x[k] = F.x[k - 1]; F.y[k] = F.y[k - 1];
+      F.a[k] = F.a[k - 1]; F.p[k] = F.p[k - 1]; F.id[k] = F.id[k - 1];
+    }
+    F.x[i + 1] = x; F.y[i + 1] = y; F.a[i + 1] = a; F.p[i + 1] = p;
+    F.id[i + 1] = F.nextId++;
+  }
+
+  _merge(i) {
+    const F = this.F;
+    F.x[i] = (F.x[i] + F.x[i + 1]) * 0.5;
+    F.y[i] = (F.y[i] + F.y[i + 1]) * 0.5;
+    F.a[i] = (F.a[i] + F.a[i + 1]) * 0.5;
+    for (let k = i + 1; k < F.n - 1; k++) {
+      F.x[k] = F.x[k + 1]; F.y[k] = F.y[k + 1];
+      F.a[k] = F.a[k + 1]; F.p[k] = F.p[k + 1]; F.id[k] = F.id[k + 1];
+    }
+    F.n--;
+  }
+
+  // Freeze the outline, normalise it into blade coordinates, and hand on the
+  // convergence points — each of those becomes a vein source, which is why a
+  // real leaf has a vein running to every tooth.
+  finish() {
+    const F = this.F, o = this.o;
+    const n = F.n;
+    let x0 = 1e9, x1 = -1e9, ymax = 1e-6;
+    for (let i = 0; i < n; i++) {
+      if (F.x[i] < x0) x0 = F.x[i];
+      if (F.x[i] > x1) x1 = F.x[i];
+      if (Math.abs(F.y[i]) > ymax) ymax = Math.abs(F.y[i]);
+    }
+    const L = Math.max(1e-6, x1 - x0);
+    this.length = L;
+    this.aspect = ymax / L;
+
+    // outline as half-widths either side of the midrib, sampled along it
+    const NS = 96;
+    const wl = new Float32Array(NS), wr = new Float32Array(NS);
+    for (let i = 0; i < n; i++) {
+      const u = clamp((F.x[i] - x0) / L, 0, 1);
+      const k = Math.min(NS - 1, Math.round(u * (NS - 1)));
+      const v = F.y[i] / L;
+      if (v < 0) { if (-v > wl[k]) wl[k] = -v; }
+      else if (v > wr[k]) wr[k] = v;
+    }
+    // fill any sample the margin skipped, then relax the pair a little
+    const fill = (w) => {
+      for (let k = 1; k < NS; k++) if (w[k] === 0) w[k] = w[k - 1];
+      for (let k = NS - 2; k >= 0; k--) if (w[k] === 0) w[k] = w[k + 1];
+      // one light pass only — smoothing here would erase the teeth the
+      // chemistry just spent its whole development making
+      for (let k = 1; k < NS - 1; k++) w[k] = (w[k - 1] + 6 * w[k] + w[k + 1]) * 0.125;
+      w[0] = 0; w[NS - 1] = 0;
+    };
+    fill(wl); fill(wr);
+    this.wl = wl; this.wr = wr; this.NS = NS;
+
+    // convergence points: local auxin maxima along the chain
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += F.a[i];
+    const mean = sum / n;
+    this.teeth = [];
+    for (let i = 2; i < n - 2; i++) {
+      if (F.a[i] < mean * 1.6) continue;
+      if (F.a[i] < F.a[i - 1] || F.a[i] < F.a[i + 1]) continue;
+      this.teeth.push({
+        u: clamp((F.x[i] - x0) / L, 0, 1),
+        v: F.y[i] / L,
+        a: F.a[i],
+      });
+    }
+    this.mature = true;
+  }
+
+  // half-width on one side of the midrib, in units of leaf length
+  half(u, sgn) {
+    if (!this.wl) return 0;
+    const NS = this.NS;
+    const f = clamp(u, 0, 1) * (NS - 1);
+    const i = Math.min(NS - 2, Math.floor(f));
+    const t = f - i;
+    const w = sgn < 0 ? this.wl : this.wr;
+    return lerp(w[i], w[i + 1], t);
+  }
+}
+
+// ===================== 30_leaf.js =====================
+// ---------------------------------------------------------------------------
+// THE BLADE
+//
+// The same auxin engine, on a different piece of geometry, doing the other
+// thing it can do.
+//
+// Auxin is made along the growing margin. Up-the-gradient polarisation breaks
+// that margin into discrete convergence points — those are the teeth and lobes.
+// Each convergence point accumulates auxin until it crosses the switch, flips
+// to with-the-flux polarisation, and canalises a strand back to the petiole.
+// That strand is a vein.
+//
+// Serration and venation are not two systems here. They are one system either
+// side of a threshold, which is the claim Bayer and Cieslak make about the
+// real thing.
+// ---------------------------------------------------------------------------
+
+
+
+
+const LEAF_DEFAULTS = {
+  nu: 46,            // cells along the blade
+  nv: 25,            // cells across the blade at its widest
+  srcRho: 1.6,       // auxin made at each convergence point
+  srcSpacing: 0.055, // how close two sources may be
+  srcEvery: 14,      // frames between recruiting a new source
+  maxSources: 70,
+  interiorSrc: 0.08, // chance a source lands inside the blade, not on the margin
+  petioleU: 0.045,
+  petioleMu: 6.0,    // the base of the blade is the sink everything drains to
+  bodyMu: 0.045,     // low turnover, so auxin reaches the sink instead of decaying
+  grow: 0.0022,      // blade expansion per frame
+  matureAt: 900,     // frames until the vein pattern is frozen and baked
+  veinFrac: 0.40,    // share of a cell's PIN on one wall for it to be a canal
+  veinMax: 260,     // strongest N canals are drawn
+  veinFloor: 0.004,  // and it must carry real traffic, not just be lopsided
+  shapeP: 0.75,      // outline exponents — these make the silhouette
+  shapeQ: 0.85,
+  lobes: 3.0,        // marginal undulation
+  lobeDepth: 0.16,
+  fenestrate: 0.0,   // programmed cell death between veins (monstera holes)
+  aspect: 0.44,      // width / length
+  furl: 0.42,        // how tightly the immature tip is rolled
+  laminaComp: 0.12,  // gradient competence inside the blade
+};
+
+class Leaf {
+  constructor(prm, opts = {}, seed = 1) {
+    this.o = { ...LEAF_DEFAULTS, ...opts };
+    // the blade runs both polarisation modes; that is the whole point
+    this.prm = { ...prm, rho: 0, mu: 0 };
+    this.rnd = mulberry32(seed);
+    this.age = 0;
+    this.scale = 0.06;      // blades start tiny and expand
+    this.mature = false;
+    this.veins = null;      // baked geometry once mature
+    // Phase one: grow the outline. Nothing about this leaf's shape exists yet.
+    this.margin = new Margin(prm, this.o.margin || {}, seed ^ 0x9e37);
+    this.built = false;
+  }
+
+  // half-width on one side of the midrib, read off the grown margin
+  wSide(u, sgn) {
+    return this.margin.mature ? this.margin.half(u, sgn) : 0;
+  }
+
+  // The silhouette is no longer a formula. It is whatever the margin grew.
+  widthAt(u) {
+    if (!this.margin.mature) return 0;
+    if (u <= 0 || u >= 1) return 0;
+    return Math.max(this.margin.half(u, -1), this.margin.half(u, 1));
+  }
+
+  _build() {
+    const o = this.o;
+    const F = new CellField(o.nu * o.nv + 8);
+    this.F = F;
+    this.index = new Int32Array(o.nu * o.nv).fill(-1);
+    const du = 1 / (o.nu - 1);
+    const dv = 1 / (o.nv - 1);
+    for (let r = 0; r < o.nu; r++) {
+      const u = r * du;
+      // The lamina has to be cut to the SAME outline the blade is drawn with.
+      // The two halves of the margin patterned independently, so using one
+      // half-width for both sides leaves tissue — and veins — hanging outside
+      // the leaf on whichever side came out narrower.
+      const hwL = this.wSide(u, -1), hwR = this.wSide(u, 1);
+      for (let c = 0; c < o.nv; c++) {
+        // triangular lattice: alternate rows are offset by half a cell
+        const v = ((c + (r & 1 ? 0.5 : 0)) * dv - 0.5) * 2;
+        const yy = v * o.aspect;
+        if (Math.abs(yy) > (yy < 0 ? hwL : hwR)) continue;
+        // jitter so canals cannot snap to the lattice axes
+        const jx = (this.rnd() - 0.5) * du * 0.45;
+        const jy = (this.rnd() - 0.5) * dv * 0.45;
+        const i = F.add(u + jx, v * o.aspect + jy, 0.05);
+        if (i < 0) continue;
+        this.index[r * o.nv + c] = i;
+        F.comp[i] = 1;
+      }
+    }
+    this.rows = o.nu; this.cols = o.nv;
+    this._link();
+    this._classify();
+  }
+
+  _link() {
+    const F = this.F, o = this.o;
+    const at = (r, c) => (r < 0 || r >= o.nu || c < 0 || c >= o.nv) ? -1 : this.index[r * o.nv + c];
+    for (let r = 0; r < o.nu; r++) {
+      for (let c = 0; c < o.nv; c++) {
+        const i = at(r, c);
+        if (i < 0) continue;
+        const odd = r & 1 ? 1 : 0;
+        const nbrs = [at(r, c + 1), at(r + 1, c - 1 + odd), at(r + 1, c + odd)];
+        for (const j of nbrs) {
+          if (j < 0 || j <= i) continue;
+          const dx = F.x[j] - F.x[i], dy = F.y[j] - F.y[i];
+          const d = Math.hypot(dx, dy) || 1e-4;
+          F.link(i, j, clamp(0.024 / d, 0.25, 1.0));
+        }
+      }
+    }
+  }
+
+  // Who makes auxin and who drains it. Discrete sources appear near the margin
+  // as the blade expands — these stand for the convergence points that mark
+  // future teeth and hydathodes. The petiole is the one sink. Everything
+  // between them is undifferentiated blade.
+  _classify() {
+    const F = this.F, o = this.o;
+    this.isMargin = new Uint8Array(F.n);
+    this.sources = [];
+    this._teeth = [];
+    for (let i = 0; i < F.n; i++) {
+      const u = F.x[i];
+      const hw = this.wSide(u, F.y[i] < 0 ? -1 : 1);
+      const edge = hw - Math.abs(F.y[i]);
+      this.isMargin[i] = (edge < 0.055 || u > 0.94) ? 1 : 0;
+      F.rho[i] = 0;
+      F.mu[i] = o.bodyMu;
+      F.comp[i] = 1;
+      if (u < o.petioleU) { F.mu[i] = o.petioleMu; this.isMargin[i] = 0; }
+    }
+    // every convergence point the margin made becomes a vein source, which is
+    // why a real leaf has a strand running out to every tooth
+    for (const t of this.margin.teeth) {
+      let best = -1, bd = 1e9;
+      for (let i = 0; i < F.n; i++) {
+        if (F.rho[i] > 0) continue;
+        const d = Math.hypot(F.x[i] - t.u, F.y[i] - t.v);
+        if (d < bd) { bd = d; best = i; }
+      }
+      if (best >= 0 && bd < 0.12) { F.rho[best] = o.srcRho; this.sources.push(best); }
+    }
+  }
+
+  // Add one source where the blade is emptiest — new tissue is what makes room
+  // for a new convergence point, so the pattern refines as the leaf expands.
+  addSource() {
+    const F = this.F, o = this.o;
+    let best = -1, bestD = -1;
+    for (let i = 0; i < F.n; i++) {
+      if (F.x[i] < 0.10 || F.rho[i] > 0) continue;
+      // sources sit at or near the margin, as hydathodes do
+      if (!this.isMargin[i] && this.rnd() > o.interiorSrc) continue;
+      let d = 9;
+      for (const sIdx of this.sources) {
+        const dd = Math.hypot(F.x[i] - F.x[sIdx], F.y[i] - F.y[sIdx]);
+        if (dd < d) d = dd;
+      }
+      d *= 0.75 + 0.5 * this.rnd();     // a little disorder, as in real leaves
+      if (d > bestD) { bestD = d; best = i; }
+    }
+    if (best < 0 || bestD < o.srcSpacing) return false;
+    F.rho[best] = o.srcRho;
+    this.sources.push(best);
+    return true;
+  }
+
+  step(dt = 1) {
+    if (this.mature) return;
+    if (!this.built) {
+      this.margin.step(dt);
+      if (this.margin.mature) {
+        this.o.aspect = Math.max(0.12, this.margin.aspect);
+        this._build();
+        this.built = true;
+      }
+      return;
+    }
+    this.age += dt;
+    const o = this.o;
+    this.scale = Math.min(1, this.scale + o.grow * dt);
+    // the blade keeps recruiting sources while it is still expanding
+    if (this.age % o.srcEvery < dt && this.sources.length < o.maxSources) this.addSource();
+    for (let s = 0; s < this.prm.substeps; s++) stepAuxin(this.F, this.prm, 'flux');
+    if (this.age > o.matureAt) this.bake();
+  }
+
+  // Freeze the vein network into drawable geometry. After this the leaf costs
+  // nothing per frame, which is what lets a whole plant stay interactive.
+  bake() {
+    const F = this.F, o = this.o;
+    const segs = [];
+    // A canal is a cell that has committed most of its transport to ONE wall.
+    // So an edge counts as a vein by its share of the cell's polarity, not by
+    // its absolute PIN — otherwise only the trunk, where all the flux funnels,
+    // ever clears the bar.
+    const frac = new Float32Array(F.n * MAXNB);
+    for (let i = 0; i < F.n; i++) {
+      const d = F.deg[i], off = i * MAXNB;
+      let tot = 0;
+      for (let k = 0; k < d; k++) tot += F.pi[off + k];
+      if (tot <= 1e-9) continue;
+      for (let k = 0; k < d; k++) frac[off + k] = F.pi[off + k] / tot;
+    }
+    let maxPi = 1e-9;
+    for (let i = 0; i < F.n * MAXNB; i++) if (F.pi[i] > maxPi) maxPi = F.pi[i];
+    for (let i = 0; i < F.n; i++) {
+      const d = F.deg[i], off = i * MAXNB;
+      for (let k = 0; k < d; k++) {
+        const e = off + k, j = F.nbr[e];
+        if (j <= i) continue;
+        const f = Math.max(frac[e], frac[F.rev[e]]);
+        const mag = Math.max(F.pi[e], F.pi[F.rev[e]]);
+        if (f < o.veinFrac || mag < maxPi * o.veinFloor) continue;
+        segs.push({
+          x0: F.x[i], y0: F.y[i], x1: F.x[j], y1: F.y[j],
+          // order of the vein: how much traffic it carries, log-compressed
+          w: Math.min(1, Math.log(1 + mag) / Math.log(1 + maxPi)),
+          f,
+        });
+      }
+    }
+    // Keep the network that carries the traffic. Drawing every lopsided wall
+    // turns a leaf into a solid sheet of light; the hierarchy is the point.
+    segs.sort((a, b) => b.w - a.w);
+    this.veins = segs.slice(0, o.veinMax);
+    this.maxPi = maxPi;
+    this.mature = true;
+  }
+
+  // distance from a blade point to the nearest vein — drives fenestration
+  // and the way light pools around the vasculature
+  veinDistanceField(res = 40) {
+    const segs = this.veins || [];
+    const fld = new Float32Array(res * res).fill(9);
+    for (let a = 0; a < res; a++) {
+      for (let b = 0; b < res; b++) {
+        const u = a / (res - 1);
+        const v = (b / (res - 1) - 0.5) * 2 * this.o.aspect;
+        let best = 9;
+        for (const s of segs) {
+          const dx = s.x1 - s.x0, dy = s.y1 - s.y0;
+          const L2 = dx * dx + dy * dy || 1e-6;
+          let t = ((u - s.x0) * dx + (v - s.y0) * dy) / L2;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          const px = s.x0 + dx * t - u, py = s.y0 + dy * t - v;
+          const d = Math.hypot(px, py);
+          if (d < best) best = d;
+        }
+        fld[a * res + b] = best;
+      }
+    }
+    this.vdf = fld; this.vdfRes = res;
+    return fld;
+  }
+
+  stats() {
+    const F = this.F;
+    let mx = 0, sum = 0, veins = 0, maxPi = 0;
+    for (let i = 0; i < F.n; i++) { sum += F.a[i]; if (F.a[i] > mx) mx = F.a[i]; }
+    for (let i = 0; i < F.n; i++) {
+      const d = F.deg[i], off = i * MAXNB;
+      for (let k = 0; k < d; k++) if (F.pi[off + k] > maxPi) maxPi = F.pi[off + k];
+    }
+    for (let i = 0; i < F.n; i++) {
+      const d = F.deg[i], off = i * MAXNB;
+      for (let k = 0; k < d; k++) if (F.nbr[off + k] > i && F.pi[off + k] > maxPi * 0.05) veins++;
+    }
+    return {
+      cells: F.n, aMean: +(sum / F.n).toFixed(2), aMax: +mx.toFixed(2),
+      maxPi: +maxPi.toFixed(2), veinEdges: veins,
+    };
+  }
+}
+
+// ===================== 35_fruit.js =====================
+// ---------------------------------------------------------------------------
+// THE FRUIT
+//
+// The leaf margin was a ring of cells that pushed outward wherever auxin had
+// converged. This is the same idea closed into a surface.
+//
+// Two phases, both chemistry:
+//
+//   1. PLACEMENT. Auxin runs over the ovary wall in up-the-gradient mode and
+//      breaks into convergence points, exactly as it does on a meristem or a
+//      leaf margin. Those points are the ovules. How many there are, and how
+//      they sit, is whatever the geometry allowed — nobody counts them.
+//
+//   2. SWELLING. Those ovules become seeds, and seeds are auxin sources. Auxin
+//      spreads out through the wall and the wall grows in proportion. Where
+//      seeds cluster the fruit bulges; between them it stays pinched. The
+//      lobing of the fruit is a readout of where the seeds landed.
+//
+// This is why you can set fruit on an unpollinated flower by painting auxin on
+// it. No pollen is simulated here and none is needed — parthenocarpy is real.
+//
+// Then it ripens, as an autocatalytic front: the ripening signal triggers its
+// own production, so it crosses the fruit as a travelling wave rather than
+// fading in everywhere at once.
+//
+// The one simplification: growth is radial from the centre. Cells keep their
+// direction and only change their distance. A fruit is therefore always
+// star-shaped about its core, which almost every real fruit is, and it removes
+// any possibility of the surface folding through itself as it lobes.
+// ---------------------------------------------------------------------------
+
+
+
+const FRUIT_DEFAULTS = {
+  subdiv: 3,          // icosphere refinement; 3 gives 642 wall cells
+  patternFor: 520,    // frames spent deciding where the ovules go
+  growFor: 1500,      // frames of swelling
+  r0: 0.10,           // ovary radius at fertilisation
+  seedRho: 0.85,      // auxin made by each seed
+  wallMu: 0.46,
+  gWall: 0.00016,     // baseline swelling of the whole wall
+  gAux: 0.00052,      // extra swelling where the seeds have delivered auxin
+  gExp: 1.8,         // how sharply the wall answers to auxin
+  smooth: 0.020,     // the wall resists creasing — applied every step, so tiny
+  seedThresh: 1.45,   // auxin needed, over the mean, to become an ovule
+  ripenRate: 0.022,  // autocatalytic gain of the ripening front
+  ripenDiff: 0.13,
+  ripenAt: 0.72,      // fraction of swelling done before ripening starts
+  // the wall's own chemistry while it is deciding where the seeds go
+  T: 22, D: 2.6, b: 3.0, rho: 0.5, mu: 0.34,
+};
+
+// --- icosphere -------------------------------------------------------------
+function icosphere(subdiv) {
+  const t = (1 + Math.sqrt(5)) / 2;
+  let verts = [
+    [-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0],
+    [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t],
+    [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1],
+  ].map(v => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; });
+  let faces = [
+    [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
+    [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
+    [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
+    [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
+  ];
+  for (let s = 0; s < subdiv; s++) {
+    const mid = new Map();
+    const nf = [];
+    const midpoint = (a, b) => {
+      const k = a < b ? a * 100000 + b : b * 100000 + a;
+      let m = mid.get(k);
+      if (m !== undefined) return m;
+      const p = [(verts[a][0] + verts[b][0]) / 2, (verts[a][1] + verts[b][1]) / 2, (verts[a][2] + verts[b][2]) / 2];
+      const l = Math.hypot(p[0], p[1], p[2]);
+      m = verts.length;
+      verts.push([p[0] / l, p[1] / l, p[2] / l]);
+      mid.set(k, m);
+      return m;
+    };
+    for (const f of faces) {
+      const a = midpoint(f[0], f[1]), b = midpoint(f[1], f[2]), c = midpoint(f[2], f[0]);
+      nf.push([f[0], a, c], [f[1], b, a], [f[2], c, b], [a, b, c]);
+    }
+    faces = nf;
+  }
+  return { verts, faces };
+}
+
+class Fruit {
+  constructor(prm, opts = {}, seed = 1) {
+    const o = this.o = { ...FRUIT_DEFAULTS, ...opts };
+    this.rnd = mulberry32(seed);
+    const { verts, faces } = icosphere(o.subdiv);
+    const n = verts.length;
+    this.n = n;
+    this.faces = faces;
+    this.dir = new Float32Array(n * 3);
+    this.rad = new Float32Array(n);
+    this.pos = new Float32Array(n * 3);
+    this.nrm = new Float32Array(n * 3);
+    this.ripe = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      this.dir[i * 3] = verts[i][0];
+      this.dir[i * 3 + 1] = verts[i][1];
+      this.dir[i * 3 + 2] = verts[i][2];
+      this.rad[i] = o.r0 * (0.97 + 0.06 * this.rnd());
+    }
+    this.prm = { ...prm, T: o.T, D: o.D, b: o.b, rho: 0, mu: 0 };
+    this.F = new CellField(n);
+    for (let i = 0; i < n; i++) this.F.add(0, 0, 0.3 + 0.4 * this.rnd());
+    // the wall's neighbour graph is the mesh's own edges
+    const seen = new Set();
+    for (const f of faces) {
+      for (let e = 0; e < 3; e++) {
+        const a = f[e], b = f[(e + 1) % 3];
+        const k = a < b ? a * 100000 + b : b * 100000 + a;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        this.F.link(Math.min(a, b), Math.max(a, b), 1);
+      }
+    }
+    this.phase = 'pattern';
+    this.age = 0;
+    this.seeds = [];
+    this.ripening = false;
+    this.mature = false;
+    this.updatePositions();
+  }
+
+  // --- phase 1: where do the ovules go? ------------------------------------
+  patternStep(dt) {
+    const F = this.F, o = this.o;
+    for (let i = 0; i < this.n; i++) { F.rho[i] = o.rho; F.mu[i] = o.mu; F.comp[i] = 1; }
+    for (let k = 0; k < this.prm.substeps; k++) stepAuxin(F, this.prm, 'grad');
+    this.age += dt;
+    if (this.age < o.patternFor) return;
+
+    let sum = 0;
+    for (let i = 0; i < this.n; i++) sum += F.a[i];
+    const mean = sum / this.n;
+    this.seeds = [];
+    for (let i = 0; i < this.n; i++) {
+      if (F.a[i] < mean * o.seedThresh) continue;
+      const d = F.deg[i], off = i * MAXNB;
+      let isMax = true;
+      for (let k = 0; k < d; k++) if (F.a[F.nbr[off + k]] > F.a[i]) { isMax = false; break; }
+      if (isMax) this.seeds.push(i);
+    }
+    // an ovary with nothing in it does not set fruit
+    if (!this.seeds.length) { this.barren = true; this.mature = true; return; }
+    for (let i = 0; i < this.n; i++) F.a[i] = 0.05;
+    this.phase = 'grow';
+    this.age = 0;
+  }
+
+  // --- phase 2: the seeds feed the wall and the wall swells ----------------
+  growStep(dt) {
+    const F = this.F, o = this.o;
+    for (let i = 0; i < this.n; i++) { F.rho[i] = 0; F.mu[i] = o.wallMu; F.comp[i] = 1; }
+    for (const s of this.seeds) F.rho[s] = o.seedRho;
+    for (let k = 0; k < this.prm.substeps; k++) stepAuxin(F, this.prm, 'flux');
+
+    let sum = 0;
+    for (let i = 0; i < this.n; i++) sum += F.a[i];
+    const mean = Math.max(1e-4, sum / this.n);
+
+    const g = this._g || (this._g = new Float32Array(this.n));
+    for (let i = 0; i < this.n; i++) {
+      const drive = Math.pow(Math.max(0, F.a[i] / mean), o.gExp);
+      g[i] = this.rad[i] + (o.gWall + o.gAux * drive) * dt;
+    }
+    // the wall is a sheet, so it resists creasing between neighbours
+    for (let i = 0; i < this.n; i++) {
+      const d = F.deg[i], off = i * MAXNB;
+      let s = 0;
+      for (let k = 0; k < d; k++) s += g[F.nbr[off + k]];
+      this.rad[i] = lerp(g[i], s / Math.max(1, d), o.smooth);
+    }
+    this.updatePositions();
+
+    this.age += dt;
+    if (!this.ripening && this.age > o.growFor * o.ripenAt) this.startRipening();
+    if (this.ripening) this.ripenStep(dt);
+    if (this.age > o.growFor) { this.phase = 'ripe'; this.mature = true; }
+  }
+
+  // --- phase 3: ripening as a self-feeding wave ----------------------------
+  startRipening() {
+    this.ripening = true;
+    // it starts somewhere, and where it starts is arbitrary — in a real fruit
+    // it is usually the end furthest from the stalk
+    let best = 0, by = -1e9;
+    for (let i = 0; i < this.n; i++) {
+      const y = this.pos[i * 3 + 1] + this.rnd() * 0.2;
+      if (y > by) { by = y; best = i; }
+    }
+    this.ripe[best] = 0.35;
+  }
+
+  ripenStep(dt) {
+    const F = this.F, o = this.o;
+    const R = this.ripe;
+    const nx = this._rn || (this._rn = new Float32Array(this.n));
+    for (let i = 0; i < this.n; i++) {
+      const d = F.deg[i], off = i * MAXNB;
+      let lap = 0;
+      for (let k = 0; k < d; k++) lap += R[F.nbr[off + k]] - R[i];
+      // autocatalysis: the signal provokes its own production
+      nx[i] = o.ripenRate * R[i] * (1 - R[i]) + o.ripenDiff * lap / Math.max(1, d);
+    }
+    for (let i = 0; i < this.n; i++) R[i] = clamp(R[i] + nx[i] * dt, 0, 1);
+  }
+
+  step(dt = 1) {
+    if (this.done) return;
+    if (this.mature && this.phase === 'ripe') {
+      if (!this.ripening) { this.done = true; return; }
+      this.ripenStep(dt);
+      // once the wave has crossed the whole fruit there is nothing left to do
+      let s = 0;
+      for (let i = 0; i < this.n; i++) s += this.ripe[i];
+      if (s / this.n > 0.985) this.done = true;
+      return;
+    }
+    if (this.mature) return;
+    if (this.phase === 'pattern') this.patternStep(dt);
+    else this.growStep(dt);
+  }
+
+  updatePositions() {
+    const n = this.n, P = this.pos, D = this.dir, N = this.nrm;
+    for (let i = 0; i < n; i++) {
+      P[i * 3] = D[i * 3] * this.rad[i];
+      P[i * 3 + 1] = D[i * 3 + 1] * this.rad[i];
+      P[i * 3 + 2] = D[i * 3 + 2] * this.rad[i];
+    }
+    N.fill(0);
+    for (const f of this.faces) {
+      const a = f[0] * 3, b = f[1] * 3, c = f[2] * 3;
+      const e1x = P[b] - P[a], e1y = P[b + 1] - P[a + 1], e1z = P[b + 2] - P[a + 2];
+      const e2x = P[c] - P[a], e2y = P[c + 1] - P[a + 1], e2z = P[c + 2] - P[a + 2];
+      const nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+      for (const v of f) { N[v * 3] += nx; N[v * 3 + 1] += ny; N[v * 3 + 2] += nz; }
+    }
+    for (let i = 0; i < n; i++) {
+      const l = Math.hypot(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]) || 1;
+      N[i * 3] /= l; N[i * 3 + 1] /= l; N[i * 3 + 2] /= l;
+    }
+  }
+
+  stats() {
+    let mn = 1e9, mx = -1e9, sum = 0, rp = 0;
+    for (let i = 0; i < this.n; i++) {
+      if (this.rad[i] < mn) mn = this.rad[i];
+      if (this.rad[i] > mx) mx = this.rad[i];
+      sum += this.rad[i];
+      rp += this.ripe[i];
+    }
+    const mean = sum / this.n;
+    return {
+      phase: this.phase, cells: this.n, seeds: this.seeds.length,
+      rMin: +mn.toFixed(3), rMax: +mx.toFixed(3), rMean: +mean.toFixed(3),
+      lobing: +((mx - mn) / mean).toFixed(2),
+      ripe: +(rp / this.n).toFixed(2),
+    };
+  }
+}
+
+// ===================== 40_plant.js =====================
+// ---------------------------------------------------------------------------
+// THE ORGANISM
+//
+// The meristem decides where organs go and when. This file only has to believe
+// it. Nothing here invents an angle, a spacing or a branching rule — it reads
+// them off the simulation and builds a body around them.
+// ---------------------------------------------------------------------------
+
+
+
+
+
+// A frond hanging off one node of an axis.
+class Organ {
+  constructor(node, angle, leaf, seed) {
+    this.node = node;
+    this.angle = angle;
+    this.leaf = leaf;
+    this.age = 0;
+    this.rnd = mulberry32(seed);
+    this.len = 0;
+    this.maxLen = 0;
+    this.droop = 0;
+    this.tilt = 0;
+    this.frame = { o: v3(), x: v3(), y: v3(), z: v3() };
+  }
+}
+
+class Axis {
+  constructor(plant, base, dir, gen, seed) {
+    this.plant = plant;
+    this.gen = gen;
+    this.seed = seed;
+    this.rnd = mulberry32(seed);
+    this.pts = [v3(base[0], base[1], base[2])];
+    this.radii = [0.02];
+    this.dir = v3(); v3norm(this.dir, dir);
+    this.up = v3(0, 1, 0);
+    // a stable reference frame carried up the axis, so organ angles mean
+    // something consistent from node to node
+    this.ref = v3();
+    v3norm(this.ref, v3cross(this.ref, Math.abs(this.dir[1]) > 0.9 ? v3(1, 0, 0) : v3(0, 1, 0), this.dir));
+    this.organs = [];
+    this.nodes = [];
+    this.alive = true;
+    this.length = 0;
+    this.twist = 0;
+    const P = plant.prm, M = { ...plant.mo };
+    // a lateral shoot has a smaller growing point than the leader, which is
+    // both true of real plants and considerably cheaper
+    if (gen > 0) { M.R = M.R * 0.78; M.rCZ = M.rCZ * 0.9; M.rPZ = M.rPZ * 0.82; }
+    this.meristem = new Meristem(P, M, seed);
+    // A shoot does not start from a randomised sheet of cells — it starts from
+    // a meristem that has already settled. Run it forward and throw away the
+    // startup transient, or the plant is born wearing a burst of organs.
+    const warm = gen === 0 ? 220 : 90;
+    for (let i = 0; i < warm; i++) this.meristem.step(1);
+    this.meristem.emitted.length = 0;
+    this.meristem.divergence.length = 0;
+    this.meristem.lastAngle = null;
+    this.age = 0;
+    this.lastOrganLen = -1e9;
+    this.florigen = 0;
+    this.floral = false;
+    this.fruit = null;
+    this.floralCount = 0;
+  }
+
+  tipPos() { return this.pts[this.pts.length - 1]; }
+
+  step(dt, sp) {
+    this.age += dt;
+    if (!this.alive) {
+      // an arrested shoot still fills out the organs it already made
+      if (this.fruit) this.updateRadii(sp);
+      for (const org of this.organs) {
+        org.age += dt;
+        const f2 = smoothstep(0, sp.organGrow, org.age);
+        org.dev = f2;
+        org.len = org.maxLen * (0.04 + 0.96 * f2);
+        org.droop = sp.droop * smoothstep(0, sp.organGrow * 1.7, org.age);
+        if (!org.leaf) { org.leaf = org.petal ? this.plant.leaves.requestPetal(org.seed) : this.plant.leaves.request(org.seed); if (org.leaf) org.leafAt = org.age; }
+      }
+      this.updateRadii(sp);
+      return;
+    }
+    const m = this.meristem;
+    if (!m) return;
+    m.step(dt);
+
+    // --- elongate ------------------------------------------------------------
+    const rate = sp.elongation * (this.gen === 0 ? 1 : 0.72) * (this.floral ? 0.22 : 1);
+    const tip = this.tipPos();
+    // tropism: up, plus a slow drift that gives the axis its character
+    const want = v3(0, 1, 0);
+    const t = this.age * 0.004 + this.seed;
+    want[0] += Math.sin(t) * sp.wander;
+    want[2] += Math.cos(t * 1.31) * sp.wander;
+    // circumnutation — the slow helical search a real growing tip performs
+    const nu = this.age * sp.nutation + this.seed * 0.7;
+    want[0] += Math.cos(nu) * sp.nutAmp;
+    want[2] += Math.sin(nu) * sp.nutAmp;
+    v3norm(want, want);
+    v3lerp(this.dir, this.dir, want, clamp(sp.tropism * dt, 0, 1));
+    v3norm(this.dir, this.dir);
+
+    this.elongate(dt, sp);
+
+    const seg = rate * dt;
+    this.length += seg;
+    const last = this.pts[this.pts.length - 1];
+    const np = v3();
+    v3addScaled(np, last, this.dir, seg);
+    // resample: keep one point per internode-ish distance
+    if (v3len(v3sub(v3(), np, this.pts[this.pts.length - 1])) > 0 &&
+      this.pts.length > 1 &&
+      v3len(v3sub(v3(), np, this.pts[this.pts.length - 2])) < sp.segLen) {
+      v3copy(this.pts[this.pts.length - 1], np);
+    } else {
+      this.pts.push(np);
+      this.radii.push(0.02);
+      if (this.pts.length > 900) { this.pts.shift(); this.radii.shift(); }
+    }
+
+    // Florigen: made in the leaves, carried to the tip, and when enough has
+    // arrived the growing point stops making leaves and becomes a flower. So
+    // WHEN a specimen flowers is a consequence of how much leaf it managed to
+    // build, not a number in a table.
+    // Florigen is made in the leaves and reaches every growing point, so it is
+    // the PLANT that becomes competent to flower, not one shoot. The tip
+    // converts, and so does any axillary bud that wakes up afterwards.
+    if (sp.florigenRate > 0 && !this.floral) {
+      let area = 0;
+      for (const org of this.organs) area += (org.dev || 0) * org.len * org.len;
+      this.plant.florigen += (area / (sp.organLen * sp.organLen + 1e-6)) * sp.florigenRate * dt;
+      if (this.plant.florigen > sp.florigenThresh && this.gen === 0) {
+        this.plant.floweredAt = this.plant.vegOrganCount();
+        this.goFloral(sp);
+      }
+    }
+    if (this.floral && this.floralCount >= sp.floralOrgans && !this.fruit) {
+      this.setFruit(sp);
+    }
+
+    // A determinate shoot: once it has made its complement of organs the apex
+    // arrests. The specimen finishes instead of growing off the top of the
+    // frame forever — and the meristem stops costing anything.
+    const budgetLeft = sp.organBudget - this.plant.vegOrganCount();
+    if ((!this.floral && (this.organs.length >= sp.maxOrgans || budgetLeft <= 0))) {
+      this.alive = false; this.arrested = true;
+      this.meristem = null;   // an arrested shoot has no growing point to pay for
+    }
+
+    // --- harvest whatever the meristem decided --------------------------------
+    while (m.emitted.length) {
+      const prim = m.emitted.shift();
+      if (this.organs.length >= sp.maxOrgans) break;
+      // two organs cannot share an internode, however fast the tip patterns
+      const mi = this.floral ? sp.minInternode * 0.10 : sp.minInternode;
+      if (this.length - this.lastOrganLen < mi) continue;
+      this.lastOrganLen = this.length;
+      this.addOrgan(prim);
+    }
+
+    // --- organs mature --------------------------------------------------------
+    for (const org of this.organs) {
+      org.age += dt;
+      const f = smoothstep(0, sp.organGrow, org.age);
+      org.dev = f;
+      org.len = org.maxLen * (0.04 + 0.96 * f);
+      org.droop = sp.droop * smoothstep(0, sp.organGrow * 1.7, org.age);
+      if (!org.leaf) { org.leaf = org.petal ? this.plant.leaves.requestPetal(org.seed) : this.plant.leaves.request(org.seed); if (org.leaf) org.leafAt = org.age; }
+    }
+
+    // --- branching: an axillary bud escapes once the apex is far enough away ---
+    if (sp.branching > 0 && this.plant.axes.length < sp.maxAxes && this.gen < sp.maxGen) {
+      for (const org of this.organs) {
+        if (org.branched || org.age < sp.budRelease) continue;
+        // the apex suppresses buds below it; that suppression falls off with
+        // distance, which is what apical dominance actually looks like
+        const d = v3len(v3sub(v3(), this.tipPos(), org.frame.o));
+        const suppressed = Math.exp(-d / sp.dominance);
+        if (suppressed > sp.branching) continue;
+        if (this.rnd() > 0.35) { org.branched = true; continue; }
+        org.branched = true;
+        const dir = v3();
+        v3lerp(dir, org.frame.x, v3(0, 1, 0), 0.45);
+        v3norm(dir, dir);
+        // competent plant → this bud makes a flower rather than a branch
+        const flowering = this.plant.florigen > sp.florigenThresh;
+        if (flowering && this.plant.flowerCount() >= sp.maxFlowers) break;
+        const ax = this.plant.addAxis(org.frame.o, dir, this.gen + 1);
+        if (flowering) ax.goFloral(sp, true);
+        break;
+      }
+    }
+    this.updateRadii(sp);
+  }
+
+  // The floral meristem is a smaller, faster version of the same tissue. Organs
+  // crowd together instead of spiralling apart, which is what a flower is.
+  goFloral(sp, immediate) {
+    this.floral = true;
+    this.pedicel = !!immediate;   // a bud that became a flower sits on a stalk
+    const m = this.meristem.o;
+    m.R *= 0.66; m.rCZ *= 0.42; m.rPZ *= 0.62; m.G *= 2.3;
+    this.meristem.candidates = [];
+    this.meristem.emitted.length = 0;
+  }
+
+  // The apex has spent itself. What is left becomes an ovary.
+  setFruit(sp) {
+    const seed = (this.seed * 2654435761 + 7919) >>> 0;
+    this.fruit = new Fruit(this.plant.prm, this.plant.sp.fruitOpts || {}, seed);
+    this.alive = false;
+    this.arrested = true;
+    this.meristem = null;      // the apex is spent; stop paying for it
+  }
+
+  addOrgan(prim) {
+    const sp = this.plant.sp;
+    const seed = (this.seed * 7919 + this.organs.length * 104729) >>> 0;
+    const leaf = this.plant.leaves.request(seed);
+    const org = new Organ(this.pts.length - 1, prim.ang, leaf, seed);
+    org.seed = seed;
+    org.maxLen = sp.organLen * (0.75 + 0.5 * org.rnd()) * (this.gen === 0 ? 1 : 0.7);
+    org.tilt = sp.organTilt * (0.8 + 0.4 * org.rnd());
+    // a little roll and pitch scatter so neighbouring blades do not lie in the
+    // same plane and saw through each other
+    org.roll = (org.rnd() - 0.5) * sp.organRoll;
+    org.lift = (org.rnd() - 0.5) * 0.22;
+    org.leafAt = 0;
+    org.birthLen = this.length;
+    if (this.floral) {
+      this.floralCount++;
+      // identity read off the radius the organ was founded at: the floral
+      // meristem shrinks as it consumes itself, so later organs start further
+      // in, and that gradient is the only thing distinguishing them
+      org.q = clamp(1 - (prim.r / Math.max(1e-3, this.meristem.o.rPZ)), 0, 1);
+      org.floral = true;
+      // the outer ones are petals — leaves whose margin was told to grow broad
+      // and smooth instead of long and toothed
+      org.petal = org.q < sp.petalQ;
+      org.leaf = null;
+      org.maxLen = sp.organLen * (org.petal ? 0.30 : 0.13) * (0.82 + 0.36 * org.rnd());
+      org.tilt = org.petal ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
+        : sp.organTilt * 0.30;
+      org.roll *= 0.25;
+      org.droopScale = org.petal ? 0.12 : 0.05;
+    }
+    this.organs.push(org);
+  }
+
+  // A shoot does not only grow at its tip. The tissue just below the apex goes
+  // on stretching for a while after it is laid down, which is what pushes
+  // leaves apart as the plant develops. Segments are lengthened in place and
+  // every organ is carried along by the tissue it was born in.
+  elongate(dt, sp) {
+    const n = this.pts.length;
+    if (n < 3 || sp.internode <= 0) return;
+    const oldArc = this._oa || (this._oa = []);
+    const newArc = this._na || (this._na = []);
+    const dirs = this._dirs || (this._dirs = []);
+    const segL = this._sl || (this._sl = []);
+    oldArc.length = n; newArc.length = n; segL.length = n - 1;
+    while (dirs.length < n) dirs.push(v3());
+
+    oldArc[0] = 0;
+    for (let i = 0; i < n - 1; i++) {
+      v3sub(_zs0, this.pts[i + 1], this.pts[i]);
+      const L = v3len(_zs0) || 1e-6;
+      segL[i] = L;
+      v3scale(dirs[i], _zs0, 1 / L);
+      oldArc[i + 1] = oldArc[i] + L;
+    }
+    const total = oldArc[n - 1];
+
+    newArc[0] = 0;
+    for (let i = 0; i < n - 1; i++) {
+      const belowTip = total - oldArc[i];
+      const e = sp.internode * Math.exp(-belowTip / sp.internodeSpan);
+      const L = segL[i] * (1 + e * dt);
+      newArc[i + 1] = newArc[i] + L;
+      v3addScaled(this.pts[i + 1], this.pts[i], dirs[i], L);
+    }
+    this.length = newArc[n - 1];
+
+    for (const org of this.organs) {
+      const L = org.birthLen;
+      if (L >= total) { org.birthLen = this.length; continue; }
+      let lo = 0, hi = n - 1;
+      while (hi - lo > 1) { const m = (lo + hi) >> 1; if (oldArc[m] <= L) lo = m; else hi = m; }
+      const t = (L - oldArc[lo]) / Math.max(1e-6, oldArc[hi] - oldArc[lo]);
+      org.birthLen = newArc[lo] + t * (newArc[hi] - newArc[lo]);
+    }
+  }
+
+  // Murray's law: a stem is exactly as thick as the traffic it carries.
+  // Organs are then placed by ARC LENGTH along the axis, interpolated between
+  // stem points, using a frame that is parallel-transported up the shoot. The
+  // old code indexed the nearest vertex, so every organ hopped sideways each
+  // time the stem gained a point — that was most of the jitter.
+  updateRadii(sp) {
+    const n = this.pts.length;
+    if (n < 2) { this.radii[0] = sp.tipRadius; return; }
+
+    const arc = this._arc || (this._arc = []);
+    const tan = this._tan || (this._tan = []);
+    const fu = this._fu || (this._fu = []);
+    arc.length = n;
+    while (tan.length < n) { tan.push(v3()); fu.push(v3()); }
+
+    arc[0] = 0;
+    for (let i = 1; i < n; i++) arc[i] = arc[i - 1] + v3len(v3sub(_zs0, this.pts[i], this.pts[i - 1]));
+    for (let i = 0; i < n; i++) {
+      v3sub(_zs0, this.pts[Math.min(n - 1, i + 1)], this.pts[Math.max(0, i - 1)]);
+      if (v3len(_zs0) < 1e-7) v3set(_zs0, 0, 1, 0);
+      v3norm(tan[i], _zs0);
+    }
+    // transport one perpendicular up the axis so organ angles stay put
+    let ref = Math.abs(tan[0][1]) > 0.9 ? _zsx : _zsy;
+    v3norm(fu[0], v3cross(fu[0], ref, tan[0]));
+    for (let i = 1; i < n; i++) {
+      const d = v3dot(fu[i - 1], tan[i]);
+      v3addScaled(_zs1, fu[i - 1], tan[i], -d);
+      if (v3len(_zs1) < 1e-5) { v3norm(fu[i], v3cross(fu[i], Math.abs(tan[i][1]) > 0.9 ? _zsx : _zsy, tan[i])); }
+      else v3norm(fu[i], _zs1);
+    }
+
+    const total = arc[n - 1];
+
+    // Thickness as a smooth function of arc length: the traffic from organs
+    // above, plus steady secondary thickening with distance below the tip.
+    // The old version counted polyline vertices, so the whole stem stepped
+    // thicker every time the shoot gained a point.
+    const bl = this._bl || (this._bl = []);
+    bl.length = 0;
+    for (const org of this.organs) bl.push(org.birthLen);
+    bl.sort((a, b) => a - b);
+    let above = bl.length, k = 0;
+    for (let i = 0; i < n; i++) {
+      while (k < bl.length && bl[k] <= arc[i]) { k++; above--; }
+      const below = total - arc[i];
+      this.radii[i] = Math.pow(
+        Math.pow(sp.tipRadius, 3) + sp.organFlow * above + sp.thicken * below
+        + (this.fruit ? sp.fruitFlow : 0),
+        1 / 3) * sp.radiusScale;
+    }
+
+    for (const org of this.organs) {
+      const L = clamp(org.birthLen, 0, total);
+      let lo = 0, hi = n - 1;
+      while (hi - lo > 1) { const m = (lo + hi) >> 1; if (arc[m] <= L) lo = m; else hi = m; }
+      const seg = Math.max(1e-6, arc[hi] - arc[lo]);
+      const t = clamp((L - arc[lo]) / seg, 0, 1);
+      v3lerp(_zp, this.pts[lo], this.pts[hi], t);
+      v3lerp(_zax, tan[lo], tan[hi], t); v3norm(_zax, _zax);
+      v3lerp(_zu, fu[lo], fu[hi], t);
+      v3addScaled(_zu, _zu, _zax, -v3dot(_zu, _zax)); v3norm(_zu, _zu);
+
+      const dir = v3rotAxis(_zdir, _zu, _zax, org.angle);
+      // pitch away from the axis, then let it settle under its own weight
+      // young organs are pressed against the axis and swing out as they fill
+      const tl = org.tilt * (0.12 + 0.88 * smoothstep(0.04, 0.72, org.dev || 0));
+      v3lerp(_zd, _zax, dir, tl);
+      _zd[1] -= (org.droop * (org.droopScale === undefined ? 1 : org.droopScale) - org.lift) * (org.dev || 0);
+      v3norm(_zd, _zd);
+      v3copy(org.frame.o, _zp);
+      v3copy(org.frame.x, _zd);
+      v3norm(_zside, v3cross(_zside, _zd, _zax));
+      if (v3len(_zside) < 0.1) v3set(_zside, 1, 0, 0);
+      v3copy(org.frame.z, _zside);
+      v3norm(_znrm, v3cross(_znrm, _zside, _zd));
+      // roll the blade about its own petiole
+      const cr = Math.cos(org.roll), sr = Math.sin(org.roll);
+      _zs1[0] = _zside[0] * cr + _znrm[0] * sr;
+      _zs1[1] = _zside[1] * cr + _znrm[1] * sr;
+      _zs1[2] = _zside[2] * cr + _znrm[2] * sr;
+      _znrm[0] = -_zside[0] * sr + _znrm[0] * cr;
+      _znrm[1] = -_zside[1] * sr + _znrm[1] * cr;
+      _znrm[2] = -_zside[2] * sr + _znrm[2] * cr;
+      v3copy(org.frame.z, _zs1);
+      v3copy(org.frame.y, _znrm);
+      org.radius = this.radii[lo];
+    }
+  }
+}
+
+const _zs0 = v3(), _zs1 = v3(), _zp = v3(), _zax = v3(), _zu = v3(), _zd = v3();
+const _zdir = v3(), _zside = v3(), _znrm = v3();
+const _zsx = v3(1, 0, 0), _zsy = v3(0, 1, 0);
+
+// Blades are expensive to grow, so a small library of them is canalised one at
+// a time in the background and shared out. Growing one per organ would mean
+// thirty tissue simulations running at once, which is thirty times too many.
+class LeafPool {
+  constructor(prm, sp, seed) {
+    this.prm = prm; this.sp = sp;
+    this.lib = [];
+    this.plib = [];
+    this.cur = null;
+    this.n = 0;
+    this.pn = 0;
+    this.petalTurn = false;
+    this.seed = seed >>> 0;
+    this.budget = sp.leafBudget;
+    this.target = sp.leafLibrary;
+  }
+  _make() {
+    const seed = (this.seed + this.n * 2654435761) >>> 0;
+    this.n++;
+    const r = mulberry32(seed);
+    const o = { ...this.sp.leafOpts };
+    // variety now comes from the margin's chemistry, not from shape numbers:
+    // how slender it grows, how hard a convergence point pushes, and how far
+    // apart those convergence points sit.
+    o.margin = {
+      ay: lerp(0.34, 0.86, r()),
+      g1: lerp(0.00070, 0.00170, r()),
+      gExp: lerp(1.6, 3.0, r()),
+      D: lerp(4.5, 11.0, r()),
+      tipBias: lerp(0.25, 0.85, r()),
+      mature: Math.round(lerp(1100, 1700, r())),
+    };
+    o.maxSources = Math.floor(lerp(30, 64, r()));
+    return new Leaf(this.prm, o, seed);
+  }
+  request(seed) {
+    if (!this.lib.length) return null;
+    return this.lib[seed % this.lib.length];
+  }
+  requestPetal(seed) {
+    if (!this.plib.length) return null;
+    return this.plib[seed % this.plib.length];
+  }
+  _makePetal() {
+    const seed = (this.seed + 977 + this.pn * 2246822519) >>> 0;
+    this.pn++;
+    const r = mulberry32(seed);
+    const o = { ...this.sp.leafOpts };
+    // a petal is a leaf whose margin was told to be broad, smooth and short:
+    // wide mediolateral growth, almost no answer to convergence points
+    o.margin = {
+      ay: lerp(0.95, 1.5, r()),
+      g1: lerp(0.00010, 0.00030, r()),
+      gExp: 1.2,
+      D: lerp(9, 16, r()),
+      tipBias: lerp(0.05, 0.30, r()),
+      mature: Math.round(lerp(700, 1000, r())),
+    };
+    o.maxSources = 14;
+    o.veinMax = 90;
+    return new Leaf(this.prm, o, seed);
+  }
+  step() {
+    if (!this.cur) {
+      // fill the leaf library first, then keep a few petals ready
+      if (this.lib.length < this.target) { this.cur = this._make(); this.petalTurn = false; }
+      else if (this.plib.length < 3) { this.cur = this._makePetal(); this.petalTurn = true; }
+      else return;
+    }
+    const L = this.cur;
+    for (let k = 0; k < this.budget && !L.mature; k++) L.step(1);
+    if (L.mature) {
+      // distance-to-vein drives fenestration and the pooling of light around
+      // the vasculature; compute it once, here
+      L.veinDistanceField(30);
+      (this.petalTurn ? this.plib : this.lib).push(L);
+      this.cur = null;
+    }
+  }
+  get growingLeaf() { return this.cur; }
+}
+
+const SPECIES_DEFAULTS = {
+  elongation: 0.0052,
+  segLen: 0.16,
+  minInternode: 0.18,
+  organRoll: 0.55,   // scatter in blade roll, radians
+  internode: 0.0072,  // subapical stretching rate
+  internodeSpan: 2.6,// how far below the tip that stretching persists
+  thicken: 0.00030,  // secondary thickening per unit of stem below the tip
+  nutation: 0.0135,  // circumnutation rate
+  nutAmp: 0.16,
+  florigenRate: 0.0016, // how fast leaves make the flowering signal
+  florigenThresh: 12,    // how much has to reach the tip before it converts
+  floralOrgans: 9,      // organs the flower makes before the apex is spent
+  fruitFlow: 0.0060,     // a swelling fruit is a huge sink; the stem answers
+  fruitScale: 0.55,
+  fruitOpts: {},
+  maxFlowers: 6,
+  petalQ: 0.62,      // organs founded outside this are petals
+  petalTilt: 1.45,   // petals reflex past perpendicular as they open
+  tropism: 0.02,
+  wander: 0.35,
+  organLen: 1.35,
+  organTilt: 0.85,
+  organGrow: 190,
+  droop: 0.55,
+  maxOrgans: 60,
+  organBudget: 96,   // across the whole specimen, not per shoot
+  tipRadius: 0.05,
+  organFlow: 0.00035,
+  radiusScale: 1.0,
+  branching: 0.55,
+  budRelease: 300,
+  dominance: 6.0,
+  maxAxes: 5,
+  maxGen: 2,
+  leafBudget: 60,
+  leafLibrary: 5,
+  leafOpts: {},
+};
+
+class Plant {
+  constructor(prm, mo, sp, seed = 1) {
+    this.prm = prm; this.mo = mo;
+    this.sp = { ...SPECIES_DEFAULTS, ...sp };
+    this.seed = seed;
+    this.leaves = new LeafPool(prm, this.sp, seed);
+    this.axes = [];
+    this.time = 0;
+    this.florigen = 0;
+    this.addAxis(v3(0, 0, 0), v3(0, 1, 0), 0);
+  }
+  addAxis(base, dir, gen) {
+    const a = new Axis(this, base, dir, gen, (this.seed * 31 + this.axes.length * 6151) >>> 0);
+    this.axes.push(a);
+    return a;
+  }
+  get main() { return this.axes[0]; }
+  organCount() { let n = 0; for (const a of this.axes) n += a.organs.length; return n; }
+  // flowers are not leaves and should not be charged against the leaf budget
+  vegOrganCount() {
+    let n = 0;
+    for (const a of this.axes) for (const o of a.organs) if (!o.floral) n++;
+    return n;
+  }
+  flowerCount() { let n = 0; for (const a of this.axes) if (a.floral) n++; return n; }
+
+  // cut the apex off and watch dominance lift
+  prune() {
+    const live = this.axes.filter(a => a.alive);
+    if (!live.length) return false;
+    let best = live[0];
+    for (const a of live) if (a.tipPos()[1] > best.tipPos()[1]) best = a;
+    best.alive = false;
+    return true;
+  }
+
+  step(dt) {
+    this.time += dt;
+    this.leaves.step();
+    for (const a of this.axes) {
+      a.step(dt, this.sp);
+      // the fruit runs faster than the shoot; there is a lot to resolve
+      if (a.fruit) for (let k = 0; k < 3; k++) a.fruit.step(dt);
+    }
+  }
+
+  // world-space extent of everything currently alive, used to frame the shot
+  bounds() {
+    let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+    for (const a of this.axes) {
+      for (const p of a.pts) {
+        if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0];
+        if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1];
+        if (p[2] < z0) z0 = p[2]; if (p[2] > z1) z1 = p[2];
+      }
+      for (const o of a.organs) {
+        const f = o.frame.o, r = o.len;
+        if (f[0] - r < x0) x0 = f[0] - r; if (f[0] + r > x1) x1 = f[0] + r;
+        if (f[1] - r < y0) y0 = f[1] - r; if (f[1] + r > y1) y1 = f[1] + r;
+        if (f[2] - r < z0) z0 = f[2] - r; if (f[2] + r > z1) z1 = f[2] + r;
+      }
+    }
+    if (x0 > x1) { x0 = y0 = z0 = -1; x1 = y1 = z1 = 1; }
+    return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, cz: (z0 + z1) / 2,
+      w: Math.max(x1 - x0, z1 - z0), h: y1 - y0 };
+  }
+
+  // Which act the specimen is in. Drives both the camera and the display.
+  stage() {
+    const fr = [];
+    for (const a of this.axes) if (a.fruit && !a.fruit.barren) fr.push(a.fruit);
+    if (fr.length && fr.every(f => f.done)) return 'ripe';
+    if (fr.some(f => f.phase === 'grow')) return 'fruiting';
+    if (this.axes.some(a => a.floral)) return 'flowering';
+    if (this.organCount() > 2) return 'leafing';
+    return 'seedling';
+  }
+
+  // Everything on this label is something the chemistry decided. None of these
+  // numbers exists anywhere in the code — they are measurements of one
+  // individual that grew the way it grew.
+  card() {
+    let leaves = 0, flowers = 0, seeds = 0, teeth = 0, petals = 0;
+    let lastLeaf = null, lastFlower = null, ripe = 0, nfruit = 0;
+    for (const a of this.axes) {
+      if (a.floral) { flowers++; lastFlower = a; }
+      if (a.fruit && !a.fruit.barren) {
+        nfruit++;
+        seeds += a.fruit.seeds.length;
+        let r = 0;
+        for (let i = 0; i < a.fruit.n; i++) r += a.fruit.ripe[i];
+        ripe += r / a.fruit.n;
+      }
+      for (const o of a.organs) {
+        if (o.floral) continue;
+        leaves++;
+        if (o.leaf && o.leaf.margin && o.leaf.margin.mature) lastLeaf = o.leaf;
+      }
+    }
+    if (lastLeaf) teeth = lastLeaf.margin.teeth.length;
+    if (lastFlower) for (const o of lastFlower.organs) if (o.petal) petals++;
+    const st = this.stats().divergence;
+    return {
+      stage: this.stage(), leaves, flowers, petals, teeth,
+      seeds, fruit: nfruit,
+      ripe: nfruit ? ripe / nfruit : 0,
+      floweredAt: this.floweredAt || 0,
+      divergence: st ? st.mean : null,
+      divergenceSd: st ? st.sd : null,
+    };
+  }
+
+  stats() {
+    // read the angle off whichever growing point has the most to say — the
+    // leader arrests, but its laterals keep patterning
+    let m = null;
+    for (const a of this.axes)
+      if (a.meristem && (!m || a.meristem.divergence.length > m.divergence.length)) m = a.meristem;
+    // once every growing point has been spent there is nothing left to measure,
+    // so hold the last reading rather than blanking the display
+    const st = (m ? m.divergenceStats(24) : null) || this._lastDiv || null;
+    if (st) this._lastDiv = st;
+    if (m) { this._lastCells = m.F.n; this._lastPl = m.plastochron; }
+    let organs = 0;
+    for (const a of this.axes) organs += a.organs.length;
+    return {
+      organs, axes: this.axes.length,
+      cells: m ? m.F.n : (this._lastCells || 0), live: m ? m.primordia.length : 0,
+      divergence: st, plastochron: m ? m.plastochron : (this._lastPl || 0),
+      height: this.main.tipPos()[1],
+    };
+  }
+}
+
+// ===================== 50_geom.js =====================
+// ---------------------------------------------------------------------------
+// Turning simulation state into triangles, lines and points.
+// Rebuilt every few frames; nothing here is persistent.
+// ---------------------------------------------------------------------------
+
+
+
+class Buffers {
+  constructor() {
+    this.tri = new Float32Array(1 << 20);   // pos3 nrm3 col3 emis1 = 10
+    this.triN = 0;
+    this.line = new Float32Array(1 << 19);  // pos3 col3 emis1 = 7
+    this.lineN = 0;
+    this.pt = new Float32Array(1 << 18);    // pos3 col3 size1 = 7
+    this.ptN = 0;
+  }
+  reset() { this.triN = 0; this.lineN = 0; this.ptN = 0; }
+  vert(p, n, c, e) {
+    if (this.triN + 10 > this.tri.length) return;
+    const t = this.tri, i = this.triN;
+    t[i] = p[0]; t[i + 1] = p[1]; t[i + 2] = p[2];
+    t[i + 3] = n[0]; t[i + 4] = n[1]; t[i + 5] = n[2];
+    t[i + 6] = c[0]; t[i + 7] = c[1]; t[i + 8] = c[2];
+    t[i + 9] = e;
+    this.triN += 10;
+  }
+  // one glowing vertex of a vein ribbon
+  gv(p, c, e) {
+    const l = this.line, i = this.lineN;
+    l[i] = p[0]; l[i + 1] = p[1]; l[i + 2] = p[2];
+    l[i + 3] = c[0]; l[i + 4] = c[1]; l[i + 5] = c[2]; l[i + 6] = e;
+    this.lineN += 7;
+  }
+  // a plain 2-vertex glowing line (needles are thin by nature)
+  seg2(a, b, c, e) {
+    if (this.lineN + 42 > this.line.length) return;
+    v3sub(_sa, b, a);
+    v3sub(_sb, VIEW, a);
+    v3norm(_sc, v3cross(_sc, _sa, _sb));
+    if (!isFinite(_sc[0])) return;
+    const w = MINW * 0.85;
+    this.ribbon(a, b, _sc, w, w * 0.35, c, e);
+  }
+
+  // A vein drawn as a camera-facing ribbon rather than a hairline, so its
+  // order — how much traffic it carries — is legible as thickness.
+  ribbon(a, b, side, w0, w1, c, e) {
+    if (this.lineN + 42 > this.line.length) return;
+    const a0 = [a[0] - side[0] * w0, a[1] - side[1] * w0, a[2] - side[2] * w0];
+    const a1 = [a[0] + side[0] * w0, a[1] + side[1] * w0, a[2] + side[2] * w0];
+    const b0 = [b[0] - side[0] * w1, b[1] - side[1] * w1, b[2] - side[2] * w1];
+    const b1 = [b[0] + side[0] * w1, b[1] + side[1] * w1, b[2] + side[2] * w1];
+    this.gv(a0, c, e); this.gv(a1, c, e); this.gv(b1, c, e);
+    this.gv(a0, c, e); this.gv(b1, c, e); this.gv(b0, c, e);
+  }
+  point(p, c, s) {
+    if (this.ptN + 7 > this.pt.length) return;
+    const t = this.pt, i = this.ptN;
+    t[i] = p[0]; t[i + 1] = p[1]; t[i + 2] = p[2];
+    t[i + 3] = c[0]; t[i + 4] = c[1]; t[i + 5] = c[2]; t[i + 6] = s;
+    this.ptN += 7;
+  }
+}
+
+const _a = v3(), _b = v3(), _c = v3(), _d = v3(), _n = v3(), _t = v3(), _u = v3();
+const _sa = v3(), _sb = v3(), _sc = v3();
+
+// where the camera is, for orienting vein ribbons
+let VIEW = v3(0, 0, 1), MINW = 0.004;
+function setView(eye, minWorld) { v3copy(VIEW, eye); MINW = minWorld; }
+
+// a generalised cylinder along a polyline, with a parallel-transported frame
+function tube(B, pts, radii, sides, colFn) {
+  const n = pts.length;
+  if (n < 2) return;
+  let up = v3(0, 0, 1);
+  const prevRing = [], curRing = [], prevNrm = [], curNrm = [];
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    v3sub(_t, pts[Math.min(n - 1, i + 1)], pts[Math.max(0, i - 1)]);
+    if (v3len(_t) < 1e-6) v3set(_t, 0, 1, 0);
+    v3norm(_t, _t);
+    if (Math.abs(v3dot(_t, up)) > 0.95) v3set(up, 1, 0, 0);
+    v3norm(_u, v3cross(_u, up, _t));
+    v3norm(_n, v3cross(_n, _t, _u));
+    v3copy(up, _n);
+    curRing.length = 0; curNrm.length = 0;
+    const r = radii[i];
+    for (let k = 0; k < sides; k++) {
+      const th = (k / sides) * TAU;
+      const cs = Math.cos(th), sn = Math.sin(th);
+      const nx = _u[0] * cs + _n[0] * sn;
+      const ny = _u[1] * cs + _n[1] * sn;
+      const nz = _u[2] * cs + _n[2] * sn;
+      curNrm.push(v3(nx, ny, nz));
+      curRing.push(v3(p[0] + nx * r, p[1] + ny * r, p[2] + nz * r));
+    }
+    if (i > 0) {
+      const c0 = colFn((i - 1) / (n - 1)), c1 = colFn(i / (n - 1));
+      for (let k = 0; k < sides; k++) {
+        const k2 = (k + 1) % sides;
+        B.vert(prevRing[k], prevNrm[k], c0.c, c0.e);
+        B.vert(curRing[k], curNrm[k], c1.c, c1.e);
+        B.vert(prevRing[k2], prevNrm[k2], c0.c, c0.e);
+        B.vert(prevRing[k2], prevNrm[k2], c0.c, c0.e);
+        B.vert(curRing[k], curNrm[k], c1.c, c1.e);
+        B.vert(curRing[k2], curNrm[k2], c1.c, c1.e);
+      }
+    }
+    prevRing.length = 0; prevNrm.length = 0;
+    for (let k = 0; k < sides; k++) { prevRing.push(curRing[k]); prevNrm.push(curNrm[k]); }
+  }
+}
+
+// map a point in blade space (u along, v across) into world space, with a
+// little curl so blades are not flat cards
+function bladePoint(out, frame, u, v, len, wid, curl, ripple, off) {
+  const bend = curl * u * u;
+  const rip = Math.sin(u * 9.0 + v * 5.0) * ripple * u;
+  const n = bend + rip + (off || 0);
+  out[0] = frame.o[0] + frame.x[0] * u * len + frame.z[0] * v * wid + frame.y[0] * n;
+  out[1] = frame.o[1] + frame.x[1] * u * len + frame.z[1] * v * wid + frame.y[1] * n;
+  out[2] = frame.o[2] + frame.x[2] * u * len + frame.z[2] * v * wid + frame.y[2] * n;
+  return out;
+}
+
+const P0 = v3(), P1 = v3(), P2 = v3(), E1 = v3(), E2 = v3(), NN = v3();
+const _pa = v3(), _pb = v3(), _pc = v3(), _e1 = v3(), _e2 = v3(), _nn = v3();
+const _q0 = v3(), _q1 = v3(), _q2 = v3(), _q3 = v3(), _side = v3();
+const _n0 = v3(), _n1 = v3(), _n2 = v3(), _n3 = v3(), _cc = v3(), _fc = v3();
+let _gridPos = new Float32Array(0), _gridNrm = new Float32Array(0), _gridCol = new Float32Array(0);
+
+function triNormal(a, b, c) {
+  v3sub(E1, b, a); v3sub(E2, c, a);
+  v3norm(NN, v3cross(NN, E1, E2));
+  return NN;
+}
+
+// A frond: a coarse parametric surface cut to the blade outline, with the
+// canalised vein network laid on top of it. The mesh is deliberately much
+// coarser than the tissue that was simulated — the veins carry the detail.
+function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV, dev) {
+  const o = leaf.o;
+  MU = MU || 22; MV = MV || 10;
+  dev = dev === undefined ? 1 : dev;
+
+  // A leaf does not scale up. It expands from the base outward as a wave of
+  // maturation runs to the tip, and the tissue ahead of that wave is still
+  // rolled up in the bud. That is why an unfurling frond looks the way it does.
+  const TAIL = 0.46;
+  const matAt = (u) => clamp((dev - u) / TAIL + 1, 0, 1);
+  // asymmetric: the two sides of a grown leaf are not the same, because the
+  // two halves of the margin patterned independently
+  const wAt = (u, t) => leaf.wSide(clamp(u, 0, 1), t < 0 ? -1 : 1) * (0.10 + 0.90 * matAt(u));
+  const wMat = (u, t) => leaf.wSide(clamp(u, 0, 1), t < 0 ? -1 : 1);
+  const furlAt = (u) => {
+    const m = 1 - matAt(u);
+    return -len * o.furl * m * m * (0.6 + m);
+  };
+  const vdf = leaf.vdf, res = leaf.vdfRes || 0;
+  const nearVein = (u, v) => {
+    if (!vdf) return 9;
+    const a = clamp(Math.round(u * (res - 1)), 0, res - 1);
+    const b = clamp(Math.round((v / o.aspect * 0.5 + 0.5) * (res - 1)), 0, res - 1);
+    return vdf[a * res + b];
+  };
+
+  // Build the surface once as a grid, with normals from finite differences of
+  // the parametrisation. Smooth normals rather than per-facet ones: a frond is
+  // a curved sheet, and faceting reads as cheap.
+  const NU = MU + 1, NV = MV + 1;
+  const pos = _gridPos.length >= NU * NV * 3 ? _gridPos : (_gridPos = new Float32Array(NU * NV * 3));
+  const nrm = _gridNrm.length >= NU * NV * 3 ? _gridNrm : (_gridNrm = new Float32Array(NU * NV * 3));
+  const col = _gridCol.length >= NU * NV * 4 ? _gridCol : (_gridCol = new Float32Array(NU * NV * 4));
+  const h = 0.004;
+  const P = _pa, Pu = _pb, Pv = _pc;
+  const at = (u, t) => t * wAt(u, t);                    // where the tissue is now
+  const matAtUV = (u, t) => t * wMat(u, t);              // where it came from
+  for (let i = 0; i < NU; i++) {
+    const u = i / MU;
+    for (let j = 0; j < NV; j++) {
+      const t = (j / MV) * 2 - 1;
+      const k3 = (i * NV + j) * 3, k4 = (i * NV + j) * 4;
+      bladePoint(P, frame, u, at(u, t), len, wid, curl, ripple, furlAt(u));
+      bladePoint(Pu, frame, u + h, at(u + h, t), len, wid, curl, ripple, furlAt(u + h));
+      bladePoint(Pv, frame, u, at(u, t + h), len, wid, curl, ripple, furlAt(u));
+      v3sub(_e1, Pu, P); v3sub(_e2, Pv, P);
+      v3norm(_nn, v3cross(_nn, _e1, _e2));
+      pos[k3] = P[0]; pos[k3 + 1] = P[1]; pos[k3 + 2] = P[2];
+      nrm[k3] = _nn[0]; nrm[k3 + 1] = _nn[1]; nrm[k3 + 2] = _nn[2];
+      const vv = matAtUV(u, t);
+      const dd = vdf ? clamp(1 - nearVein(u, vv) * 11, 0, 1) : 0;
+      const tt = clamp(u * 0.9 + 0.1, 0, 1);
+      col[k4] = lerp(pal.blade0[0], pal.blade1[0], tt) + dd * pal.veinTint[0];
+      col[k4 + 1] = lerp(pal.blade0[1], pal.blade1[1], tt) + dd * pal.veinTint[1];
+      col[k4 + 2] = lerp(pal.blade0[2], pal.blade1[2], tt) + dd * pal.veinTint[2];
+      col[k4 + 3] = dd * glow * 0.24;
+    }
+  }
+  const gp = (i, j, out) => { const k = (i * NV + j) * 3; out[0] = pos[k]; out[1] = pos[k + 1]; out[2] = pos[k + 2]; return out; };
+  const gn = (i, j, out) => { const k = (i * NV + j) * 3; out[0] = nrm[k]; out[1] = nrm[k + 1]; out[2] = nrm[k + 2]; return out; };
+  const gcC = (i, j) => { const k = (i * NV + j) * 4; _cc[0] = col[k]; _cc[1] = col[k + 1]; _cc[2] = col[k + 2]; return _cc; };
+  const gcE = (i, j) => col[(i * NV + j) * 4 + 3];
+
+  if (!leaf.margin || !leaf.margin.mature) return;
+  for (let i = 0; i < MU; i++) {
+    const u0 = i / MU, u1 = (i + 1) / MU;
+    for (let j = 0; j < MV; j++) {
+      if (o.fenestrate > 0) {
+        const mu = (u0 + u1) * 0.5;
+        const mt = ((j + 0.5) / MV) * 2 - 1;
+        if (nearVein(mu, matAtUV(mu, mt)) > o.fenestrate && mu > 0.16 && mu < 0.93) continue;
+      }
+      gp(i, j, _q0); gp(i, j + 1, _q1); gp(i + 1, j + 1, _q2); gp(i + 1, j, _q3);
+      B.vert(_q0, gn(i, j, _n0), gcC(i, j), gcE(i, j));
+      B.vert(_q1, gn(i, j + 1, _n1), gcC(i, j + 1), gcE(i, j + 1));
+      B.vert(_q2, gn(i + 1, j + 1, _n2), gcC(i + 1, j + 1), gcE(i + 1, j + 1));
+      B.vert(_q0, gn(i, j, _n0), gcC(i, j), gcE(i, j));
+      B.vert(_q2, gn(i + 1, j + 1, _n2), gcC(i + 1, j + 1), gcE(i + 1, j + 1));
+      B.vert(_q3, gn(i + 1, j, _n3), gcC(i + 1, j), gcE(i + 1, j));
+    }
+  }
+
+  // --- the vasculature, as ribbons whose width is the vein's order ----------
+  const lift = len * 0.010 + 0.005;
+  const segs = leaf.veins;
+  if (segs) {
+    const base = len * 0.0034;
+    for (const s of segs) {
+      // veins mature basipetally too — none exist ahead of the wave
+      if (s.x0 > dev + 0.04 || s.x1 > dev + 0.04) continue;
+      // a vein whose material half-width has collapsed cannot be mapped onto
+      // the current outline — skip it rather than divide by nothing and fling
+      // a quad to infinity
+      const w0 = wMat(s.x0, s.y0), w1 = wMat(s.x1, s.y1);
+      if (w0 < 1e-3 || w1 < 1e-3) continue;
+      // and never let a remapped vein leave the blade, whatever the outline did
+      const t0 = clamp(s.y0 / w0, -1, 1), t1 = clamp(s.y1 / w1, -1, 1);
+      bladePoint(_q0, frame, s.x0, t0 * wAt(s.x0, s.y0), len, wid, curl, ripple, lift + furlAt(s.x0));
+      bladePoint(_q1, frame, s.x1, t1 * wAt(s.x1, s.y1), len, wid, curl, ripple, lift + furlAt(s.x1));
+      v3sub(_e1, _q1, _q0);
+      v3sub(_e2, VIEW, _q0);
+      v3norm(_side, v3cross(_side, _e1, _e2));
+      if (!isFinite(_side[0])) continue;
+      const w = Math.max(MINW, base * (0.25 + s.w * 1.35));
+      B.ribbon(_q0, _q1, _side, w, w, pal.vein, glow * (0.06 + s.w * 0.52));
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// THE GROWING TIP, AT CELL RESOLUTION
+//
+// Each cell is drawn as a disc coloured by how much auxin it holds. Then, as
+// the camera comes in, the mechanism fades up on top of it:
+//
+//   needle  — the direction that cell has loaded its PIN pumps. This is the
+//             decision the whole model turns on. Length and brightness are how
+//             committed the cell is; an unpolarised cell has almost none.
+//   spark   — auxin actually being moved, travelling along that needle at a
+//             rate set by the real flux through that wall.
+//
+// Watch the needles around a forming organ: they all swing to point at it. That
+// convergence IS the primordium. Nothing else is happening.
+// ---------------------------------------------------------------------------
+function meristemDome(B, m, frame, scale, pal, t, detail) {
+  const F = m.F, o = m.o;
+  const R = o.R;
+  const p = v3(), q = v3();
+  const dt = detail || 0;
+  const toWorld = (sx, sy, sz, out) => {
+    out[0] = frame.o[0] + frame.z[0] * sx + frame.y[0] * sy + frame.x[0] * sz;
+    out[1] = frame.o[1] + frame.z[1] * sx + frame.y[1] * sy + frame.x[1] * sz;
+    out[2] = frame.o[2] + frame.z[2] * sx + frame.y[2] * sy + frame.x[2] * sz;
+    return out;
+  };
+  const domeH = (r) => Math.sqrt(Math.max(0, 1 - r * r)) * 0.55;
+
+  for (let i = 0; i < F.n; i++) {
+    const x = F.x[i], y = F.y[i];
+    const r = Math.hypot(x, y) / R;
+    const sx = x / R * scale, sy = y / R * scale, sz = domeH(r) * scale;
+    toWorld(sx, sy, sz, p);
+    const a = clamp(F.a[i] / 6, 0, 1);
+    const g = Math.pow(a, 0.7);
+    const col = [
+      lerp(pal.cell0[0], pal.cell1[0], g),
+      lerp(pal.cell0[1], pal.cell1[1], g),
+      lerp(pal.cell0[2], pal.cell1[2], g),
+    ];
+    // at close range the cells must read as separate cells, not as one lamp
+    const shrink = 1 - dt * 0.42;
+    const dim = 1 - dt * 0.45;
+    B.point(p, [col[0] * dim, col[1] * dim, col[2] * dim],
+      scale * (0.052 + 0.018 * F.sz[i]) * (1 + g * 0.55) * shrink);
+
+    if (dt < 0.02) continue;
+
+    // --- the cell's PIN polarity ------------------------------------------
+    const d = F.deg[i], off = i * MAXNB;
+    let px = 0, py = 0, tot = 0, flux = 0;
+    for (let k = 0; k < d; k++) {
+      const e = off + k, j = F.nbr[e];
+      const ex = F.x[j] - x, ey = F.y[j] - y;
+      const el = Math.hypot(ex, ey) || 1;
+      const w = F.P[e];
+      px += w * ex / el; py += w * ey / el; tot += w;
+      if (F.J[e] > flux) flux = F.J[e];
+    }
+    if (tot <= 1e-6) continue;
+    px /= tot; py /= tot;
+    const pol = Math.hypot(px, py);          // 0 apolar, 1 all on one wall
+    if (pol < 0.02) continue;
+    const ux = px / pol, uy = py / pol;
+
+    const nl = scale * 0.070 * (0.35 + pol * 1.45);
+    const bx = sx + ux * nl, by = sy + uy * nl;
+    const r2 = Math.hypot(bx, by) / scale;
+    toWorld(bx, by, domeH(Math.min(1, r2)) * scale, q);
+    const nb = dt * (0.10 + pol * 1.5) * (0.4 + clamp(F.a[i] / 4, 0, 1));
+    B.seg2(p, q, pal.pin, nb);
+
+    // --- auxin on the move --------------------------------------------------
+    if (flux > 0.02) {
+      const h = (Math.imul(F.id[i] ^ 0x2545f491, 0x9e3779b1) >>> 8) / 16777216;
+      const ph = (t * 0.00055 * (0.5 + Math.min(2.5, flux * 0.35)) + h) % 1;
+      const fx = sx + ux * nl * (0.15 + ph * 1.25);
+      const fy = sy + uy * nl * (0.15 + ph * 1.25);
+      const rr = Math.hypot(fx, fy) / scale;
+      toWorld(fx, fy, domeH(Math.min(1, rr)) * scale, q);
+      const fade = Math.sin(ph * Math.PI);
+      const b2 = dt * fade * clamp(flux * 0.5, 0, 1.6);
+      B.point(q, [pal.spark[0] * b2, pal.spark[1] * b2, pal.spark[2] * b2],
+        scale * 0.035 * (0.6 + fade));
+    }
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// A fruit: the ovary wall as a closed shell, coloured by how far the ripening
+// wave has crossed it, with the seeds glowing faintly through the flesh.
+// ---------------------------------------------------------------------------
+function fruitShell(B, fr, origin, scale, pal) {
+  const P = fr.pos, N = fr.nrm, R = fr.ripe;
+  const a = v3(), b = v3(), c = v3(), na = v3(), nb = v3(), nc = v3();
+  const cc = v3();
+  const col = (i) => {
+    const t = clamp(R[i], 0, 1);
+    cc[0] = lerp(pal.fruit0[0], pal.fruit1[0], t);
+    cc[1] = lerp(pal.fruit0[1], pal.fruit1[1], t);
+    cc[2] = lerp(pal.fruit0[2], pal.fruit1[2], t);
+    return cc;
+  };
+  if (!fr._glow || fr._glow.length !== fr.n) {
+    fr._glow = new Float32Array(fr.n);
+    for (const sd of fr.seeds) fr._glow[sd] = 1;
+  }
+  const G = fr._glow;
+  const put = (i, p, n) => {
+    p[0] = origin[0] + P[i * 3] * scale;
+    p[1] = origin[1] + P[i * 3 + 1] * scale;
+    p[2] = origin[2] + P[i * 3 + 2] * scale;
+    n[0] = N[i * 3]; n[1] = N[i * 3 + 1]; n[2] = N[i * 3 + 2];
+  };
+  const em = (i) => pal.glow * (0.04 + 0.26 * G[i] + 0.18 * R[i]);
+  for (const f of fr.faces) {
+    put(f[0], a, na); put(f[1], b, nb); put(f[2], c, nc);
+    B.vert(a, na, col(f[0]), em(f[0]));
+    B.vert(b, nb, col(f[1]), em(f[1]));
+    B.vert(c, nc, col(f[2]), em(f[2]));
+  }
+}
+
+// ===================== 60_render.js =====================
+// ---------------------------------------------------------------------------
+// WebGL2 renderer: forward pass into an HDR target, then bloom and grade.
+// ---------------------------------------------------------------------------
+
+
+function sh(gl, type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    throw new Error('shader: ' + gl.getShaderInfoLog(s) + '\n' + src.split('\n').map((l, i) => (i + 1) + ': ' + l).join('\n'));
+  }
+  return s;
+}
+function prog(gl, vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, sh(gl, gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, sh(gl, gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('link: ' + gl.getProgramInfoLog(p));
+  p.u = new Proxy({}, { get: (t, k) => (t[k] !== undefined ? t[k] : (t[k] = gl.getUniformLocation(p, k))) });
+  return p;
+}
+
+const HEAD = `#version 300 es
+precision highp float;`;
+
+// Every pass that draws world geometry displaces it by the same slow field, so
+// stems, blades, veins and cells stay welded together while the whole specimen
+// breathes. It also does the quiet work of hiding the fact that the geometry
+// itself is only rebuilt a few times a second.
+const SWAY = `
+uniform float uTime, uSway;
+vec3 sway(vec3 p){
+  float h = max(p.y, 0.0);
+  float amp = uSway * h * h * 0.0011;
+  float t = uTime * 0.00023;
+  float a = sin(t*1.00 + p.y*0.26 + p.x*0.13);
+  float b = sin(t*0.71 + p.z*0.23 - p.y*0.17);
+  float c = sin(t*1.63 + p.x*0.44 + p.z*0.37);
+  return p + vec3(a + c*0.22, c*0.10, b + c*0.18) * amp;
+}`;
+
+const MESH_VS = `${HEAD}
+${SWAY}
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in vec3 aCol;
+layout(location=3) in float aEmis;
+uniform mat4 uVP;
+out vec3 vP; out vec3 vN; out vec3 vC; out float vE;
+void main(){ vec3 P=sway(aPos); vP=P; vN=aNrm; vC=aCol; vE=aEmis; gl_Position=uVP*vec4(P,1.0); }`;
+
+const MESH_FS = `${HEAD}
+in vec3 vP; in vec3 vN; in vec3 vC; in float vE;
+uniform vec3 uEye, uKey, uKeyCol, uAmbTop, uAmbBot, uFog;
+uniform float uFogD, uFogNear;
+out vec4 o;
+void main(){
+  vec3 N = normalize(vN);
+  vec3 V = normalize(uEye - vP);
+  if (dot(N,V) < 0.0) N = -N;
+  float d = max(dot(N, uKey), 0.0);
+  // light that has passed through the tissue rather than bounced off it
+  float back = pow(max(dot(-N, uKey), 0.0), 2.0);
+  float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+  vec3 amb = mix(uAmbBot, uAmbTop, N.y*0.5+0.5);
+  vec3 c = vC * (amb + uKeyCol*d*0.9) + vC*uKeyCol*back*0.55 + rim*uAmbTop*0.7;
+  c += vC * vE * 3.0;
+  // fog measured from the near face of the subject, not from the eye, so it
+  // reads the same whether the camera is close in or pulled right back
+  float dist = length(vP-uEye);
+  float f = 1.0 - exp(-max(0.0, dist - uFogNear)*uFogD);
+  c = mix(c, uFog, clamp(f,0.0,1.0)*0.80);
+  // alpha carries linear depth for the defocus pass
+  o = vec4(c, dist*0.01);
+}`;
+
+const LINE_VS = `${HEAD}
+${SWAY}
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aCol;
+layout(location=2) in float aEmis;
+uniform mat4 uVP;
+out vec3 vC; out float vE; out vec3 vP;
+void main(){ vec3 P=sway(aPos); vC=aCol; vE=aEmis; vP=P; gl_Position=uVP*vec4(P,1.0); }`;
+
+const LINE_FS = `${HEAD}
+in vec3 vC; in float vE; in vec3 vP;
+uniform vec3 uEye, uFog; uniform float uFogD, uFogNear;
+out vec4 o;
+void main(){
+  vec3 c = vC * vE;
+  float f = 1.0 - exp(-max(0.0, length(vP-uEye) - uFogNear)*uFogD);
+  c *= (1.0 - clamp(f,0.0,1.0)*0.8);
+  o = vec4(c, 1.0);   // alpha is masked off by blendFuncSeparate
+}`;
+
+const PT_VS = `${HEAD}
+${SWAY}
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aCol;
+layout(location=2) in float aSize;
+uniform mat4 uVP; uniform vec3 uEye; uniform float uPx;
+out vec3 vC;
+void main(){
+  vC=aCol;
+  vec4 cp = uVP*vec4(sway(aPos),1.0);
+  gl_Position = cp;
+  gl_PointSize = clamp(aSize*uPx/max(0.001,cp.w), 1.0, 64.0);
+}`;
+
+const PT_FS = `${HEAD}
+in vec3 vC; out vec4 o;
+void main(){
+  vec2 d = gl_PointCoord*2.0-1.0;
+  float r = dot(d,d);
+  if (r>1.0) discard;
+  float a = smoothstep(1.0, 0.15, r);
+  o = vec4(vC*a*1.12, 1.0);
+}`;
+
+const QUAD_VS = `${HEAD}
+out vec2 uv;
+void main(){
+  vec2 p = vec2((gl_VertexID<<1)&2, gl_VertexID&2);
+  uv = p; gl_Position = vec4(p*2.0-1.0, 0.0, 1.0);
+}`;
+
+const BG_FS = `${HEAD}
+in vec2 uv; out vec4 o;
+uniform vec3 uTop, uBot, uGlow; uniform float uT;
+void main(){
+  vec2 p = uv*2.0-1.0;
+  vec3 c = mix(uBot, uTop, pow(clamp(uv.y,0.0,1.0),0.75));
+  // a slow bloom of light behind the specimen
+  float d = length(p*vec2(1.0,1.25) - vec2(0.0,-0.15));
+  c += uGlow * exp(-d*2.1) * (0.85+0.15*sin(uT*0.0007));
+  o = vec4(c, 3.0);   // the void is far away, so it defocuses
+
+}`;
+
+const BRIGHT_FS = `${HEAD}
+in vec2 uv; out vec4 o;
+uniform sampler2D uT; uniform float uThresh;
+void main(){
+  vec3 c = texture(uT, uv).rgb;
+  float l = dot(c, vec3(0.2126,0.7152,0.0722));
+  o = vec4(c * smoothstep(uThresh, uThresh*2.2, l), 1.0);
+}`;
+
+const BLUR_FS = `${HEAD}
+in vec2 uv; out vec4 o;
+uniform sampler2D uT; uniform vec2 uDir;
+void main(){
+  vec3 s = texture(uT,uv).rgb*0.2270270270;
+  s += texture(uT, uv+uDir*1.3846153846).rgb*0.3162162162;
+  s += texture(uT, uv-uDir*1.3846153846).rgb*0.3162162162;
+  s += texture(uT, uv+uDir*3.2307692308).rgb*0.0702702703;
+  s += texture(uT, uv-uDir*3.2307692308).rgb*0.0702702703;
+  o = vec4(s,1.0);
+}`;
+
+const COMP_FS = `${HEAD}
+in vec2 uv; out vec4 o;
+uniform sampler2D uScene, uBloom, uDof;
+uniform float uBloomAmt, uExposure, uGrain, uT, uVig;
+uniform float uFocus, uRange, uDofAmt;
+vec3 aces(vec3 x){
+  return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0.0, 1.0);
+}
+float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
+void main(){
+  vec4 sc = texture(uScene,uv);
+  vec3 c = sc.rgb;
+  // defocus: alpha carries linear depth, so the plane the camera is looking at
+  // stays sharp and everything in front of and behind it softens
+  float zdep = sc.a * 100.0;
+  float coc = clamp(abs(zdep - uFocus) / max(0.001, uRange), 0.0, 1.0);
+  coc = coc*coc*(3.0-2.0*coc) * uDofAmt;
+  c = mix(c, texture(uDof, uv).rgb, coc);
+  vec3 b = texture(uBloom,uv).rgb;
+  c += b*uBloomAmt;
+  // a touch of lateral chroma, strongest at the edges
+  vec2 d = (uv-0.5);
+  float ca = 0.0016*dot(d,d)*4.0;
+  c.r = mix(texture(uScene, uv+d*ca).r, texture(uDof, uv+d*ca).r, coc) + texture(uBloom, uv+d*ca).r*uBloomAmt;
+  c.b = mix(texture(uScene, uv-d*ca).b, texture(uDof, uv-d*ca).b, coc) + texture(uBloom, uv-d*ca).b*uBloomAmt;
+  c *= uExposure;
+  c = aces(c);
+  c *= 1.0 - uVig*dot(d,d)*1.6;
+  c += (hash(uv*vec2(1024.0,768.0)+fract(uT*0.001))-0.5)*uGrain;
+  o = vec4(pow(max(c,0.0), vec3(1.0/2.2)), 1.0);
+}`;
+
+class Renderer {
+  constructor(canvas) {
+    const gl = canvas.getContext('webgl2', {
+      antialias: true, alpha: false, powerPreference: 'high-performance',
+      preserveDrawingBuffer: false,
+    });
+    if (!gl) throw new Error('WebGL2 unavailable');
+    this.gl = gl; this.canvas = canvas;
+    this.float = !!gl.getExtension('EXT_color_buffer_float');
+    gl.getExtension('OES_texture_float_linear');
+
+    this.pMesh = prog(gl, MESH_VS, MESH_FS);
+    this.pLine = prog(gl, LINE_VS, LINE_FS);
+    this.pPt = prog(gl, PT_VS, PT_FS);
+    this.pBg = prog(gl, QUAD_VS, BG_FS);
+    this.pBright = prog(gl, QUAD_VS, BRIGHT_FS);
+    this.pBlur = prog(gl, QUAD_VS, BLUR_FS);
+    this.pComp = prog(gl, QUAD_VS, COMP_FS);
+
+    this.vaoQuad = gl.createVertexArray();
+
+    this.triBuf = gl.createBuffer();
+    this.vaoTri = gl.createVertexArray();
+    gl.bindVertexArray(this.vaoTri);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.triBuf);
+    const S = 10 * 4;
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, S, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, S, 12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, S, 24);
+    gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 1, gl.FLOAT, false, S, 36);
+
+    this.lineBuf = gl.createBuffer();
+    this.vaoLine = gl.createVertexArray();
+    gl.bindVertexArray(this.vaoLine);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.lineBuf);
+    const S2 = 7 * 4;
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, S2, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, S2, 12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, S2, 24);
+
+    this.ptBuf = gl.createBuffer();
+    this.vaoPt = gl.createVertexArray();
+    gl.bindVertexArray(this.vaoPt);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.ptBuf);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, S2, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, S2, 12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, S2, 24);
+    gl.bindVertexArray(null);
+
+    this.fbo = {};
+    this.vp = m4(); this.proj = m4(); this.view = m4();
+    this.resize();
+  }
+
+  _tex(w, h, float) {
+    const gl = this.gl;
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    const internal = float && this.float ? gl.RGBA16F : gl.RGBA8;
+    const type = float && this.float ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, gl.RGBA, type, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+  _fb(w, h, float, depth) {
+    const gl = this.gl;
+    const f = gl.createFramebuffer();
+    const tex = this._tex(w, h, float);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    let rb = null;
+    if (depth) {
+      rb = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rb);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { f, tex, rb, w, h };
+  }
+
+  resize() {
+    const gl = this.gl, c = this.canvas;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(2, Math.floor(c.clientWidth * dpr));
+    const h = Math.max(2, Math.floor(c.clientHeight * dpr));
+    if (c.width === w && c.height === h && this.fbo.scene) return;
+    c.width = w; c.height = h;
+    for (const k of Object.keys(this.fbo)) {
+      const o = this.fbo[k];
+      if (!o) continue;
+      gl.deleteFramebuffer(o.f); gl.deleteTexture(o.tex);
+      if (o.rb) gl.deleteRenderbuffer(o.rb);
+    }
+    const hw = Math.max(2, w >> 1), hh = Math.max(2, h >> 1);
+    this.fbo.scene = this._fb(w, h, true, true);
+    this.fbo.bright = this._fb(hw, hh, true, false);
+    this.fbo.blurA = this._fb(hw, hh, true, false);
+    this.fbo.blurB = this._fb(hw, hh, true, false);
+    this.fbo.dofA = this._fb(hw, hh, true, false);
+    this.fbo.dofB = this._fb(hw, hh, true, false);
+    this.W = w; this.H = h;
+  }
+
+  upload(B) {
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.triBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, B.tri.subarray(0, B.triN), gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.lineBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, B.line.subarray(0, B.lineN), gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.ptBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, B.pt.subarray(0, B.ptN), gl.DYNAMIC_DRAW);
+    this.nTri = B.triN / 10; this.nLine = B.lineN / 7; this.nPt = B.ptN / 7;
+  }
+
+  draw(cam, pal, t) {
+    const gl = this.gl;
+    this.resize();
+    m4perspective(this.proj, cam.fov, this.W / this.H, 0.05, 400);
+    m4lookAt(this.view, cam.eye, cam.target, v3(0, 1, 0));
+    m4mul(this.vp, this.proj, this.view);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo.scene.f);
+    gl.viewport(0, 0, this.W, this.H);
+    gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
+    gl.disable(gl.BLEND);
+    gl.useProgram(this.pBg);
+    gl.uniform3fv(this.pBg.u.uTop, pal.bgTop);
+    gl.uniform3fv(this.pBg.u.uBot, pal.bgBot);
+    gl.uniform3fv(this.pBg.u.uGlow, pal.bgGlow);
+    gl.uniform1f(this.pBg.u.uT, t);
+    gl.bindVertexArray(this.vaoQuad);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    // depthMask must be back on before the clear — glClear respects the mask,
+    // and a silently skipped depth clear leaves last frame's depth in place
+    gl.depthMask(true);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    gl.useProgram(this.pMesh);
+    gl.uniformMatrix4fv(this.pMesh.u.uVP, false, this.vp);
+    gl.uniform3fv(this.pMesh.u.uEye, cam.eye);
+    gl.uniform3fv(this.pMesh.u.uKey, pal.key);
+    gl.uniform3fv(this.pMesh.u.uKeyCol, pal.keyCol);
+    gl.uniform3fv(this.pMesh.u.uAmbTop, pal.ambTop);
+    gl.uniform3fv(this.pMesh.u.uAmbBot, pal.ambBot);
+    gl.uniform3fv(this.pMesh.u.uFog, pal.fog);
+    gl.uniform1f(this.pMesh.u.uFogD, pal.fogD);
+    gl.uniform1f(this.pMesh.u.uFogNear, cam.fogNear || 0);
+    gl.uniform1f(this.pMesh.u.uTime, t);
+    gl.uniform1f(this.pMesh.u.uSway, pal.sway);
+    gl.bindVertexArray(this.vaoTri);
+    if (this.nTri) gl.drawArrays(gl.TRIANGLES, 0, this.nTri);
+
+    gl.enable(gl.BLEND);
+    // colour adds, alpha is left alone — it is carrying depth for the defocus
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ZERO, gl.ONE);
+    gl.depthMask(false);
+
+    gl.useProgram(this.pLine);
+    gl.uniformMatrix4fv(this.pLine.u.uVP, false, this.vp);
+    gl.uniform3fv(this.pLine.u.uEye, cam.eye);
+    gl.uniform3fv(this.pLine.u.uFog, pal.fog);
+    gl.uniform1f(this.pLine.u.uFogD, pal.fogD);
+    gl.uniform1f(this.pLine.u.uFogNear, cam.fogNear || 0);
+    gl.uniform1f(this.pLine.u.uTime, t);
+    gl.uniform1f(this.pLine.u.uSway, pal.sway);
+    gl.bindVertexArray(this.vaoLine);
+    if (this.nLine) gl.drawArrays(gl.TRIANGLES, 0, this.nLine);
+
+    gl.useProgram(this.pPt);
+    gl.uniformMatrix4fv(this.pPt.u.uVP, false, this.vp);
+    gl.uniform3fv(this.pPt.u.uEye, cam.eye);
+    gl.uniform1f(this.pPt.u.uPx, this.H * 0.9);
+    gl.uniform1f(this.pPt.u.uTime, t);
+    gl.uniform1f(this.pPt.u.uSway, pal.sway);
+    gl.bindVertexArray(this.vaoPt);
+    if (this.nPt) gl.drawArrays(gl.POINTS, 0, this.nPt);
+
+    gl.disable(gl.BLEND);
+    gl.depthMask(true);
+
+    // --- bloom ---------------------------------------------------------------
+    const { bright, blurA, blurB, scene } = this.fbo;
+    gl.bindVertexArray(this.vaoQuad);
+    gl.disable(gl.DEPTH_TEST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bright.f);
+    gl.viewport(0, 0, bright.w, bright.h);
+    gl.useProgram(this.pBright);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, scene.tex);
+    gl.uniform1i(this.pBright.u.uT, 0);
+    gl.uniform1f(this.pBright.u.uThresh, pal.bloomThresh);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    let src = bright, dst = blurA;
+    for (let i = 0; i < 3; i++) {
+      const r = 1 + i * 1.6;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, dst.f);
+      gl.viewport(0, 0, dst.w, dst.h);
+      gl.useProgram(this.pBlur);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, src.tex);
+      gl.uniform1i(this.pBlur.u.uT, 0);
+      gl.uniform2f(this.pBlur.u.uDir, r / dst.w, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      const tmp = src === bright ? blurB : src;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, tmp.f);
+      gl.useProgram(this.pBlur);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, dst.tex);
+      gl.uniform1i(this.pBlur.u.uT, 0);
+      gl.uniform2f(this.pBlur.u.uDir, 0, r / dst.h);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      src = tmp; dst = dst === blurA ? blurB === src ? blurA : blurB : blurA;
+      if (dst === src) dst = (src === blurA) ? blurB : blurA;
+    }
+
+    // --- defocus image: two gaussian passes over the whole scene ------------
+    const { dofA, dofB } = this.fbo;
+    let dsrc = scene;
+    for (let i = 0; i < 2; i++) {
+      const r = 1.4 + i * 2.2;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, dofA.f);
+      gl.viewport(0, 0, dofA.w, dofA.h);
+      gl.useProgram(this.pBlur);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, dsrc.tex);
+      gl.uniform1i(this.pBlur.u.uT, 0);
+      gl.uniform2f(this.pBlur.u.uDir, r / dofA.w, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, dofB.f);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, dofA.tex);
+      gl.uniform2f(this.pBlur.u.uDir, 0, r / dofB.h);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      dsrc = dofB;
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.W, this.H);
+    gl.useProgram(this.pComp);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, scene.tex);
+    gl.uniform1i(this.pComp.u.uScene, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, src.tex);
+    gl.uniform1i(this.pComp.u.uBloom, 1);
+    gl.uniform1f(this.pComp.u.uBloomAmt, pal.bloom);
+    gl.uniform1f(this.pComp.u.uExposure, pal.exposure);
+    gl.uniform1f(this.pComp.u.uGrain, pal.grain);
+    gl.uniform1f(this.pComp.u.uVig, pal.vignette);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, dofB.tex);
+    gl.uniform1i(this.pComp.u.uDof, 2);
+    gl.uniform1f(this.pComp.u.uFocus, cam.dist);
+    gl.uniform1f(this.pComp.u.uRange, cam.dofRange || 8);
+    gl.uniform1f(this.pComp.u.uDofAmt, pal.dof);
+    gl.uniform1f(this.pComp.u.uT, t);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindVertexArray(null);
+  }
+}
+
+// ===================== 70_app.js =====================
+// ---------------------------------------------------------------------------
+// The exhibit: camera, species, scene assembly, and the loop.
+// ---------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+// --- species ---------------------------------------------------------------
+// Each is a parameter set, not a shape. Nothing here says what the plant will
+// look like; it says how its chemistry is tuned.
+const SPECIES = {
+  'Cathedral Fern': {
+    prm: { T: 40, D: 6.0, mu: 0.30, rho: 0.60, b: 3.0 },
+    mo: { R: 10, rCZ: 2.4, rPZ: 6.8, G: 0.0042 },
+    sp: {
+      elongation: 0.0044, organLen: 4.3, organTilt: 0.86, droop: 0.5,
+      maxOrgans: 52, branching: 0.5, maxAxes: 5,
+      leafOpts: { fenestrate: 0, aspect: 0.40 },
+    },
+    pal: {
+      blade0: [0.06, 0.21, 0.21], blade1: [0.10, 0.36, 0.32],
+      veinTint: [0.02, 0.16, 0.22], vein: [0.35, 1.0, 0.95],
+      stem0: [0.13, 0.26, 0.27], stem1: [0.22, 0.44, 0.40],
+      cell0: [0.05, 0.14, 0.20], cell1: [0.55, 1.0, 0.85],
+      bgTop: [0.012, 0.030, 0.045], bgBot: [0.004, 0.008, 0.014],
+      bgGlow: [0.03, 0.10, 0.13], fog: [0.02, 0.05, 0.07], fogD: 0.075,
+      key: [0.35, 0.75, 0.45], keyCol: [0.55, 0.85, 0.80],
+      ambTop: [0.10, 0.22, 0.30], ambBot: [0.02, 0.04, 0.07],
+      glow: 1.0, spore: [0.4, 0.9, 0.85],
+      pin: [0.55, 0.92, 1.0], spark: [0.85, 1.0, 0.95],
+      fruit0: [0.06, 0.20, 0.17], fruit1: [0.95, 0.45, 0.55],
+      petal0: [0.20, 0.30, 0.46], petal1: [0.62, 0.80, 1.0], petalVein: [0.8, 0.95, 1.0],
+    },
+  },
+  'Spiral Ossuary': {
+    prm: { T: 52, D: 6.5, mu: 0.30, rho: 0.60, b: 3.4 },
+    mo: { R: 10, rCZ: 2.2, rPZ: 6.4, G: 0.0042 },
+    sp: {
+      elongation: 0.0036, organLen: 3.2, organTilt: 0.66, droop: 0.24,
+      maxOrgans: 60, branching: 0.30, maxAxes: 3,
+      leafOpts: { fenestrate: 0, aspect: 0.30 },
+    },
+    pal: {
+      blade0: [0.26, 0.24, 0.20], blade1: [0.50, 0.47, 0.40],
+      veinTint: [0.30, 0.16, 0.02], vein: [1.0, 0.62, 0.20],
+      stem0: [0.30, 0.28, 0.24], stem1: [0.58, 0.54, 0.46],
+      cell0: [0.18, 0.15, 0.13], cell1: [1.0, 0.75, 0.35],
+      bgTop: [0.045, 0.038, 0.033], bgBot: [0.010, 0.008, 0.007],
+      bgGlow: [0.09, 0.055, 0.02], fog: [0.06, 0.05, 0.045], fogD: 0.062,
+      key: [0.4, 0.8, 0.3], keyCol: [0.95, 0.85, 0.70],
+      ambTop: [0.22, 0.20, 0.18], ambBot: [0.05, 0.04, 0.035],
+      glow: 0.9, spore: [1.0, 0.8, 0.45],
+      pin: [1.0, 0.80, 0.45], spark: [1.0, 0.95, 0.75],
+      fruit0: [0.24, 0.22, 0.17], fruit1: [1.0, 0.62, 0.18],
+      petal0: [0.44, 0.38, 0.28], petal1: [1.0, 0.90, 0.66], petalVein: [1.0, 0.9, 0.7],
+    },
+  },
+  'Abyssal Frond': {
+    prm: { T: 34, D: 5.4, mu: 0.30, rho: 0.60, b: 2.7 },
+    mo: { R: 11, rCZ: 2.8, rPZ: 7.4, G: 0.0034 },
+    sp: {
+      elongation: 0.0050, organLen: 5.0, organTilt: 1.02, droop: 0.95,
+      maxOrgans: 44, branching: 0.62, maxAxes: 6,
+      leafOpts: { fenestrate: 0.052, aspect: 0.52 },
+    },
+    pal: {
+      blade0: [0.10, 0.04, 0.16], blade1: [0.20, 0.08, 0.29],
+      veinTint: [0.22, 0.02, 0.24], vein: [1.0, 0.28, 0.85],
+      stem0: [0.14, 0.06, 0.20], stem1: [0.26, 0.11, 0.36],
+      cell0: [0.09, 0.03, 0.14], cell1: [1.0, 0.45, 0.95],
+      bgTop: [0.030, 0.010, 0.045], bgBot: [0.004, 0.002, 0.010],
+      bgGlow: [0.07, 0.015, 0.10], fog: [0.04, 0.015, 0.06], fogD: 0.082,
+      key: [0.3, 0.85, 0.42], keyCol: [0.62, 0.45, 0.85],
+      ambTop: [0.16, 0.08, 0.26], ambBot: [0.03, 0.01, 0.06],
+      glow: 0.95, spore: [0.9, 0.4, 1.0],
+      pin: [0.85, 0.55, 1.0], spark: [1.0, 0.80, 1.0],
+      fruit0: [0.08, 0.05, 0.16], fruit1: [0.95, 0.20, 0.70],
+      petal0: [0.32, 0.10, 0.34], petal1: [1.0, 0.42, 0.86], petalVein: [1.0, 0.7, 1.0],
+    },
+  },
+  'Sun Coral': {
+    prm: { T: 46, D: 7.2, mu: 0.30, rho: 0.60, b: 3.2 },
+    mo: { R: 9.5, rCZ: 2.0, rPZ: 6.2, G: 0.005 },
+    sp: {
+      elongation: 0.0032, organLen: 3.0, organTilt: 0.5, droop: 0.15,
+      maxOrgans: 64, branching: 0.72, maxAxes: 7, maxGen: 3,
+      leafOpts: { fenestrate: 0.040, aspect: 0.58 },
+    },
+    pal: {
+      blade0: [0.30, 0.10, 0.04], blade1: [0.56, 0.24, 0.08],
+      veinTint: [0.35, 0.22, 0.02], vein: [1.0, 0.85, 0.35],
+      stem0: [0.34, 0.12, 0.05], stem1: [0.62, 0.26, 0.09],
+      cell0: [0.22, 0.07, 0.03], cell1: [1.0, 0.9, 0.45],
+      bgTop: [0.045, 0.020, 0.014], bgBot: [0.008, 0.004, 0.004],
+      bgGlow: [0.11, 0.04, 0.015], fog: [0.07, 0.035, 0.02], fogD: 0.058,
+      key: [0.45, 0.7, 0.55], keyCol: [1.0, 0.82, 0.60],
+      ambTop: [0.26, 0.14, 0.09], ambBot: [0.05, 0.025, 0.02],
+      glow: 1.0, spore: [1.0, 0.7, 0.35],
+      pin: [1.0, 0.85, 0.50], spark: [1.0, 1.0, 0.80],
+      fruit0: [0.22, 0.10, 0.04], fruit1: [1.0, 0.72, 0.15],
+      petal0: [0.44, 0.18, 0.06], petal1: [1.0, 0.78, 0.30], petalVein: [1.0, 0.9, 0.5],
+    },
+  },
+};
+
+const BASE_PAL = {
+  bloom: 0.38, bloomThresh: 1.15, exposure: 1.04, grain: 0.024, vignette: 0.60,
+  sway: 1.0, dof: 0.80, laminaMul: 0.86,
+  pin: [0.62, 0.88, 1.0], spark: [1.0, 0.98, 0.86],
+  fruit0: [0.10, 0.22, 0.14], fruit1: [0.85, 0.30, 0.22],
+  petal0: [0.30, 0.24, 0.42], petal1: [0.72, 0.55, 0.95], petalVein: [1.0, 0.85, 1.0],
+};
+
+class App {
+  constructor(canvas, hud) {
+    this.canvas = canvas;
+    this.hud = hud;
+    this.renderer = new Renderer(canvas);
+    this.B = new Buffers();
+    this.cam = {
+      az: 0.7, el: 0.22, dist: 15, fov: 0.72,
+      eye: v3(0, 4, 15), target: v3(0, 4, 0), tgtY: 4,
+      autoRot: true, idle: 0,
+    };
+    this.speciesName = 'Cathedral Fern';
+    this.speedMul = 1;
+    this.showMeristem = true;
+    this.detail = 0;
+    this.focus = null;
+    this.userDriving = false;
+    this.subject = null;
+    this.shot = null; this.shotT = 0;
+    this.resumeAfter = 16000;
+    this.idleT = 0;
+    this.ringWidth = 0;
+    this.frame = 0;
+    this.t = 0;
+    this.fps = 60;
+    this._acc = 0;
+    this.spores = [];
+    this.newSpecimen();
+    this._bindInput();
+  }
+
+  newSpecimen(name = this.speciesName, seed = (Math.random() * 1e6) | 0) {
+    this.specimenNo = ('000' + (seed % 9973)).slice(-4);
+    const S = SPECIES[name] || SPECIES['Cathedral Fern'];
+    this.speciesName = name;
+    this.prm = { ...DEFAULT_PRM, ...S.prm };
+    this.mo = { ...MERISTEM_DEFAULTS, ...S.mo };
+    this.sp = { ...SPECIES_DEFAULTS, ...S.sp };
+    this.sp.leafOpts = { ...LEAF_DEFAULTS, ...(S.sp.leafOpts || {}) };
+    this.pal = { ...BASE_PAL, ...S.pal };
+    // The lamina is pulled down so the vasculature is the brightest thing in
+    // the plant. A leaf should read as light held inside tissue.
+    const m = this.pal.laminaMul;
+    this.pal.blade0 = this.pal.blade0.map(v => v * m);
+    this.pal.blade1 = this.pal.blade1.map(v => v * m);
+    // petals share every rendering rule with leaves; only the colours differ
+    this.petalPal = { ...this.pal, blade0: this.pal.petal0.map(v => v * m),
+      blade1: this.pal.petal1.map(v => v * m), vein: this.pal.petalVein,
+      veinTint: this.pal.petal1.map(v => v * 0.25) };
+    if (this.ringWidth) this.mo.rOut = this.mo.rCZ + this.ringWidth;
+    const fr = mulberry32(seed ^ 0x51ed270b);
+    this.sp.fruitOpts = {
+      T: lerp(14, 34, fr()), D: lerp(1.8, 4.2, fr()),
+      gExp: lerp(1.3, 2.6, fr()), gAux: lerp(0.00035, 0.00075, fr()),
+      seedThresh: lerp(1.25, 1.7, fr()),
+    };
+    this.plant = new Plant(this.prm, this.mo, this.sp, seed);
+    this.bbS = null;
+    this.cam.dist = 7.5; this.cam.tgtY = 1.4;
+    const rnd = mulberry32(seed ^ 0x5bf03635);
+    this.spores = [];
+    this.shot = null; this.shotT = 0; this.subject = null;
+    this.userDriving = false; this.idleT = 0;
+    for (let i = 0; i < 220; i++) {
+      this.spores.push({
+        p: v3((rnd() - 0.5) * 34, rnd() * 26 - 2, (rnd() - 0.5) * 34),
+        s: 0.02 + rnd() * 0.05, ph: rnd() * TAU, sp: 0.1 + rnd() * 0.5,
+      });
+    }
+    this.age = 0;
+  }
+
+  _bindInput() {
+    const c = this.canvas;
+    let drag = false, lx = 0, ly = 0, pinch = 0;
+    const down = (x, y) => { drag = true; lx = x; ly = y; this.cam.idle = 0; this.cam.autoRot = false; this.takeOver(); };
+    const move = (x, y) => {
+      if (!drag) return;
+      this.cam.az -= (x - lx) * 0.006;
+      this.cam.el = clamp(this.cam.el + (y - ly) * 0.005, -0.5, 1.35);
+      lx = x; ly = y; this.cam.idle = 0;
+    };
+    const up = () => { drag = false; };
+    c.addEventListener('pointerdown', e => { c.setPointerCapture(e.pointerId); down(e.clientX, e.clientY); });
+    c.addEventListener('pointermove', e => move(e.clientX, e.clientY));
+    c.addEventListener('pointerup', up);
+    c.addEventListener('pointercancel', up);
+    c.addEventListener('wheel', e => {
+      e.preventDefault();
+      this.takeOver();
+      this.cam.dist = clamp(this.cam.dist * (1 + Math.sign(e.deltaY) * 0.09), 3, 70);
+      this.cam.idle = 0;
+    }, { passive: false });
+    c.addEventListener('touchstart', e => {
+      if (e.touches.length === 2) {
+        pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        drag = false;
+      }
+    }, { passive: true });
+    c.addEventListener('touchmove', e => {
+      if (e.touches.length === 2 && pinch) {
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        this.cam.dist = clamp(this.cam.dist * (pinch / Math.max(1, d)), 3, 70);
+        pinch = d; this.cam.idle = 0;
+      }
+    }, { passive: true });
+    c.addEventListener('touchend', () => { pinch = 0; }, { passive: true });
+  }
+
+  // ---------------------------------------------------------------------------
+  // THE DIRECTOR
+  //
+  // The plant has events now — a leaf unfurling, a flower opening, a fruit
+  // swelling, a ripening wave crossing it. This picks which of those to be
+  // looking at, holds the shot, and moves on. It hands over the instant the
+  // viewer touches anything, and takes back over only if asked.
+  // ---------------------------------------------------------------------------
+  pickShot() {
+    const P = this.plant;
+    const prev = this.shot && this.shot.kind;
+    const cand = [];
+    let liveTip = null;
+    for (const ax of P.axes) if (ax.alive && ax.meristem && (!liveTip || ax.tipPos()[1] > liveTip.tipPos()[1])) liveTip = ax;
+
+    for (const ax of P.axes) {
+      if (ax.fruit && !ax.fruit.barren && ax.fruit.phase !== 'pattern') {
+        let r = 0;
+        for (let i = 0; i < ax.fruit.n; i++) r += ax.fruit.ripe[i];
+        r /= ax.fruit.n;
+        // a ripening front crossing a fruit is the best thing on screen
+        const w = (r > 0.02 && r < 0.97) ? 9 : (ax.fruit.phase === 'grow' ? 6 : 1.2);
+        cand.push({ kind: 'fruit', ax, w, dist: 3.4, el: 0.30, hold: 11000 });
+      }
+      if (ax.floral && !ax.fruit) {
+        const open = ax.organs.filter(o => o.petal && (o.dev || 0) > 0.05 && (o.dev || 0) < 0.95).length;
+        if (open) cand.push({ kind: 'flower', ax, w: 7, dist: 4.2, el: 0.34, hold: 10000 });
+      }
+    }
+    for (const ax of P.axes) {
+      for (const o of ax.organs) {
+        if (o.floral || !o.leaf) continue;
+        const d = o.dev || 0;
+        if (d > 0.14 && d < 0.62) { cand.push({ kind: 'organ', ax, org: o, w: 3.2, dist: 2.6, el: 0.26, hold: 8500 }); break; }
+      }
+    }
+    if (liveTip) cand.push({ kind: 'apex', ax: liveTip, w: P.organCount() < 5 ? 12 : 2.6, hold: 9500 });
+    cand.push({ kind: 'wide', w: P.organCount() < 3 ? 0.2 : 5, hold: 12000 });
+
+    let tot = 0;
+    for (const c of cand) { if (c.kind === prev) c.w *= 0.22; tot += c.w; }
+    let r = this._rnd() * tot;
+    for (const c of cand) { r -= c.w; if (r <= 0) return c; }
+    return cand[cand.length - 1];
+  }
+
+  _rnd() {
+    this._rs = ((this._rs || 12345) * 1103515245 + 12345) & 0x7fffffff;
+    return this._rs / 0x7fffffff;
+  }
+
+  directorStep(dtms) {
+    if (this.userDriving) {
+      this.subject = null;
+      // yielding to touch has to work in both directions: after a while with
+      // no input, the film resumes on its own
+      this.idleT = (this.idleT || 0) + dtms;
+      if (this.idleT > this.resumeAfter) this.giveBack();
+      return;
+    }
+    this.idleT = 0;
+    this.shotT = (this.shotT || 0) + dtms;
+    if (!this.shot || this.shotT > (this.shot.hold || 10000)) {
+      this.shot = this.pickShot();
+      this.shotT = 0;
+    }
+    const sh = this.shot;
+    if (sh.kind === 'apex' && (!sh.ax.alive || !sh.ax.meristem)) { this.shot = null; return; }
+    this.focus = sh.kind === 'apex' ? 'apex' : null;
+    this.subject = (sh.kind === 'fruit' || sh.kind === 'flower' || sh.kind === 'organ') ? sh : null;
+  }
+
+  takeOver() {
+    this.idleT = 0;
+    if (this.userDriving) return;
+    this.userDriving = true;
+    this.subject = null;
+    if (this.onHandover) this.onHandover();
+  }
+  giveBack() {
+    this.userDriving = false;
+    this.focus = null;
+    this.shot = null; this.shotT = 0;
+    this.cam.autoRot = true;
+  }
+
+  // --------------------------------------------------------------------------
+  step(dtms) {
+    // step count follows real time, so growth looks the same on a slow device
+    this._acc += this.speedMul * dtms / 8;
+    const steps = clamp(Math.floor(this._acc), 0, 6);
+    this._acc -= steps;
+    for (let i = 0; i < steps; i++) this.plant.step(1);
+    this.age += steps;
+    this.t += dtms;
+
+    this.directorStep(dtms);
+
+    // camera: frame whatever the specimen has actually become
+    const c = this.cam;
+    c.idle += dtms;
+    if (c.idle > 6000) c.autoRot = true;
+    if (c.autoRot) c.az += dtms * 0.000042;
+    // The raw bounding box jumps every time an organ appears. Smooth it first,
+    // then smooth the camera against it — two stages of damping is the
+    // difference between a camera that drifts and one that twitches.
+    const raw = this.plant.bounds();
+    const bs = this.bbS || (this.bbS = { ...raw });
+    // damping expressed as a time constant, so a slow device and a fast one
+    // settle at the same rate rather than the same number of frames
+    const damp = (rate) => 1 - Math.exp(-rate * dtms / 16.67);
+    const kb = damp(0.075);
+    bs.cx = lerp(bs.cx, raw.cx, kb); bs.cy = lerp(bs.cy, raw.cy, kb);
+    bs.cz = lerp(bs.cz, raw.cz, kb);
+    bs.w = lerp(bs.w, raw.w, kb); bs.h = lerp(bs.h, raw.h, kb);
+    const bb = bs;
+    // Fit the specimen into the clear part of the frame — the panel owns the
+    // bottom, so the subject is fitted to 66% of the height and biased upward.
+    const aspect = Math.max(0.45, this.renderer.W / this.renderer.H);
+    // Fit the specimen's bounding sphere. Horizontal FOV is the wider of the
+    // two on a landscape canvas, so the vertical one is what binds.
+    const halfV = c.fov / 2;
+    const halfH = Math.atan(Math.tan(halfV) * aspect);
+    const hh = bb.h / 2, hw = bb.w / 2;
+    // fit height into 66% of the frame (the panel owns the bottom) and width
+    // into 86%, then step back far enough to clear the near side of the plant
+    const distV = (hh / 0.66) / Math.tan(halfV);
+    const distH = (hw / 0.86) / Math.tan(halfH);
+    let want = clamp(Math.max(distV, distH) + hw * 0.9 + 1.2, 5, 120);
+    let aimY = bb.cy - hh * 0.14, aimX = bb.cx, aimZ = bb.cz;
+    const sub = this.subject;
+    if (sub) {
+      let p = null, scale = 1;
+      if (sub.kind === 'fruit') { p = sub.ax.tipPos(); scale = this.sp.fruitScale * 1.6; }
+      else if (sub.kind === 'flower') { p = sub.ax.tipPos(); scale = Math.max(0.5, sub.ax.length * 0.6); }
+      else if (sub.kind === 'organ' && sub.org) { p = sub.org.frame.o; scale = Math.max(0.6, sub.org.len * 0.7); }
+      if (p) {
+        aimX = p[0]; aimY = p[1]; aimZ = p[2];
+        want = clamp(scale * sub.dist, 1.6, 40);
+        c.el = lerp(c.el, sub.el, damp(0.03));
+      }
+    }
+    if (this.focus === 'apex') {
+      // sit right off the growing point, close enough that single cells resolve
+      let best = null;
+      for (const ax of this.plant.axes) if (ax.alive && (!best || ax.tipPos()[1] > best.tipPos()[1])) best = ax;
+      if (!best) best = this.plant.main;
+      const tp = best.tipPos();
+      const ms = Math.max(0.35, best.radii[best.radii.length - 1] * 5.5);
+      want = ms * 5.6;
+      aimX = tp[0]; aimY = tp[1] + ms * 0.22; aimZ = tp[2];
+      // look down onto the dome — the spiral is only legible from above
+      c.el = lerp(c.el, 0.78, damp(0.05));
+    }
+    const k = damp(c.autoRot ? 0.10 : 0.035);
+    c.dist = lerp(c.dist, want, k);
+    c.tgtY = lerp(c.tgtY, aimY, k);
+    c.cx = lerp(c.cx === undefined ? aimX : c.cx, aimX, k);
+    c.cz = lerp(c.cz === undefined ? aimZ : c.cz, aimZ, k);
+    v3set(c.target, c.cx, c.tgtY, c.cz);
+    // fog begins where the subject does
+    c.fogNear = Math.max(0, c.dist - Math.max(hh, hw) * 1.1);
+    // only things well off the plane the camera is looking at go soft
+    c.dofRange = Math.max(2.0, Math.max(hh, hw) * 0.62);
+    const ce = Math.cos(c.el), se = Math.sin(c.el);
+    v3set(c.eye,
+      c.target[0] + Math.sin(c.az) * ce * c.dist,
+      c.target[1] + se * c.dist,
+      c.target[2] + Math.cos(c.az) * ce * c.dist);
+
+    for (const s of this.spores) {
+      s.p[1] += s.sp * 0.004 * dtms * 0.06;
+      s.p[0] += Math.sin(this.t * 0.0004 + s.ph) * 0.004;
+      if (s.p[1] > 26) s.p[1] = -2;
+    }
+  }
+
+  buildScene() {
+    const B = this.B, pal = this.pal, P = this.plant;
+    B.reset();
+    // spend the vertex budget where there is something to see: a specimen with
+    // sixty fronds gets a coarser surface than one with six
+    // vein ribbons face the camera and never get thinner than a pixel or so
+    const px = 2 * Math.tan(this.cam.fov / 2) / Math.max(1, this.renderer.H);
+    setView(this.cam.eye, this.cam.dist * px * 1.5);
+    this.detail = 0;
+    // when the camera has gone in to look at a growing tip, anything between it
+    // and that tip is in the way — drop it rather than let a leaf fill the frame
+    let cullFrom = null, cullR = 0;
+    const sb = this.subject;
+    if (sb && (sb.kind === 'fruit' || sb.kind === 'flower')) {
+      cullFrom = sb.ax.tipPos();
+      cullR = Math.hypot(this.cam.eye[0] - cullFrom[0], this.cam.eye[1] - cullFrom[1],
+        this.cam.eye[2] - cullFrom[2]) - this.sp.fruitScale * 2.2;
+    } else if (this.focus === 'apex') {
+      let best = null;
+      for (const ax of P.axes) if (ax.alive && (!best || ax.tipPos()[1] > best.tipPos()[1])) best = ax;
+      if (best) {
+        cullFrom = best.tipPos();
+        cullR = Math.hypot(this.cam.eye[0] - cullFrom[0], this.cam.eye[1] - cullFrom[1],
+          this.cam.eye[2] - cullFrom[2]) - Math.max(0.35, best.radii[best.radii.length - 1] * 5.5) * 1.15;
+      }
+    }
+    const nOrg = P.organCount();
+    const fen = (this.sp.leafOpts.fenestrate || 0) > 0;
+    this.bladeMU = nOrg > 42 ? (fen ? 17 : 13) : nOrg > 24 ? 18 : 22;
+    this.bladeMV = nOrg > 42 ? (fen ? 9 : 6) : nOrg > 24 ? 8 : 10;
+    for (const ax of P.axes) {
+      const nseg = ax.pts.length;
+      if (nseg > 1) {
+        tube(B, ax.pts, ax.radii, 7, (t) => ({
+          c: [lerp(pal.stem0[0], pal.stem1[0], t), lerp(pal.stem0[1], pal.stem1[1], t), lerp(pal.stem0[2], pal.stem1[2], t)],
+          e: t > 0.93 && ax.alive ? (t - 0.93) * 5.0 * pal.glow : 0,
+        }));
+      }
+      for (const org of ax.organs) {
+        if (org.len < 0.02) continue;
+        if (cullFrom) {
+          const dq = Math.hypot(this.cam.eye[0] - org.frame.o[0], this.cam.eye[1] - org.frame.o[1],
+            this.cam.eye[2] - org.frame.o[2]);
+          if (dq < cullR) continue;
+        }
+        const L = org.leaf;
+        // petiole
+        const a = org.frame.o;
+        // a longer stalk carries the blade clear of the shoot and its neighbours
+        const pet = org.len * 0.34 + org.radius * 1.8;
+        const b = v3(a[0] + org.frame.x[0] * pet,
+          a[1] + org.frame.x[1] * pet,
+          a[2] + org.frame.x[2] * pet);
+        tube(B, [a, b], [org.radius * 0.5, org.radius * 0.30], 5, () => ({ c: pal.stem1, e: 0 }));
+        if (!L || !L.margin || !L.margin.mature) continue;
+        const fr = { o: b, x: org.frame.x, y: org.frame.y, z: org.frame.z };
+        // blades unfurl rather than appearing at full size
+        // one development parameter: the blade lengthens, the wave of
+        // maturation runs out along it, and the furled tip uncoils behind it
+        const dev = clamp((org.dev || 0) * 1.06 - 0.03, 0, 1);
+        const bl = org.len * 0.80;
+        if (bl < 0.02) continue;
+        const bp = org.petal ? this.petalPal : pal;
+        blade(B, L, fr, bl, bl, bp, -bl * (org.petal ? 0.05 : 0.16), bl * 0.014,
+          bp.glow, this.bladeMU, this.bladeMV, dev);
+      }
+      // the fruit, if this shoot got that far
+      if (ax.fruit && !ax.fruit.barren && ax.fruit.phase !== 'pattern') {
+        const n2 = ax.pts.length;
+        const tip = ax.pts[n2 - 1];
+        const fs = this.sp.fruitScale * (ax.gen === 0 ? 1 : 0.72);
+        fruitShell(B, ax.fruit, tip, fs, pal);
+      }
+
+      // the growing point itself
+      if (this.showMeristem && ax.alive && ax.meristem) {
+        const n = ax.pts.length;
+        const tip = ax.pts[n - 1];
+        const prev = ax.pts[Math.max(0, n - 2)];
+        const dir = v3(); v3norm(dir, v3sub(dir, tip, prev));
+        if (!isFinite(dir[0]) || v3len(dir) < 0.5) v3set(dir, 0, 1, 0);
+        let refv = v3(0, 0, 1);
+        if (Math.abs(dir[2]) > 0.9) refv = v3(1, 0, 0);
+        const e1 = v3(); v3norm(e1, v3cross3(e1, refv, dir));
+        const e2 = v3(); v3norm(e2, v3cross3(e2, dir, e1));
+        const mScale = Math.max(0.35, ax.radii[n - 1] * 5.5);
+        // the mechanism fades up as you approach — no mode to find, you just
+        // come closer and the cells start showing what they are doing
+        const dEye = Math.hypot(this.cam.eye[0] - tip[0], this.cam.eye[1] - tip[1], this.cam.eye[2] - tip[2]);
+        const det = smoothstep(0.030, 0.105, mScale / Math.max(0.01, dEye));
+        if (det > this.detail) this.detail = det;
+        meristemDome(B, ax.meristem, { o: tip, x: dir, y: e2, z: e1 },
+          mScale, pal, this.t, det);
+      }
+    }
+    for (const s of this.spores) B.point(s.p, pal.spore, s.s * 0.9);
+    this.renderer.upload(B);
+  }
+
+  render() {
+    // ease the bloom off as the cells resolve, so detail is not washed away
+    const p = this.pal;
+    const keep = p._bloom === undefined ? (p._bloom = p.bloom) : p._bloom;
+    p.bloom = keep * (1 - 0.55 * this.detail);
+    this.renderer.draw(this.cam, this.pal, this.t);
+    p.bloom = keep;
+  }
+}
+
+// tiny local cross to avoid an import cycle in the hot path
+function v3cross3(o, a, b) {
+  const x = a[1] * b[2] - a[2] * b[1];
+  const y = a[2] * b[0] - a[0] * b[2];
+  const z = a[0] * b[1] - a[1] * b[0];
+  o[0] = x; o[1] = y; o[2] = z; return o;
+}
+
+// ===================== 80_main.js =====================
+// ---------------------------------------------------------------------------
+// wiring
+// ---------------------------------------------------------------------------
+
+const canvas = document.getElementById('c');
+const $ = (id) => document.getElementById(id);
+
+let app;
+try {
+  app = new App(canvas, null);
+} catch (e) {
+  $('fatal').style.display = 'block';
+  $('fatal').textContent = 'Could not start: ' + e.message;
+  throw e;
+}
+window.__app = app;
+
+// --- the specimen label ----------------------------------------------------
+let lastHud = 0;
+const STAGES = ['seedling', 'leafing', 'flowering', 'fruiting', 'ripe'];
+function hud(now) {
+  if (now - lastHud < 220) return;
+  lastHud = now;
+  const c = app.plant.card();
+  $('cardName').textContent = 'no. ' + app.specimenNo + ' · ' + app.speciesName;
+  $('cLeaves').textContent = c.leaves || '—';
+  $('cTeeth').textContent = c.teeth || '—';
+  $('cFlowers').textContent = c.flowers || '—';
+  $('cPetals').textContent = c.petals || '—';
+  $('cSeeds').textContent = c.seeds || '—';
+  $('cFlowered').textContent = c.floweredAt ? c.floweredAt + ' leaves' : '—';
+  $('cDiv').textContent = c.divergence
+    ? c.divergence.toFixed(0) + '° ±' + c.divergenceSd.toFixed(0) : '—';
+  const st = c.stage;
+  for (const el of document.querySelectorAll('#stage span'))
+    el.classList.toggle('on', el.dataset.s === st);
+  $('fps').textContent = app.fps.toFixed(0);
+  $('legend').classList.toggle('on', app.detail > 0.35);
+  document.body.classList.toggle('driving', !!app.userDriving);
+}
+
+// --- loop ------------------------------------------------------------------
+let last = performance.now(), frames = 0, fpsT = 0;
+function loop(now) {
+  const dt = Math.min(64, now - last); last = now;
+  frames++; fpsT += dt;
+  if (fpsT > 500) { app.fps = frames * 1000 / fpsT; frames = 0; fpsT = 0; }
+  app.step(dt);
+  if (app.fps > 42 || app.frame % 2 === 0) app.buildScene();
+  app.frame++;
+  app.render();
+  hud(now);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// --- species ---------------------------------------------------------------
+const chips = $('species');
+for (const name of Object.keys(SPECIES)) {
+  const b = document.createElement('button');
+  b.className = 'chip' + (name === app.speciesName ? ' on' : '');
+  b.textContent = name;
+  b.onclick = () => {
+    app.newSpecimen(name);
+    [...chips.children].forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    syncSliders();
+  };
+  chips.appendChild(b);
+}
+
+// --- controls that show you their own effect -------------------------------
+let tipT = 0;
+function showTip(text) {
+  const t = $('tip');
+  t.textContent = text;
+  t.classList.add('on');
+  clearTimeout(tipT);
+  tipT = setTimeout(() => t.classList.remove('on'), 3800);
+}
+
+const SLIDERS = [
+  ['transport', v => { app.prm.T = v; }, () => app.prm.T, 8, 90, 1,
+    'How hard each cell pumps auxin at its neighbours. Turn it down far enough and the maxima stop forming — the plant runs out of leaves.'],
+  ['diffusion', v => { app.prm.D = v; }, () => app.prm.D, 1, 14, 0.1,
+    'How much auxin leaks between cells. This sets how far a new leaf reaches to keep the next one away from it.'],
+  ['tip growth', v => { for (const a of app.plant.axes) if (a.meristem) a.meristem.o.G = v; },
+    () => { for (const a of app.plant.axes) if (a.meristem) return a.meristem.o.G; return app.mo.G; },
+    0.0008, 0.010, 0.0002,
+    'How fast the growing point expands. Faster means gaps open sooner, so leaves come thicker and faster.'],
+  ['sharpness', v => { app.prm.b = v; }, () => app.prm.b, 1.5, 5, 0.1,
+    'How decisively a cell commits to its richest neighbour. High values make hard, isolated maxima; low ones smear them out.'],
+  ['generative ring', v => {
+    for (const a of app.plant.axes) if (a.meristem) a.meristem.o.rOut = v > 0 ? a.meristem.o.rCZ + v : 0;
+    app.ringWidth = v;
+  }, () => app.ringWidth ?? 0, 0, 5, 0.2,
+    'How wide a band may found a leaf. Narrow it and the divergence angle tightens — and the shoot nearly stops making leaves. That trade-off is a real result.'],
+  ['time', v => { app.speedMul = v; }, () => app.speedMul, 0, 4, 0.25,
+    'How fast the simulation runs.'],
+];
+const slidersEl = $('sliders');
+const sliderRefs = [];
+for (const [label, set, get, min, max, step, tip] of SLIDERS) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = '<label>' + label + '<span></span></label>' +
+    '<input type="range" min="' + min + '" max="' + max + '" step="' + step + '">';
+  slidersEl.appendChild(row);
+  const inp = row.querySelector('input');
+  const out = row.querySelector('span');
+  inp.oninput = () => {
+    set(parseFloat(inp.value));
+    out.textContent = inp.value;
+    // take the viewer to where this control's effect is actually visible
+    if (label !== 'time') {
+      app.takeOver();
+      app.focus = 'apex';
+      app.cam.autoRot = true; app.cam.idle = 9999;
+      showTip(tip);
+      $('regrowBtn').classList.add('urge');
+    }
+  };
+  sliderRefs.push({ inp, out, get });
+}
+function syncSliders() {
+  for (const s of sliderRefs) {
+    const v = s.get();
+    s.inp.value = v;
+    s.out.textContent = (Math.round(v * 10000) / 10000).toString();
+  }
+}
+syncSliders();
+
+// --- buttons ---------------------------------------------------------------
+$('newBtn').onclick = () => { app.newSpecimen(); app.giveBack(); syncSliders(); $('regrowBtn').classList.remove('urge'); };
+$('regrowBtn').onclick = () => {
+  app.newSpecimen(app.speciesName);
+  app.giveBack();
+  $('regrowBtn').classList.remove('urge');
+  showTip('Same chemistry, new specimen — the shape follows from the settings you just changed.');
+};
+$('pruneBtn').onclick = () => {
+  if (app.plant.prune()) {
+    showTip('Apex removed. The auxin that was suppressing the buds below it is gone, so one of them will take over.');
+  }
+};
+$('cellsBtn').onclick = () => {
+  app.takeOver();
+  app.focus = app.focus === 'apex' ? null : 'apex';
+  app.cam.autoRot = true; app.cam.idle = 9999;
+  $('cellsBtn').textContent = app.focus ? 'pull back' : 'into the cells';
+};
+$('sheetBtn').onclick = () => {
+  document.body.classList.toggle('sheet');
+  $('sheetBtn').textContent = document.body.classList.contains('sheet') ? 'close' : 'controls';
+};
+$('handover').onclick = () => { app.giveBack(); $('cellsBtn').textContent = 'into the cells'; };
+$('cineBtn').onclick = () => {
+  document.body.classList.add('cinema');
+  document.body.classList.remove('sheet');
+  $('sheetBtn').textContent = 'controls';
+  app.giveBack();
+};
+$('exitCine').onclick = () => document.body.classList.remove('cinema');
+$('aboutBtn').onclick = () => $('about').classList.toggle('show');
+$('aboutClose').onclick = () => $('about').classList.remove('show');
+
+addEventListener('resize', () => app.renderer.resize());
+setTimeout(() => { const h = $('hint'); if (h) h.style.opacity = 0; }, 8000);
+
+// --- first run: the mechanism before anything else -------------------------
+app.focus = 'apex';
+showTip('This is the growing tip, one cell at a time. Every needle is a cell aiming its pumps — where they agree, a leaf begins.');
+
+</script>
+</body>
+</html>

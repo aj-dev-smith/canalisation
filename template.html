@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Canalisation — a xenobotany engine</title>
+<style>
+  :root{
+    --ink:#e8f2f0; --dim:#7f9a99; --line:rgba(150,220,215,.16);
+    --panel:rgba(6,14,17,.72); --accent:#6ff0dc;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:#03070a;color:var(--ink);
+    font:13px/1.45 ui-sans-serif,-apple-system,"SF Pro Text",Inter,system-ui,sans-serif}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  .ui{position:fixed;z-index:5}
+  #title{top:max(14px,env(safe-area-inset-top));left:16px;pointer-events:none}
+  #title h1{margin:0;font-size:15px;font-weight:560;letter-spacing:.14em;text-transform:uppercase}
+  #title p{margin:3px 0 0;font-size:11.5px;color:var(--dim);max-width:20em;letter-spacing:.02em}
+  #readout{top:max(14px,env(safe-area-inset-top));right:16px;text-align:right;pointer-events:none}
+  #divVal{font-size:30px;font-weight:300;letter-spacing:-.01em;display:block;
+    font-variant-numeric:tabular-nums;color:var(--accent);line-height:1}
+  #divLbl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+  #divSd{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+  #divBar{--p:38%;--sd:6%;position:relative;height:3px;width:132px;margin:8px 0 0 auto;
+    background:rgba(255,255,255,.09);border-radius:2px;overflow:hidden}
+  #divBar::before{content:"";position:absolute;left:calc(var(--p) - var(--sd)/2);width:var(--sd);
+    top:0;bottom:0;background:rgba(111,240,220,.35)}
+  #divBar::after{content:"";position:absolute;left:var(--p);width:2px;top:0;bottom:0;background:var(--accent)}
+  #golden{position:absolute;left:38.19%;top:-3px;bottom:-3px;width:1px;background:rgba(255,255,255,.45)}
+  #goldenLbl{font-size:9.5px;color:rgba(255,255,255,.4);letter-spacing:.08em;margin-top:4px}
+  #panel{left:16px;right:16px;bottom:max(14px,env(safe-area-inset-bottom));
+    background:var(--panel);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--line);border-radius:14px;padding:12px 14px 13px;max-width:560px}
+  body.collapsed #panelBody{display:none}
+  body.collapsed #panel{padding-bottom:10px}
+  #panelHead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  #stats{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--dim);
+    font-variant-numeric:tabular-nums}
+  #stats b{color:var(--ink);font-weight:520}
+  .btn{font:inherit;font-size:11.5px;letter-spacing:.03em;color:var(--ink);
+    background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:999px;
+    padding:6px 12px;cursor:pointer;transition:.15s}
+  .btn:hover{background:rgba(111,240,220,.14)}
+  .btn.off{opacity:.45}
+  #species{display:flex;gap:6px;flex-wrap:wrap;margin:11px 0 4px}
+  .chip{font:inherit;font-size:11px;padding:5px 10px;border-radius:999px;cursor:pointer;
+    background:transparent;border:1px solid var(--line);color:var(--dim);transition:.15s}
+  .chip.on{background:rgba(111,240,220,.16);color:var(--ink);border-color:rgba(111,240,220,.45)}
+  #sliders{margin-top:8px;display:grid;grid-template-columns:1fr;gap:7px}
+  @media(min-width:520px){#sliders{grid-template-columns:1fr 1fr;gap:7px 16px}}
+  .row label{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);
+    letter-spacing:.05em;text-transform:uppercase;margin-bottom:2px}
+  .row label span{color:var(--ink);font-variant-numeric:tabular-nums;text-transform:none;letter-spacing:0}
+  input[type=range]{width:100%;height:16px;-webkit-appearance:none;background:transparent;margin:0}
+  input[type=range]::-webkit-slider-runnable-track{height:2px;background:rgba(255,255,255,.16);border-radius:2px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;margin-top:-5.5px;
+    border-radius:50%;background:var(--accent);border:none;cursor:pointer}
+  input[type=range]::-moz-range-track{height:2px;background:rgba(255,255,255,.16)}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--accent);border:none}
+  #actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;align-items:center}
+  #stats{font-size:10.5px;color:var(--dim);margin-left:auto;font-variant-numeric:tabular-nums}
+  #stats b{color:var(--ink)}
+  .btn.urge{border-color:rgba(111,240,220,.6);background:rgba(111,240,220,.16)}
+  @media(max-width:560px){#card{right:10px}#card table{font-size:10px}#bar{gap:6px}
+    .btn{padding:6px 10px;font-size:11px}}
+  #about{position:fixed;inset:0;z-index:20;background:rgba(3,7,10,.93);
+    backdrop-filter:blur(12px);padding:28px 22px;overflow:auto;display:none}
+  #about.show{display:block}
+  #about .inner{max-width:640px;margin:0 auto}
+  #about h2{font-size:13px;letter-spacing:.16em;text-transform:uppercase;margin:0 0 14px;color:var(--accent)}
+  #about p{color:#b9cecd;font-size:13px;margin:0 0 12px}
+  #about code{color:var(--accent);font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  #about .eq{background:rgba(255,255,255,.04);border-left:2px solid rgba(111,240,220,.35);
+    padding:10px 12px;margin:14px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:11.5px;color:#cfe6e4;white-space:pre-wrap;overflow-x:auto;border-radius:0 6px 6px 0}
+  #aboutClose{position:sticky;top:0;float:right}
+  #fatal{display:none;position:fixed;inset:0;z-index:99;background:#03070a;color:#f88;
+    padding:30px;font-family:ui-monospace,monospace;font-size:13px;white-space:pre-wrap}
+  @media(max-width:560px){
+    #title p{display:none}
+    #title h1{font-size:12.5px}
+    #divVal{font-size:23px}
+    #readout{top:calc(max(14px,env(safe-area-inset-top)) + 22px)}
+    #divBar{width:104px}
+    #panel{left:8px;right:8px;padding:10px 12px 11px}
+    #stats{gap:10px;font-size:10.5px}
+  }
+  body.cinema .ui, body.cinema #panel{opacity:0;pointer-events:none;transition:opacity .6s}
+  #exitCine{position:fixed;right:14px;bottom:14px;z-index:9;width:34px;height:34px;border-radius:50%;
+    border:1px solid var(--line);background:rgba(6,14,17,.5);display:none;cursor:pointer;
+    align-items:center;justify-content:center;color:var(--dim);font-size:15px;line-height:1}
+  body.cinema #exitCine{display:flex}
+  #legend{position:fixed;left:16px;z-index:6;
+    bottom:calc(max(14px,env(safe-area-inset-bottom)) + 150px);
+    width:min(320px,calc(100% - 32px));padding:10px 12px;border-radius:12px;
+    background:rgba(6,14,17,.74);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border:1px solid var(--line);opacity:0;transition:opacity .5s;pointer-events:none}
+  body.collapsed #legend{bottom:calc(max(14px,env(safe-area-inset-bottom)) + 66px)}
+  body.cinema #legend{bottom:max(22px,env(safe-area-inset-bottom))}
+  @media(max-width:560px){#legend{left:8px;width:calc(100% - 16px)}}
+  #legend.on{opacity:1}
+  #legend h3{margin:0 0 6px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+  #legend p{margin:0 0 5px;font-size:11px;color:#b9cecd;line-height:1.4}
+  #legend .k{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;
+    vertical-align:baseline;position:relative;top:1px}
+  /* specimen label */
+  #card{position:fixed;top:max(14px,env(safe-area-inset-top));right:16px;z-index:5;
+    text-align:right;pointer-events:none;font-variant-numeric:tabular-nums}
+  #cardHead{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);
+    border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:6px}
+  #card table{border-collapse:collapse;margin-left:auto;font-size:11px}
+  #card td{padding:1.5px 0 1.5px 14px;color:var(--dim);white-space:nowrap}
+  #card td.v{color:var(--ink);font-weight:520}
+  #card .em{color:var(--accent)}
+  /* stage bar */
+  #stage{position:fixed;left:0;right:0;bottom:calc(max(10px,env(safe-area-inset-bottom)) + 52px);
+    z-index:5;display:flex;justify-content:center;gap:0;pointer-events:none}
+  #stage span{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(160,190,188,.30);
+    padding:0 9px;transition:color .6s}
+  #stage span.on{color:var(--accent)}
+  #stage span+span::before{content:"";display:inline-block;width:3px;height:3px;border-radius:50%;
+    background:rgba(160,190,188,.22);margin-right:11px;vertical-align:middle}
+  /* slim bar + sheet */
+  #bar{position:fixed;left:0;right:0;bottom:0;z-index:8;background:linear-gradient(to top,rgba(3,7,10,.75),transparent);display:flex;align-items:center;
+    justify-content:center;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+  #sheet{position:fixed;left:50%;transform:translateX(-50%) translateY(110%);
+    bottom:calc(52px + env(safe-area-inset-bottom));z-index:7;width:min(560px,calc(100% - 20px));
+    background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border:1px solid var(--line);border-radius:16px;padding:14px 16px 16px;
+    transition:transform .32s cubic-bezier(.3,.8,.3,1);max-height:70vh;overflow:auto}
+  #sheet{transform:translateX(-50%) translateY(calc(100% + 90px))}
+  body.sheet #sheet{transform:translateX(-50%) translateY(0)}
+  #handover{position:fixed;left:50%;transform:translateX(-50%);z-index:6;
+    bottom:calc(max(10px,env(safe-area-inset-bottom)) + 92px);display:none;
+    font-size:11px;letter-spacing:.04em}
+  body.driving #handover{display:block;animation:pulse 2.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+  #tip{position:fixed;left:50%;transform:translateX(-50%);z-index:8;
+    bottom:calc(52px + env(safe-area-inset-bottom) + 12px);width:min(430px,calc(100% - 28px));
+    background:rgba(6,14,17,.86);border:1px solid var(--line);border-radius:10px;
+    padding:9px 12px;font-size:11.5px;color:#b9cecd;line-height:1.4;
+    opacity:0;transition:opacity .3s;pointer-events:none}
+  #tip.on{opacity:1}
+  body.cinema #card,body.cinema #stage,body.cinema #bar,body.cinema #handover{opacity:0;pointer-events:none;transition:opacity .6s}
+  #hint{position:fixed;left:0;right:0;top:calc(max(14px,env(safe-area-inset-top)) + 96px);
+    text-align:center;font-size:10.5px;color:var(--dim);letter-spacing:.1em;
+    text-transform:uppercase;pointer-events:none;opacity:.75;transition:opacity 1s}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="ui" id="title">
+  <h1>Canalisation</h1>
+  <p>A plant grown from its own chemistry. Nothing here is drawn — the shape is what the auxin does.</p>
+</div>
+
+<div id="card">
+  <div id="cardHead"><span id="cardName">specimen</span></div>
+  <table>
+    <tr><td>leaves</td><td class="v" id="cLeaves">—</td></tr>
+    <tr><td>teeth, last leaf</td><td class="v" id="cTeeth">—</td></tr>
+    <tr><td>flowers</td><td class="v" id="cFlowers">—</td></tr>
+    <tr><td>petals</td><td class="v" id="cPetals">—</td></tr>
+    <tr><td>seeds</td><td class="v" id="cSeeds">—</td></tr>
+    <tr><td>flowered after</td><td class="v" id="cFlowered">—</td></tr>
+    <tr><td>divergence</td><td class="v em" id="cDiv">—</td></tr>
+  </table>
+</div>
+
+<div id="stage">
+  <span data-s="seedling">seedling</span><span data-s="leafing">leafing</span><span data-s="flowering">flowering</span><span data-s="fruiting">fruiting</span><span data-s="ripe">ripe</span>
+</div>
+
+<div id="legend">
+  <h3>the growing tip, cell by cell</h3>
+  <p><span class="k" style="background:#8fe8ff"></span>Each dot is one cell. The brighter it
+  glows, the more auxin it is holding.</p>
+  <p><span class="k" style="background:#9fd8ff"></span>Each needle is the direction that cell
+  has aimed its pumps. That single choice, per cell, is the whole mechanism.</p>
+  <p><span class="k" style="background:#fff8dc"></span>Each spark is auxin actually moving,
+  travelling at the speed of the real flux through that wall.</p>
+  <p style="color:#7f9a99">Watch a bright spot: every needle around it swings to point
+  inward. That agreement <i>is</i> a leaf being decided.</p>
+</div>
+
+<div id="tip"></div>
+<button class="btn" id="handover">you have the camera · <b>resume</b></button>
+
+<div id="bar">
+  <button class="btn" id="sheetBtn">controls</button>
+  <button class="btn" id="cellsBtn">into the cells</button>
+  <button class="btn" id="newBtn">new specimen</button>
+  <button class="btn" id="aboutBtn">what is this?</button>
+</div>
+
+<div id="sheet">
+  <div id="species"></div>
+  <div id="sliders"></div>
+  <div id="actions">
+    <button class="btn" id="regrowBtn">regrow with these</button>
+    <button class="btn" id="pruneBtn">cut the apex</button>
+    <button class="btn" id="cineBtn">cinema</button>
+    <span id="stats"><span>fps <b id="fps">60</b></span></span>
+  </div>
+</div>
+
+<div id="about"><div class="inner">
+  <button class="btn" id="aboutClose">close</button>
+  <h2>What this actually is</h2>
+  <p>Every plant in this window is grown by simulating one molecule: <b>auxin</b>, the
+  hormone that tells plant cells where to become things. Cells pump it at each other
+  through PIN proteins sitting in their walls. That is the entire mechanism.</p>
+  <div class="eq">da_i/dt = ρ − μ·a_i + Σ_j [ T (P_ji φ(a_j) − P_ij φ(a_i)) + D w_ij (a_j − a_i) ]
+
+φ(a) = a / (Km + a)          saturating carrier kinetics
+P_ij = p_i · q_ij / Σ_k q_ik   PIN split across a cell's walls</div>
+  <p>The trick is that a cell has two ways to decide which wall to put its pumps on,
+  and it chooses between them based on how much auxin it is holding:</p>
+  <div class="eq">q_ij = (1−s_i)·<b>a_j^b</b> / Σ  +  s_i·<b>π_ij</b> / Σ
+s_i  = a_i^h / (ath^h + a_i^h)
+
+low auxin  → point at your richest neighbour   (up-the-gradient)
+high auxin → point where flux already goes     (with-the-flux)
+dπ_ij/dt = α·J_ij² − β·π_ij</div>
+  <p>Up-the-gradient polarisation makes auxin pile into isolated <b>maxima</b>. On the
+  growing tip, each maximum becomes a leaf — and because each one drains the tissue
+  around it, the next can only appear in the gap left over. That competition, not any
+  rule, is what produces the divergence angle in the top right. It is measured off the
+  plant while you watch, never assigned.</p>
+  <p>With-the-flux polarisation does the opposite: flux begets more flux, so diffuse
+  flow collapses into narrow <b>canals</b>. Run it in a leaf blade with sources near the
+  margin and a sink at the stalk, and it carves a vein network. The bright filaments in
+  every frond were canalised, edge by edge, from a blank sheet of cells.</p>
+  <p>Two shapes, one mechanism, separated by a threshold. That unification is the claim
+  made by Bayer and colleagues (2009) and Cieslak and colleagues (2019); the
+  up-the-gradient half follows Smith and colleagues (2006), the canalisation half goes
+  back to Sachs (1969) and Mitchison (1980).</p>
+  <p>Things worth trying: push <code>meristem growth</code> up and watch the phyllotaxis
+  reorganise; drop <code>transport</code> until the maxima stop forming and the plant
+  runs out of leaves; cut the apex and watch a dormant bud take over, because the auxin
+  that was suppressing it is gone.</p>
+  <h2 style="margin-top:26px">Where it falls short, and what I tried</h2>
+  <p>Real shoot meristems settle onto 137.5° far more tightly than this one does. Here the
+  angle wanders — the readout shows the spread, and it is the number this tissue is actually
+  producing, not one it has been nudged toward. Two experiments went looking for the reason.</p>
+  <p><b>Was the inhibition too short-ranged?</b> An organ's inhibition reaches about
+  <code>√(D/μ)</code> ≈ 4.5 cells, while the pattern's own spacing is ~5.8 — so only about two
+  previous organs get a say, and a Fibonacci spiral needs four or five to carry the phase. I
+  added a second, slower signal made by organ founder cells with its own diffusion and decay,
+  so its reach could be tuned independently, and swept it from 4 to 17 cell diameters. It
+  changed nothing: the spread stayed flat across every range and every strength. The reason is
+  worth keeping — a field with a long enough reach to remember the last five organs is also
+  nearly <i>uniform</i> across a meristem this size, so it has no idea which direction to point.
+  Range and positional information trade against each other.</p>
+  <p><b>Could a new organ be slotting in at a different radius instead of waiting for a gap?</b>
+  The band that can found an organ is several cells deep, so yes, in principle. Narrowing it to a
+  thin generative ring did tighten things — spread fell by about a third and the fraction of
+  organs landing near the mean roughly tripled — but the shoot then made almost no leaves at all.
+  That control is the <code>generative ring</code> slider: turn it down and watch the angle
+  sharpen while the plant starves. The trade-off is the finding.</p>
+  <p style="color:#7f9a99;font-size:11.5px;margin-top:18px">Both results are negative, and both
+  point the same way: in a single reaction–transport field on an idealised disc, the rate at which
+  sites become available and the sharpness with which one is chosen are governed by overlapping
+  constants. You can have a crisp angle or a productive shoot, not both. Which is presumably why
+  the published models spend their effort on the tissue — real meristem geometry, layered
+  epidermis, mechanical feedback — rather than on the chemistry alone.</p>
+</div></div>
+
+<button id="exitCine" title="show controls">&#9678;</button>
+<div id="fatal"></div>
+<script type="module">
+/* __BUNDLE__ */
+</script>
+</body>
+</html>
