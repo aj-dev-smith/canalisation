@@ -35,7 +35,6 @@ function hud(now) {
   for (const el of document.querySelectorAll('#stage span'))
     el.classList.toggle('on', el.dataset.s === st);
   $('fps').textContent = app.fps.toFixed(0);
-  $('legend').classList.toggle('on', app.detail > 0.35);
   document.body.classList.toggle('driving', !!app.userDriving);
 }
 
@@ -55,19 +54,32 @@ function loop(now) {
 requestAnimationFrame(loop);
 
 // --- species ---------------------------------------------------------------
+// The rail lives in the bottom bar, not behind the controls sheet: the catalogue
+// is the first thing worth trying, so it should not need a menu opened first.
 const chips = $('species');
+const rgb = (c) => 'rgb(' + c.map(v => Math.round(Math.min(1, v) * 255)).join(',') + ')';
 for (const name of Object.keys(SPECIES)) {
   const b = document.createElement('button');
   b.className = 'chip' + (name === app.speciesName ? ' on' : '');
-  b.textContent = name;
+  b.title = name;
+  // the swatch is the species' own vein colour, read off its palette — the same
+  // number the renderer uses, so the chip cannot drift from the plant
+  const dot = document.createElement('i');
+  dot.style.background = dot.style.color = rgb(SPECIES[name].pal.vein);
+  b.append(dot, document.createTextNode(name));
   b.onclick = () => {
     app.newSpecimen(name);
     [...chips.children].forEach(x => x.classList.remove('on'));
     b.classList.add('on');
+    b.scrollIntoView({ block: 'nearest', inline: 'center' });
     syncSliders();
+    $('regrowBtn').classList.remove('urge');
   };
   chips.appendChild(b);
 }
+// a fresh specimen of the same species leaves the rail alone; a species change
+// is the only thing that moves it
+chips.querySelector('.chip.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 
 // --- controls that show you their own effect -------------------------------
 let tipT = 0;

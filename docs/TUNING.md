@@ -116,6 +116,62 @@ Most stem length should come from **subapical elongation**, not tip extension �
 that is what spreads leaves apart and reads as growth rather than extrusion.
 Organs are born crowded (`minInternode` small) and stretch apart afterwards.
 
+## Species (`70_app.js` SPECIES)
+
+A species is `prm` + `mo` + `sp` + `marginBias` + `pal`. `node test/species.mjs`
+grows all of them and prints organs, axes, height, divergence, flowers, petals,
+seeds, stuck axes, leaf aspect and tooth count. Run it before and after any change.
+
+### Keeping a meristem emitting
+
+The single most important thing to check on a new preset is whether the meristem
+keeps producing for thousands of steps or locks up after a few dozen organs. It is
+`D` that decides, far more than `T` or `G`. Main-axis organ count at 4000 steps,
+four seeds, `maxOrgans 78`, flowering suppressed:
+
+| T | D | G | organs by seed |
+|---|---|---|---|
+| 36 | 5.2 | 0.0046 | 29 / 18 / 38 / 78 |
+| 36 | 6.0 | 0.0034 | **78 / 78 / 78 / 78** |
+| 42 | 5.2 | 0.0060 | 9 / 17 / 35 / 14 |
+| 42 | 6.0 | 0.0034 | 27 / 77 / 70 / 75 |
+| 42 | 6.8 | 0.0034 | **78 / 78 / 78 / 78** |
+| 42 | 6.8 | 0.0060 | 41 / 78 / 37 / 21 |
+| 48 | 5.2 | 0.0034 | 14 / 28 / 36 / 71 |
+
+**Low D with high G stalls.** The field settles into a state where nothing clears
+`detectA` above a mean that the existing primordia have raised. `D` near 6.5–7 with
+`G` near 0.0034 keeps emitting at every seed. A leafy species wants that corner; a
+species that is meant to run out of leaves can sit outside it, but check it is
+running out for the reason you intended.
+
+### marginBias — leaf character without leaf shape
+
+Multipliers on the per-leaf margin draw (`LeafPool._make`), so per-leaf variety
+survives. Measured mean blade aspect over the leaf library:
+
+| species | `ay` | measured aspect |
+|---|---|---|
+| Spiral Ossuary, Hoarfrost Thicket | 0.55–0.62 | 0.32–0.34 |
+| Sulphur Rosette | 0.78 | 0.36–0.39 |
+| Cathedral Fern | 0.86 | 0.44–0.46 |
+| Abyssal Frond | 1.12 | 0.48–0.53 |
+| Sun Coral | 1.20 | 0.47–0.48 |
+| Ember Creeper, Nightglass Parasol | 1.35–1.45 | 0.54–0.57 |
+
+`ay` is the only bias with a large, reliable effect on the silhouette. `g1`/`gExp`
+move tooth prominence, `D` moves tooth count modestly (38 → 55 across its whole
+useful span). Pushing `D` past ~14 with `g1` near zero stops outgrowth altogether —
+the margin matures at length 0.13 and the leaf is a stub. That corner is the petal
+regime, and it only works for petals because they are meant to be tiny.
+
+### Rates that compound
+
+`internode` is applied as `L *= (1 + e·dt)` every step, so it compounds: 0.0090
+over 9000 steps is not 1.8x, it is enormous. Anything above ~0.009 needs the axis
+to arrest early or the specimen leaves the frame. This is also why a species whose
+axes never arrest (see PITFALLS) reads as a runaway rather than a slow drift.
+
 ## Rendering (`70_app.js` BASE_PAL)
 
 ```

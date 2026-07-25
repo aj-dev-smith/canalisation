@@ -8,6 +8,9 @@
   :root{
     --ink:#e8f2f0; --dim:#7f9a99; --line:rgba(150,220,215,.16);
     --panel:rgba(6,14,17,.72); --accent:#6ff0dc;
+    /* height of the bottom bar. The species rail lives inside it now, so every
+       element that floats above the bar is positioned off this, not off 52px. */
+    --bar:88px;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%;overflow:hidden;background:#03070a;color:var(--ink);
@@ -43,10 +46,24 @@
     padding:6px 12px;cursor:pointer;transition:.15s}
   .btn:hover{background:rgba(111,240,220,.14)}
   .btn.off{opacity:.45}
-  #species{display:flex;gap:6px;flex-wrap:wrap;margin:11px 0 4px}
-  .chip{font:inherit;font-size:11px;padding:5px 10px;border-radius:999px;cursor:pointer;
-    background:transparent;border:1px solid var(--line);color:var(--dim);transition:.15s}
+  #species{display:flex;gap:6px;align-items:center;overflow-x:auto;max-width:100%;
+    padding:1px 2px;scrollbar-width:none;-ms-overflow-style:none;scroll-behavior:smooth}
+  #species::-webkit-scrollbar{display:none}
+  /* once the rail is wider than the window it has to look scrollable, so the
+     ends fade out. Above that width every chip fits and the fade would just be
+     dimming two of them for no reason. */
+  @media(max-width:1130px){
+    #species{-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 16px,#000 calc(100% - 16px),transparent 100%);
+      mask-image:linear-gradient(90deg,transparent 0,#000 16px,#000 calc(100% - 16px),transparent 100%)}
+  }
+  .chip{font:inherit;font-size:11px;padding:5px 10px 5px 8px;border-radius:999px;cursor:pointer;
+    background:rgba(3,7,10,.5);border:1px solid var(--line);color:var(--dim);transition:.15s;
+    flex:0 0 auto;white-space:nowrap;display:flex;align-items:center;gap:6px}
+  .chip:hover{color:var(--ink)}
+  /* the dot is the species' own vein colour, taken straight off its palette */
+  .chip i{width:7px;height:7px;border-radius:50%;flex:0 0 auto;opacity:.65;transition:.15s}
   .chip.on{background:rgba(111,240,220,.16);color:var(--ink);border-color:rgba(111,240,220,.45)}
+  .chip.on i{opacity:1;box-shadow:0 0 7px currentColor}
   #sliders{margin-top:8px;display:grid;grid-template-columns:1fr;gap:7px}
   @media(min-width:520px){#sliders{grid-template-columns:1fr 1fr;gap:7px 16px}}
   .row label{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);
@@ -62,7 +79,9 @@
   #stats{font-size:10.5px;color:var(--dim);margin-left:auto;font-variant-numeric:tabular-nums}
   #stats b{color:var(--ink)}
   .btn.urge{border-color:rgba(111,240,220,.6);background:rgba(111,240,220,.16)}
-  @media(max-width:560px){#card{right:10px}#card table{font-size:10px}#bar{gap:6px}
+  @media(max-width:560px){#card{right:10px}#card table{font-size:10px}
+    #bar{gap:6px;padding-left:8px;padding-right:8px}
+    #barActions{gap:6px}
     .btn{padding:6px 10px;font-size:11px}}
   #about{position:fixed;inset:0;z-index:20;background:rgba(3,7,10,.93);
     backdrop-filter:blur(12px);padding:28px 22px;overflow:auto;display:none}
@@ -91,19 +110,6 @@
     border:1px solid var(--line);background:rgba(6,14,17,.5);display:none;cursor:pointer;
     align-items:center;justify-content:center;color:var(--dim);font-size:15px;line-height:1}
   body.cinema #exitCine{display:flex}
-  #legend{position:fixed;left:16px;z-index:6;
-    bottom:calc(max(14px,env(safe-area-inset-bottom)) + 150px);
-    width:min(320px,calc(100% - 32px));padding:10px 12px;border-radius:12px;
-    background:rgba(6,14,17,.74);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-    border:1px solid var(--line);opacity:0;transition:opacity .5s;pointer-events:none}
-  body.collapsed #legend{bottom:calc(max(14px,env(safe-area-inset-bottom)) + 66px)}
-  body.cinema #legend{bottom:max(22px,env(safe-area-inset-bottom))}
-  @media(max-width:560px){#legend{left:8px;width:calc(100% - 16px)}}
-  #legend.on{opacity:1}
-  #legend h3{margin:0 0 6px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
-  #legend p{margin:0 0 5px;font-size:11px;color:#b9cecd;line-height:1.4}
-  #legend .k{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;
-    vertical-align:baseline;position:relative;top:1px}
   /* specimen label */
   #card{position:fixed;top:max(14px,env(safe-area-inset-top));right:16px;z-index:5;
     text-align:right;pointer-events:none;font-variant-numeric:tabular-nums}
@@ -114,7 +120,7 @@
   #card td.v{color:var(--ink);font-weight:520}
   #card .em{color:var(--accent)}
   /* stage bar */
-  #stage{position:fixed;left:0;right:0;bottom:calc(max(10px,env(safe-area-inset-bottom)) + 52px);
+  #stage{position:fixed;left:0;right:0;bottom:calc(max(10px,env(safe-area-inset-bottom)) + var(--bar));
     z-index:5;display:flex;justify-content:center;gap:0;pointer-events:none}
   #stage span{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(160,190,188,.30);
     padding:0 9px;transition:color .6s}
@@ -122,22 +128,25 @@
   #stage span+span::before{content:"";display:inline-block;width:3px;height:3px;border-radius:50%;
     background:rgba(160,190,188,.22);margin-right:11px;vertical-align:middle}
   /* slim bar + sheet */
-  #bar{position:fixed;left:0;right:0;bottom:0;z-index:8;background:linear-gradient(to top,rgba(3,7,10,.75),transparent);display:flex;align-items:center;
-    justify-content:center;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+  #bar{position:fixed;left:0;right:0;bottom:0;z-index:8;
+    background:linear-gradient(to top,rgba(3,7,10,.82) 55%,transparent);
+    display:flex;flex-direction:column;align-items:center;gap:8px;
+    padding:8px 12px calc(10px + env(safe-area-inset-bottom))}
+  #barActions{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}
   #sheet{position:fixed;left:50%;transform:translateX(-50%) translateY(110%);
-    bottom:calc(52px + env(safe-area-inset-bottom));z-index:7;width:min(560px,calc(100% - 20px));
+    bottom:calc(var(--bar) + env(safe-area-inset-bottom));z-index:7;width:min(560px,calc(100% - 20px));
     background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
     border:1px solid var(--line);border-radius:16px;padding:14px 16px 16px;
     transition:transform .32s cubic-bezier(.3,.8,.3,1);max-height:70vh;overflow:auto}
   #sheet{transform:translateX(-50%) translateY(calc(100% + 90px))}
   body.sheet #sheet{transform:translateX(-50%) translateY(0)}
   #handover{position:fixed;left:50%;transform:translateX(-50%);z-index:6;
-    bottom:calc(max(10px,env(safe-area-inset-bottom)) + 92px);display:none;
+    bottom:calc(max(10px,env(safe-area-inset-bottom)) + var(--bar) + 40px);display:none;
     font-size:11px;letter-spacing:.04em}
   body.driving #handover{display:block;animation:pulse 2.6s ease-in-out infinite}
   @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
   #tip{position:fixed;left:50%;transform:translateX(-50%);z-index:8;
-    bottom:calc(52px + env(safe-area-inset-bottom) + 12px);width:min(430px,calc(100% - 28px));
+    bottom:calc(var(--bar) + env(safe-area-inset-bottom) + 12px);width:min(430px,calc(100% - 28px));
     background:rgba(6,14,17,.86);border:1px solid var(--line);border-radius:10px;
     padding:9px 12px;font-size:11.5px;color:#b9cecd;line-height:1.4;
     opacity:0;transition:opacity .3s;pointer-events:none}
@@ -177,30 +186,20 @@
   <span data-s="seedling">seedling</span><span data-s="leafing">leafing</span><span data-s="flowering">flowering</span><span data-s="fruiting">fruiting</span><span data-s="ripe">ripe</span>
 </div>
 
-<div id="legend">
-  <h3>the growing tip, cell by cell</h3>
-  <p><span class="k" style="background:#8fe8ff"></span>Each dot is one cell. The brighter it
-  glows, the more auxin it is holding.</p>
-  <p><span class="k" style="background:#9fd8ff"></span>Each needle is the direction that cell
-  has aimed its pumps. That single choice, per cell, is the whole mechanism.</p>
-  <p><span class="k" style="background:#fff8dc"></span>Each spark is auxin actually moving,
-  travelling at the speed of the real flux through that wall.</p>
-  <p style="color:#7f9a99">Watch a bright spot: every needle around it swings to point
-  inward. That agreement <i>is</i> a leaf being decided.</p>
-</div>
-
 <div id="tip"></div>
 <button class="btn" id="handover">you have the camera · <b>resume</b></button>
 
 <div id="bar">
-  <button class="btn" id="sheetBtn">controls</button>
-  <button class="btn" id="cellsBtn">into the cells</button>
-  <button class="btn" id="newBtn">new specimen</button>
-  <button class="btn" id="aboutBtn">what is this?</button>
+  <div id="species"></div>
+  <div id="barActions">
+    <button class="btn" id="sheetBtn">controls</button>
+    <button class="btn" id="cellsBtn">into the cells</button>
+    <button class="btn" id="newBtn">new specimen</button>
+    <button class="btn" id="aboutBtn">what is this?</button>
+  </div>
 </div>
 
 <div id="sheet">
-  <div id="species"></div>
   <div id="sliders"></div>
   <div id="actions">
     <button class="btn" id="regrowBtn">regrow with these</button>

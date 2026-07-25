@@ -58,6 +58,37 @@ cell's neighbourhood has thinned.
 **Never track anything by cell index across frames.** Cells are swap-removed;
 indices are not identities. Track by position, or by the stable `id` field.
 
+## Species presets
+
+**A parameter that is overwritten before it is read is not a parameter.**
+`leafOpts.aspect` sat in all four species presets, differing 0.30 → 0.58, and had
+done nothing since the margin engine landed: `Leaf.step()` assigns
+`o.aspect = margin.aspect` the instant the outline matures, which is before
+`_build()` ever reads it. Every species grew the same leaf (measured aspect
+0.44/0.45 across all four). Species leaf character now comes from `marginBias`,
+which scales the margin's own chemistry. **If a preset field is meant to change
+the output, grow one and measure the output** — `test/species.mjs` does exactly this.
+
+**`minInternode` DISCARDS primordia, it does not queue them.** A shoot that
+elongates slowly throws away almost everything its meristem emits. The first
+rosette attempt made 12 leaves out of 42 primordia and looked like a patterning
+failure; the patterning was fine. Any species with near-zero elongation must lower
+`minInternode` to match, or it starves.
+
+**An axis that hits `maxOrgans` arrests, and an arrested apex can never flower.**
+`maxOrgans` is not "how many leaves this species has" — it is a kill switch. Set it
+comfortably above the leaf count the species actually reaches, and let flowering be
+what stops the shoot. A parasol capped at 15 hit the cap before florigen crossed
+threshold and never flowered at any seed.
+
+**A floral axis that never reaches `floralOrgans` never sets fruit — and never
+arrests, so it elongates forever.** On screen: a bare whip shooting out of the top
+of an otherwise finished plant. It bites hardest where the floral meristem patterns
+slowly (long wavelength, small central zone), because `goFloral` shrinks the
+meristem and a long-wavelength field then fits almost no maxima on it.
+`test/species.mjs` reports this as the `stuck` column. **It is catalogue-wide, not
+specific to any one preset** — see ROADMAP.
+
 ## Rendering
 
 **`glClear(DEPTH_BUFFER_BIT)` respects the depth mask.** Clearing with `depthMask(false)`
