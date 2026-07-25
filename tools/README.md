@@ -1,9 +1,15 @@
 # Capture tools (headless Playwright)
 
 `npm i -D playwright && npx playwright install chromium` first. These render the
-page offscreen and screenshot it. Software rendering runs ~16fps (measured: 15.6)
-— fine for verifying geometry and catching errors, **useless for judging motion**.
-Use a real browser for that; on real hardware the page runs at vsync.
+page offscreen and screenshot it — **fine for verifying geometry and catching
+console errors, useless for judging performance or motion.** Use a real browser
+for both.
+
+Do not read the `fps` in the state dump. Repeated identical runs on one machine
+gave 15.6, 33.4, 120 and 120.2, because headless chromium sometimes gets a
+hardware path and sometimes falls back to software, and the tool cannot tell you
+which it got. One run also produced a black frame while still reporting a full
+triangle count. Real Chrome on the same machine is a steady 120 (vsync).
 
 They resolve playwright's own chromium rather than a hardcoded path, so they work
 on any platform. Both of those were broken until 2026-07-25: the browser path was

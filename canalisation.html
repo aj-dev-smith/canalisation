@@ -156,6 +156,10 @@
   <p>A plant grown from its own chemistry. Nothing here is drawn — the shape is what the auxin does.</p>
 </div>
 
+<!-- The styling and the 8s fade-out for this already existed; the element itself
+     was missing, so the camera had no discoverable controls at all. -->
+<div id="hint">drag to orbit &middot; scroll to zoom &middot; shift-drag to pan</div>
+
 <div id="card">
   <div id="cardHead"><span id="cardName">specimen</span></div>
   <table>
@@ -3641,6 +3645,7 @@ class App {
     const rnd = mulberry32(seed ^ 0x5bf03635);
     this.spores = [];
     this.shot = null; this.shotT = 0; this.subject = null;
+    this._covered = new Set();   // headline events are once per axis, per specimen
     this.userDriving = false; this.idleT = 0;
     for (let i = 0; i < 220; i++) {
       this.spores.push({
@@ -3653,36 +3658,78 @@ class App {
 
   _bindInput() {
     const c = this.canvas;
-    let drag = false, lx = 0, ly = 0, pinch = 0;
-    const down = (x, y) => { drag = true; lx = x; ly = y; this.cam.idle = 0; this.cam.autoRot = false; this.takeOver(); };
+    let drag = false, panning = false, lx = 0, ly = 0, pinch = 0, pcx = 0, pcy = 0;
+
+    // Orbit and zoom alone cannot get you onto one leaf — they only ever circle
+    // the point the auto-framer chose, which is the middle of the plant. Panning
+    // moves that point in the camera's own screen plane, scaled so a pixel drags
+    // the same apparent distance however far out you are.
+    const pan = (dx, dy) => {
+      const cm = this.cam;
+      const fwd = v3(); v3norm(fwd, v3sub(fwd, cm.target, cm.eye));
+      const right = v3(); v3norm(right, v3cross3(right, fwd, v3(0, 1, 0)));
+      const up2 = v3(); v3norm(up2, v3cross3(up2, right, fwd));
+      const s = 2 * Math.tan(cm.fov / 2) * cm.dist / Math.max(1, this.renderer.H);
+      if (cm.cx === undefined) { cm.cx = cm.target[0]; cm.cz = cm.target[2]; }
+      cm.cx += (up2[0] * dy - right[0] * dx) * s;
+      cm.tgtY += (up2[1] * dy - right[1] * dx) * s;
+      cm.cz += (up2[2] * dy - right[2] * dx) * s;
+      cm.idle = 0;
+    };
+
+    const down = (x, y, isPan) => {
+      drag = true; panning = !!isPan; lx = x; ly = y;
+      this.cam.idle = 0; this.cam.autoRot = false; this.takeOver();
+    };
     const move = (x, y) => {
       if (!drag) return;
-      this.cam.az -= (x - lx) * 0.006;
-      this.cam.el = clamp(this.cam.el + (y - ly) * 0.005, -0.5, 1.35);
+      const dx = x - lx, dy = y - ly;
+      if (panning) pan(dx, dy);
+      else {
+        this.cam.az -= dx * 0.006;
+        this.cam.el = clamp(this.cam.el + dy * 0.005, -0.5, 1.35);
+      }
       lx = x; ly = y; this.cam.idle = 0;
     };
-    const up = () => { drag = false; };
-    c.addEventListener('pointerdown', e => { c.setPointerCapture(e.pointerId); down(e.clientX, e.clientY); });
+    const up = () => { drag = false; panning = false; };
+    c.addEventListener('pointerdown', e => {
+      c.setPointerCapture(e.pointerId);
+      // right button or shift-drag pans; shift is there for trackpads
+      down(e.clientX, e.clientY, e.button === 2 || e.button === 1 || e.shiftKey);
+    });
     c.addEventListener('pointermove', e => move(e.clientX, e.clientY));
     c.addEventListener('pointerup', up);
     c.addEventListener('pointercancel', up);
+    c.addEventListener('contextmenu', e => e.preventDefault());
     c.addEventListener('wheel', e => {
       e.preventDefault();
       this.takeOver();
+      // stop the idle drift too, exactly as pointerdown does — without this a
+      // wheel-only zoom left autoRot on, which picked the faster damping
+      this.cam.autoRot = false;
       this.cam.dist = clamp(this.cam.dist * (1 + Math.sign(e.deltaY) * 0.09), 3, 70);
       this.cam.idle = 0;
     }, { passive: false });
+    const centre = (t) => [(t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2];
     c.addEventListener('touchstart', e => {
       if (e.touches.length === 2) {
         pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        [pcx, pcy] = centre(e.touches);
         drag = false;
+        this.takeOver();
+        this.cam.autoRot = false;
       }
     }, { passive: true });
     c.addEventListener('touchmove', e => {
       if (e.touches.length === 2 && pinch) {
         const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         this.cam.dist = clamp(this.cam.dist * (pinch / Math.max(1, d)), 3, 70);
-        pinch = d; this.cam.idle = 0;
+        pinch = d;
+        // and two fingers moving together pan, so touch can reach a leaf too
+        const [nx, ny] = centre(e.touches);
+        pan(nx - pcx, ny - pcy);
+        pcx = nx; pcy = ny;
+        this.cam.idle = 0;
       }
     }, { passive: true });
     c.addEventListener('touchend', () => { pinch = 0; }, { passive: true });
@@ -3696,8 +3743,65 @@ class App {
   // looking at, holds the shot, and moves on. It hands over the instant the
   // viewer touches anything, and takes back over only if asked.
   // ---------------------------------------------------------------------------
+  // A plant blooms once and ripens once. Measured on a Cathedral Fern, the
+  // window in which petals are visibly opening is open for about 1.1s, and the
+  // ripening front crosses in about 1.2s — each happening ONCE in a fifty-second
+  // film. A shot holds for 10-12s, and the director only used to choose at shot
+  // boundaries, so the chance of a re-pick even landing inside the bloom was
+  // about one in twelve, before it then had to win a lottery against leaf,
+  // apex and wide. That is why it "always skipped the blooming": not preference,
+  // arithmetic. Weight tuning cannot fix an event shorter than one shot.
+  //
+  // So the rare events are no longer lottery entries. They are HEADLINES:
+  //   - triggered early, on "this axis is about to bloom" rather than "is
+  //     blooming", so the camera is already there when it happens;
+  //   - allowed to interrupt a running shot rather than wait it out;
+  //   - held past the end of the event, so you see the flower open and then rest
+  //     on it, instead of cutting the instant it finishes;
+  //   - fired once per axis, so the film moves on instead of looping.
+  // Leaf, apex and wide stay a lottery. They are the filler between events.
+  headlineShot() {
+    const P = this.plant;
+    const seen = this._covered || (this._covered = new Set());
+    const key = (ax, k) => k + ':' + P.axes.indexOf(ax);
+    for (const ax of P.axes) {
+      // fruit set through swelling and the ripening wave — one continuous arc
+      if (ax.fruit && !ax.fruit.barren && ax.fruit.phase !== 'pattern' && !seen.has(key(ax, 'fruit'))) {
+        let r = 0;
+        for (let i = 0; i < ax.fruit.n; i++) r += ax.fruit.ripe[i];
+        if (r / ax.fruit.n < 0.98) {
+          return { kind: 'fruit', ax, headline: true, dist: 3.4, el: 0.30, hold: 13000, minHold: 6000 };
+        }
+      }
+      // petals exist but have not finished opening. Note this fires while dev is
+      // still ~0, which is the point — arrive before the bloom, not during it.
+      if (ax.floral && !ax.fruit && !seen.has(key(ax, 'flower'))) {
+        const petals = ax.organs.filter(o => o.petal);
+        if (petals.length) {
+          const dev = petals.reduce((a, o) => a + (o.dev || 0), 0) / petals.length;
+          if (dev < 0.97) {
+            // minHold is short because the shot that preempts this one is almost
+            // always the fruit on this same axis — the flower becomes the fruit,
+            // so it is the same point in space and the cut reads as a push-in
+            // rather than a jump. Holding longer here only loses the swelling.
+            return { kind: 'flower', ax, headline: true, dist: 4.2, el: 0.34, hold: 10000, minHold: 3000 };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  _markCovered(sh) {
+    if (!sh || !sh.headline) return;
+    const seen = this._covered || (this._covered = new Set());
+    seen.add(sh.kind + ':' + this.plant.axes.indexOf(sh.ax));
+  }
+
   pickShot() {
     const P = this.plant;
+    const head = this.headlineShot();
+    if (head) { this._markCovered(head); return head; }
     const prev = this.shot && this.shot.kind;
     const cand = [];
     let liveTip = null;
@@ -3750,7 +3854,18 @@ class App {
     }
     this.idleT = 0;
     this.shotT = (this.shotT || 0) + dtms;
-    if (!this.shot || this.shotT > (this.shot.hold || 10000)) {
+    // Preemption. Waiting out a 10s hold is exactly how a 1.1s bloom got missed,
+    // so a pending headline cuts the current shot short. Filler yields at once; a
+    // headline yields only after its own minHold, so each event still gets its
+    // moment rather than being clipped by the next one.
+    let cut = !this.shot || this.shotT > (this.shot.hold || 10000);
+    if (!cut) {
+      const head = this.headlineShot();
+      if (head && !(this.shot.headline && this.shot.ax === head.ax && this.shot.kind === head.kind)) {
+        cut = !this.shot.headline || this.shotT > (this.shot.minHold || 0);
+      }
+    }
+    if (cut) {
       this.shot = this.pickShot();
       this.shotT = 0;
     }
@@ -3789,7 +3904,11 @@ class App {
     // camera: frame whatever the specimen has actually become
     const c = this.cam;
     c.idle += dtms;
-    if (c.idle > 6000) c.autoRot = true;
+    // Resuming the drift is the film's business, and giveBack() owns it. Flipping
+    // it back on after 6s while the viewer was still driving also switched the
+    // framing damping from 0.035 to 0.10, so a wheel zoom was dragged back three
+    // times faster than a drag was.
+    if (c.idle > 6000 && !this.userDriving) c.autoRot = true;
     if (c.autoRot) c.az += dtms * 0.000042;
     // The raw bounding box jumps every time an organ appears. Smooth it first,
     // then smooth the camera against it — two stages of damping is the
@@ -3822,7 +3941,25 @@ class App {
     if (sub) {
       let p = null, scale = 1;
       if (sub.kind === 'fruit') { p = sub.ax.tipPos(); scale = this.sp.fruitScale * 1.6; }
-      else if (sub.kind === 'flower') { p = sub.ax.tipPos(); scale = Math.max(0.5, sub.ax.length * 0.6); }
+      else if (sub.kind === 'flower') {
+        p = sub.ax.tipPos();
+        // Frame the FLOWER, not the stalk carrying it. This was ax.length * 0.6 —
+        // the length of the whole shoot — so a flower on a tall axis was framed
+        // from 40 units away (the clamp ceiling) and read as a speck. Measured
+        // 39.77 on a seed whose flowering axis was ~15 units long.
+        // How far the petal tips actually reach from the axis, using maxLen so
+        // the framing does not drift outward as the petals grow into it. Measured
+        // ~1.52 on a Cathedral Fern; the 1.2 puts the whole flower inside the
+        // frame with a little air rather than cropping the outermost petals.
+        let reach = 0;
+        for (const o of sub.ax.organs) {
+          if (!o.floral) continue;
+          const f = o.frame.o, t = sub.ax.tipPos();
+          const base = Math.hypot(f[0] - t[0], f[1] - t[1], f[2] - t[2]);
+          reach = Math.max(reach, base + (o.maxLen || o.len || 0));
+        }
+        scale = Math.max(0.5, reach * 1.2);
+      }
       else if (sub.kind === 'organ' && sub.org) { p = sub.org.frame.o; scale = Math.max(0.6, sub.org.len * 0.7); }
       if (p) {
         aimX = p[0]; aimY = p[1]; aimZ = p[2];
@@ -3842,11 +3979,21 @@ class App {
       // look down onto the dome — the spiral is only legible from above
       c.el = lerp(c.el, 0.78, damp(0.05));
     }
+    // While the viewer is driving, the auto-framer has to keep its hands off the
+    // camera. This block used to run unconditionally: a wheel event set `dist`,
+    // and the very next frame lerped it straight back to the fitted distance, so
+    // zooming in visibly sprang back out. Orbit escaped only because `az`/`el`
+    // are not fitted here — which is exactly how the bug presented, "zoom fights
+    // me, orbit is fine". `userDriving` gated the director's choice of shot but
+    // never the framing.
     const k = damp(c.autoRot ? 0.10 : 0.035);
-    c.dist = lerp(c.dist, want, k);
-    c.tgtY = lerp(c.tgtY, aimY, k);
-    c.cx = lerp(c.cx === undefined ? aimX : c.cx, aimX, k);
-    c.cz = lerp(c.cz === undefined ? aimZ : c.cz, aimZ, k);
+    if (c.cx === undefined) { c.cx = aimX; c.cz = aimZ; }
+    if (!this.userDriving) {
+      c.dist = lerp(c.dist, want, k);
+      c.tgtY = lerp(c.tgtY, aimY, k);
+      c.cx = lerp(c.cx, aimX, k);
+      c.cz = lerp(c.cz, aimZ, k);
+    }
     v3set(c.target, c.cx, c.tgtY, c.cz);
     // fog begins where the subject does
     c.fogNear = Math.max(0, c.dist - Math.max(hh, hw) * 1.1);
@@ -3876,20 +4023,45 @@ class App {
     this.detail = 0;
     // when the camera has gone in to look at a growing tip, anything between it
     // and that tip is in the way — drop it rather than let a leaf fill the frame
-    let cullFrom = null, cullR = 0;
+    let cullFrom = null, cullR = 0, cullRad = 0, cullKeep = null;
     const sb = this.subject;
     if (sb && (sb.kind === 'fruit' || sb.kind === 'flower')) {
       cullFrom = sb.ax.tipPos();
-      cullR = Math.hypot(this.cam.eye[0] - cullFrom[0], this.cam.eye[1] - cullFrom[1],
-        this.cam.eye[2] - cullFrom[2]) - this.sp.fruitScale * 2.2;
+      cullRad = this.sp.fruitScale * 2.2;
+      if (sb.kind === 'flower') {
+        // a flower is much wider than a fruit — size the clearance to the petals
+        let reach = 0;
+        for (const o of sb.ax.organs) {
+          if (!o.floral) continue;
+          const f = o.frame.o;
+          reach = Math.max(reach, Math.hypot(f[0] - cullFrom[0], f[1] - cullFrom[1],
+            f[2] - cullFrom[2]) + (o.maxLen || o.len || 0));
+        }
+        cullRad = Math.max(cullRad, reach * 1.25);
+      }
+      cullKeep = sb.ax;      // never cull the flower we came to look at
     } else if (this.focus === 'apex') {
       let best = null;
       for (const ax of P.axes) if (ax.alive && (!best || ax.tipPos()[1] > best.tipPos()[1])) best = ax;
       if (best) {
         cullFrom = best.tipPos();
-        cullR = Math.hypot(this.cam.eye[0] - cullFrom[0], this.cam.eye[1] - cullFrom[1],
-          this.cam.eye[2] - cullFrom[2]) - Math.max(0.35, best.radii[best.radii.length - 1] * 5.5) * 1.15;
+        cullRad = Math.max(0.35, best.radii[best.radii.length - 1] * 5.5) * 1.15;
       }
+    }
+    // Clear a cylinder along the line of sight rather than a sphere around the
+    // eye. The old test compared each organ's BASE distance to the subject
+    // distance, which both stripped lateral scenery that was never in the way and
+    // — worse — kept long leaves whose base sits behind the subject while the
+    // blade reaches right across the front of it. That is what was burying the
+    // flower shot.
+    let sdx = 0, sdy = 0, sdz = 0;
+    if (cullFrom) {
+      sdx = cullFrom[0] - this.cam.eye[0];
+      sdy = cullFrom[1] - this.cam.eye[1];
+      sdz = cullFrom[2] - this.cam.eye[2];
+      const sl = Math.hypot(sdx, sdy, sdz) || 1;
+      sdx /= sl; sdy /= sl; sdz /= sl;
+      cullR = sl - cullRad;      // stop clearing just short of the subject
     }
     const nOrg = P.organCount();
     const fen = (this.sp.leafOpts.fenestrate || 0) > 0;
@@ -3905,10 +4077,16 @@ class App {
       }
       for (const org of ax.organs) {
         if (org.len < 0.02) continue;
-        if (cullFrom) {
-          const dq = Math.hypot(this.cam.eye[0] - org.frame.o[0], this.cam.eye[1] - org.frame.o[1],
-            this.cam.eye[2] - org.frame.o[2]);
-          if (dq < cullR) continue;
+        if (cullFrom && !(ax === cullKeep && org.floral)) {
+          const ox = org.frame.o[0] - this.cam.eye[0];
+          const oy = org.frame.o[1] - this.cam.eye[1];
+          const oz = org.frame.o[2] - this.cam.eye[2];
+          const t = ox * sdx + oy * sdy + oz * sdz;          // along the sight line
+          if (t > 0 && t < cullR) {
+            const px2 = ox - sdx * t, py2 = oy - sdy * t, pz2 = oz - sdz * t;
+            // how far off the sight line it sits, allowing for its own reach
+            if (Math.hypot(px2, py2, pz2) - (org.len || 0) < cullRad) continue;
+          }
         }
         const L = org.leaf;
         // petiole

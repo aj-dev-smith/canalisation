@@ -58,7 +58,12 @@ Chrome, 2400x1620. It ran seed to ripe unattended: 97 leaves, 1 flower, 9 petals
 
 **The GPU is asleep and the simulation is free.** Everything is CPU geometry
 generation, which better hardware does not help. 119.8fps, vsync-capped.
-(Headless swiftshader for comparison: 15.6fps — the docs' "~16fps" was right.)
+
+Measured in real Chrome, and it has to be. The headless tools' `fps` is not
+usable as a number: four identical runs gave 15.6, 33.4, 120 and 120.2, because
+headless chromium may or may not get a hardware path and does not say which. An
+earlier draft of this entry quoted 15.6 as confirming the docs' "~16fps" figure —
+that was one sample from an unstable configuration, and it is withdrawn.
 
 `buildScene` costs 5.7ms even at `axesAlive: 0, fullyDev: 106/106` — a plant that
 has entirely stopped changing. Sway is wholly in the vertex shader
@@ -144,6 +149,60 @@ canalisation; the literature on loop suppression is where to start. Worth
 remembering that real leaves *do* form closed loops — reticulate venation and
 areoles are loops — so the target is not "no loops", it is "no loop that outweighs
 the midrib".
+
+## The director could not catch its own headline events (2026-07-25)
+
+Reported as "it always skips the blooming and the fruiting to go follow another
+stalk". Measured on a Cathedral Fern, and it was arithmetic rather than taste:
+
+| event | occurrences per film | window open |
+|---|---|---|
+| blooming | 1 | **1.1s** |
+| ripening front | 1 | **1.2s** |
+| fruit swelling | 1 | 4.2s |
+| leaf unfurling | ~continuous | 16.1s |
+
+A shot holds for **10–12s**, and the director only chose at shot boundaries. So a
+1.1s bloom window is roughly a tenth of one shot: the chance of a re-pick even
+landing inside it was about 1 in 12, and it then had to win a weighted lottery
+against leaf, apex and wide. **An event shorter than one shot cannot be caught by
+tuning weights.** Confirmed by instrumenting a full run — on three seeds the old
+director spent 0% of the bloom window and 0% of the ripening window looking at
+them, going `apex > organ > wide` while the only flower of the film opened and
+closed off camera.
+
+Rare events are no longer lottery entries. They are headlines: triggered on "this
+axis is *about to* bloom" rather than "is blooming" so the camera is already
+there; allowed to preempt a running shot instead of waiting out the hold; held
+past the end of the event so you rest on the opened flower; and fired once per
+axis so the film moves on. Leaf, apex and wide remain a lottery — they are the
+filler between events.
+
+```
+                bloom   swell   ripen    shot order
+  before          0%      0%      0%     apex > organ > wide
+  after         100%     90%    100%     apex > organ > flower* > fruit*
+```
+
+Two framing bugs fell out of finally pointing the camera at a flower:
+
+- **The flower shot framed the stalk, not the flower.** `scale` was
+  `ax.length * 0.6` — the length of the whole shoot — so a flower on a tall axis
+  was framed from 39.77 units, the clamp ceiling, and read as a speck. Now scaled
+  from how far the petal tips actually reach (~1.5 units), giving ~7.
+- **The occlusion cull tested each organ's base position.** So a long leaf whose
+  base sits *behind* the subject, but whose blade reaches across the front of it,
+  was kept — and buried the flower. It also stripped lateral scenery that was
+  never in the way. Now it clears a cylinder along the line of sight, sized to the
+  subject, and never culls the subject's own floral organs.
+
+**Open, and a composition question rather than a bug:** the ovary visually
+dominates a flower close-up. It is not oversized — measured at 1.0 world radius
+against a petal reach of 1.66, so 0.6x — but it is an opaque solid mass whereas
+the petals are thin translucent blades, so it reads as much bigger than it is.
+Note also that fruit sets almost immediately, so there is barely a petals-without-
+ovary moment to shoot. Worth deciding whether the ovary should stay small until
+the petals have finished opening.
 
 ## Design forks and why
 
