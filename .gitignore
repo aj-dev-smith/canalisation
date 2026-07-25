@@ -1,4 +1,5 @@
 node_modules/
 shots/
+.claude/
 *.log
 .DS_Store

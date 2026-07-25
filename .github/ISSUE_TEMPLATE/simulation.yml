@@ -1,0 +1,38 @@
+name: Simulation issue
+description: The chemistry is doing something wrong — patterning, organs, veins, outlines, fruit
+labels: [simulation]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Before filing: **phyllotaxis wandering 90–160° instead of locking to 137.5°
+        is known and diagnosed**, not a bug. See docs/JOURNAL.md.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: And what you expected the chemistry to do instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: harness
+    attributes:
+      label: Harness output
+      description: >-
+        Output from the relevant harness in `test/` — phyllo, pattern, margin, fruit
+        or flower2. This is worth far more than a description.
+      render: text
+
+  - type: input
+    id: seed
+    attributes:
+      label: Seed
+      description: Almost everything here is seeded and reproducible. Which seed shows it?
+
+  - type: input
+    id: params
+    attributes:
+      label: Non-default parameters
+      description: Any overrides you passed, or the species preset you were on.

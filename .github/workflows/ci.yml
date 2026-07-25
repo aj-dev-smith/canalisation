@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: build + invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # No install step: the simulation and its tests have zero dependencies.
+      # playwright is a devDependency used only by the optional tools/ scripts.
+
+      - name: Build
+        run: node build.js
+
+      - name: canalisation.html is in sync with src/
+        run: |
+          if ! git diff --exit-code --stat canalisation.html; then
+            echo
+            echo "::error file=canalisation.html::Build artifact is stale."
+            echo "canalisation.html does not match what build.js produces from src/."
+            echo "Run 'node build.js' and commit the result alongside your source change."
+            exit 1
+          fi
+
+      - name: Invariants
+        run: node test/smoke.mjs
+
+  diagnostics:
+    name: diagnostics (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # These harnesses print numbers and always exit 0 — they never gate a merge.
+      # They run so the measurements land in the PR's logs, where a reviewer can
+      # diff them against the same output on main.
+      - name: Phyllotaxis
+        run: node test/phyllo.mjs
+      - name: Patterning
+        run: node test/pattern.mjs '{"T":40,"D":6}' '{"G":0}'
+      - name: Leaf margin
+        run: node test/margin.mjs
+      - name: Fruit
+        run: node test/fruit.mjs

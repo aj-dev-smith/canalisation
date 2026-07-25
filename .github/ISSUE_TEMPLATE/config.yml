@@ -1,0 +1,12 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Phyllotaxis does not lock to 137.5°
+    url: https://github.com/aj-dev-smith/canalisation/blob/main/docs/JOURNAL.md
+    about: >-
+      Known and diagnosed, not a bug. Divergence wanders 90–160°. Two hypotheses
+      were tested with controlled sweeps and both were falsified — read the journal
+      before opening an issue. Fudge factors that force the golden angle will be
+      declined; a structural mechanism would be very welcome.
+  - name: What is imposed vs what emerges
+    url: https://github.com/aj-dev-smith/canalisation/blob/main/docs/SCIENCE.md
+    about: The biology, the papers, and the short list of spatial priors.

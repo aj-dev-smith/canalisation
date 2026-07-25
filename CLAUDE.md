@@ -37,6 +37,7 @@ one shared scope — name collisions are silent otherwise and cost a debugging c
 Tests are headless Node, no browser:
 
 ```bash
+node test/smoke.mjs                                # structural invariants; the CI gate
 node test/pattern.mjs '{"T":40,"D":6}' '{"G":0}'   # is the tissue patterning at all?
 node test/phyllo.mjs                               # divergence angle stats
 node test/margin.mjs                               # grow a leaf outline, ASCII silhouette
@@ -47,6 +48,33 @@ node test/flower2.mjs                              # full life cycle incl. axill
 **Always test the science headlessly before touching the renderer.** A visual bug
 and a simulation bug look identical on screen, and the headless harnesses give you
 numbers in seconds instead of minutes.
+
+## Branching
+
+`main` is protected and is never committed to directly. **Every change goes on a
+feature branch and lands through a pull request**, including your own — the point
+is that CI has run and the reasoning is written down somewhere other than a commit
+message.
+
+```bash
+git switch main && git pull
+git switch -c short-descriptive-name    # leaf-vein-hierarchy, not fix-stuff
+# ... work, then before opening the PR:
+node build.js && node test/smoke.mjs
+```
+
+- Branch off `main`, one concern per branch.
+- **Commit the regenerated `canalisation.html` with the source change that caused
+  it.** CI fails the PR if the artifact is stale. It is also the file most likely
+  to conflict, since it is a 150kb generated blob — if it does, do not hand-merge
+  it. Take either side and re-run `node build.js`.
+- If a branch touches the simulation, put the before/after numbers from the `test/`
+  harnesses in the PR body. That is the review currency here, not screenshots.
+- Long-lived branches drift badly against a generated artifact. Rebase on `main`
+  often, or keep them short.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) is the outward-facing version of this for people
+arriving from GitHub, and it leads with the one rule above.
 
 ## Architecture
 

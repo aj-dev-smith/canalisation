@@ -1,16 +1,25 @@
 {
-  "name": "xenobotany",
+  "name": "canalisation",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "A xenobotany engine: plant form grown from a simulation of auxin transport. Nothing about the shape is drawn.",
+  "keywords": [
+    "auxin",
+    "phyllotaxis",
+    "morphogenesis",
+    "generative",
+    "simulation",
+    "procedural",
+    "botany",
+    "webgl"
+  ],
+  "license": "MIT",
+  "author": "AJ Smith",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "node build.js",
+    "test": "node test/smoke.mjs"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "devDependencies": {
     "playwright": "^1.62.0"
-  },
-  "type": "module"
+  }
 }
