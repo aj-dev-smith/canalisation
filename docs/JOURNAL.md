@@ -58,7 +58,12 @@ Chrome, 2400x1620. It ran seed to ripe unattended: 97 leaves, 1 flower, 9 petals
 
 **The GPU is asleep and the simulation is free.** Everything is CPU geometry
 generation, which better hardware does not help. 119.8fps, vsync-capped.
-(Headless swiftshader for comparison: 15.6fps — the docs' "~16fps" was right.)
+
+Measured in real Chrome, and it has to be. The headless tools' `fps` is not
+usable as a number: four identical runs gave 15.6, 33.4, 120 and 120.2, because
+headless chromium may or may not get a hardware path and does not say which. An
+earlier draft of this entry quoted 15.6 as confirming the docs' "~16fps" figure —
+that was one sample from an unstable configuration, and it is withdrawn.
 
 `buildScene` costs 5.7ms even at `axesAlive: 0, fullyDev: 106/106` — a plant that
 has entirely stopped changing. Sway is wholly in the vertex shader
