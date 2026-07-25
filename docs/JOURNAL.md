@@ -86,24 +86,64 @@ rescaling to the surviving range — same log law, right normaliser. Drawn ratio
 Full sweep in TUNING.md. This changed nothing about the chemistry; it stopped a
 presentation step from throwing away what the chemistry had already found.
 
-### Open: the hierarchy points the wrong way
+### Open: about a third of leaves grow a futile eddy at the tip
 
-Making it visible immediately exposed the next problem. Traffic should accumulate
-toward the single petiole sink at `u < 0.045`. Measured mean traffic by band:
+Making the hierarchy visible immediately exposed the next problem. Characterised,
+because the first look was misleading in two ways worth recording.
+
+**The transport model is fine.** Net flux accumulates toward the petiole sink
+exactly as conservation demands — 2.3 units crossing `u=0.9` rising to 80.0
+crossing `u=0.1`, tracking cumulative production above each boundary (4.8 ->
+110.4). The sink at `u < 0.045` absorbs 71% of all disposal, body turnover the
+other 29%. Do not go looking for a leak; there isn't one.
+
+*(First measurement of this was wrong: it summed only the basipetal half of each
+crossing and so reported gross, not net, flux — which looked flat and suggested a
+conservation failure. If you re-derive this, keep the sign.)*
+
+**The defect is circulation.** Gross apical flux as a share of gross basal, by
+band, on an affected leaf:
 
 ```
-u  0.0-0.1  0.1-0.2  0.2-0.3  0.3-0.4  0.4-0.5  0.5-0.6  0.6-0.7  0.7-0.8  0.8-0.9  0.9-1.0
-     327       83      113      146      126      230      356      621     1082     1260
+u        0.1   0.3   0.5   0.7   0.9
+circ%     4%   12%   45%   89%   98%
 ```
 
-There *is* a trunk at the sink (max 1197 in the first band), but the heaviest
-veins in the leaf sit at `u` 0.76–0.97 — at the tip. The top 8 by traffic are all
-`u >= 0.70`. **This is pre-existing and independent of the mapping fix**, which
-only remaps `w` and never touches `mag`. Untested hypotheses: `pi` is a history
-variable that keeps accumulating where flux has been sustained longest, and
-`addSource` recruits near the expanding margin, so late tip sources may simply
-have had the most time under load; or the basipetal maturation wave is loading the
-tip first. Worth a controlled run with source recruitment frozen.
+At the tip, 106 units move basally and 104 move back apically through *different*
+walls — a closed loop delivering almost nothing. Because `pi` grows like `J^2` and
+`bake()` reads `max(pi[e], pi[rev e])`, **both limbs of a futile eddy are drawn as
+major veins.** That is why an affected leaf's heaviest vasculature sits at
+`u` 0.76–0.97 while the net transport there is ~2 units.
+
+**Incidence — and it is not universal.** Over 16 seeds, mean `pi` in the basal
+fifth over the apical fifth:
+
+```
+inverted (< 0.5):  seeds 3, 4, 10, 12, 13   ratios 0.03 0.12 0.43 0.08 0.15
+correct  (>= 1):   the other 11             median ratio 5.9, up to 22.3
+```
+
+**5 of 16 (31%).** Tip circulation predicts it cleanly: every inverted leaf is at
+>= 78%, every healthy one at <= 68%. Note `test/vein.mjs` uses **seed 4**, which is
+one of the pathological ones — do not generalise from it, as I initially did.
+
+**It is permanent, not transient.** Stepped 4000 further steps past maturity —
+nearly 3x the maturation time — circulation holds at 92–101% and the ratio moves
+0.03 -> 0.04, 0.08 -> 0.08, 0.12 -> 0.17. Baking later will not help. It is a
+stable attractor of an unbounded quadratic feedback: a closed flux loop
+reinforces itself with nothing to cap it.
+
+**Fix is a real fork, not a tweak**, which is why it is still open. The obvious
+lever is `Jsat`, currently 1e6 precisely so the feedback never saturates — and
+PITFALLS records that saturating `pi` costs the cell its polarity altogether. So
+loop suppression probably cannot come from clamping the feedback. Ranking veins by
+net `|J|` instead of `pi` was tested and **rejected**: it compresses the pathology
+(0.12 -> 0.29) but does not fix it, and it makes healthy leaves worse
+(3.80 -> 1.92). Spurious loops are a known weakness of Mitchison-type flux
+canalisation; the literature on loop suppression is where to start. Worth
+remembering that real leaves *do* form closed loops — reticulate venation and
+areoles are loops — so the target is not "no loops", it is "no loop that outweighs
+the midrib".
 
 ## Design forks and why
 
