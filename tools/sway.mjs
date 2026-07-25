@@ -1,8 +1,9 @@
 import { chromium } from 'playwright';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-  args: ['--use-gl=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+import { pathToFileURL } from 'url';
+const pageUrl = pathToFileURL(process.cwd() + '/canalisation.html').href;
+const b = await chromium.launch({ args: ['--use-gl=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
 const pg = await b.newPage({ viewport: { width: 700, height: 500 } });
-await pg.goto('file://${process.cwd()}/canalisation.html');
+await pg.goto(pageUrl);
 await pg.waitForTimeout(22000);
 // freeze growth and the camera; only the sway field should still be moving
 await pg.evaluate(() => { const a=window.__app; a.speedMul=0; a.cam.autoRot=false; a.cam.idle=0; });

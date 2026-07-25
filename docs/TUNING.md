@@ -60,6 +60,39 @@ Variety per leaf comes from randomising `ay`, `g1`, `gExp`, `D`, `tipBias` — t
 margin's chemistry — **not** from shape numbers. Petals are the same engine with
 `ay` 0.95–1.5, `g1` near zero and high `D`: broad, smooth, untoothed.
 
+## Leaf veins — traffic to drawn width (`30_leaf.js` `bake()`)
+
+The canalisation engine produces a **15x** spread of traffic across the veins it
+keeps (raw `pi`, max/median). Across *all* walls the spread is ~950x. How that
+becomes ribbon width is a display mapping, and it was throwing the hierarchy away.
+
+Downstream, `50_geom.js` draws each vein at `max(MINW, base*(0.25 + w*1.35))`, so
+the **drawn** ratio is what the eye gets — and the `0.25` offset caps any mapping
+at **6.4x** no matter what `w` does. Measured over four leaves:
+
+| mapping | drawn max/min | drawn max/median | median w |
+|---|---|---|---|
+| `log(1+mag)/log(1+maxPi)` (was) | 1.82 | 1.49 | 0.61 |
+| **`log`, rescaled to the kept range** | **6.40** | **2.67** | **0.27** | ← in use
+| `pow 0.5` (sqrt) | 3.43 | 2.63 | 0.27 |
+| `pow 0.35` | 2.57 | 2.04 | 0.40 |
+| `linear` | 5.56 | 4.60 | 0.07 |
+
+The old divisor was `maxPi` — the maximum over *every* wall in the tissue,
+including walls that never became veins. Kept veins bottom out around `mag` 29 of
+`maxPi` 2347, so `log(1+29)/log(1+2347) = 0.44`: **the bottom 44% of the output
+range was unreachable by construction.** Rescaling to `[min,max]` of the veins
+actually kept is the same log law with the right normaliser, and it hits the 6.4x
+geometric ceiling.
+
+`linear` reaches a similar ratio but collapses median `w` to 0.07, so everything
+but the trunk sits on the `MINW` pixel floor — the failure mode PITFALLS warns
+about under "threshold on share, not absolute". Do not use it.
+
+If you ever want more than 6.4x, the `0.25` in `50_geom.js` is the binding
+constraint, not the mapping. It exists so minor veins stay visible; lower it and
+they become hairlines. Change one or the other, never both at once.
+
 ## Fruit (`35_fruit.js`)
 
 ```

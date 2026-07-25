@@ -1,9 +1,10 @@
 import { chromium } from 'playwright';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-  args: ['--use-gl=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+import { pathToFileURL } from 'url';
+const pageUrl = pathToFileURL(process.cwd() + '/canalisation.html').href;
+const b = await chromium.launch({ args: ['--use-gl=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
 const pg = await b.newPage({ viewport: { width: 1000, height: 720 } });
 pg.on('pageerror', e => console.log('PAGEERROR: ' + e.message));
-await pg.goto('file://${process.cwd()}/canalisation.html');
+await pg.goto(pageUrl);
 await pg.evaluate(() => { window.__app.speedMul = 4; document.body.classList.add('collapsed'); });
 for (const t of [45000, 35000, 30000, 25000]) {
   await pg.waitForTimeout(t);

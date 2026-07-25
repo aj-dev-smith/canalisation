@@ -1,12 +1,13 @@
 import { chromium } from 'playwright';
+import { pathToFileURL } from 'url';
+const pageUrl = pathToFileURL(process.cwd() + '/canalisation.html').href;
 const [,, out, waitMs, extra] = process.argv;
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-  args: ['--use-gl=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+const b = await chromium.launch({ args: ['--use-gl=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
 const pg = await b.newPage({ viewport: { width: 1100, height: 760 }, deviceScaleFactor: 1 });
 const errs = [];
 pg.on('console', m => { if (m.type()==='error'||m.type()==='warning') errs.push(m.type()+': '+m.text()); });
 pg.on('pageerror', e => errs.push('PAGEERROR: ' + e.message));
-await pg.goto('file://${process.cwd()}/canalisation.html');
+await pg.goto(pageUrl);
 await pg.waitForTimeout(+waitMs || 4000);
 if (extra) await pg.evaluate(extra);
 const st = await pg.evaluate(() => {

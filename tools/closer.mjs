@@ -1,9 +1,10 @@
 import { chromium } from 'playwright';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-  args: ['--use-gl=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+import { pathToFileURL } from 'url';
+const pageUrl = pathToFileURL(process.cwd() + '/canalisation.html').href;
+const b = await chromium.launch({ args: ['--use-gl=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
 const pg = await b.newPage({ viewport: { width: 1000, height: 700 } });
 pg.on('pageerror', e => console.log('PAGEERROR: ' + e.message));
-await pg.goto('file://${process.cwd()}/canalisation.html');
+await pg.goto(pageUrl);
 await pg.waitForTimeout(22000);
 await pg.evaluate(() => { window.__app.focus = 'apex'; document.body.classList.add('collapsed'); });
 await pg.waitForTimeout(9000);
