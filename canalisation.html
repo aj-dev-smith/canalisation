@@ -156,6 +156,10 @@
   <p>A plant grown from its own chemistry. Nothing here is drawn — the shape is what the auxin does.</p>
 </div>
 
+<!-- The styling and the 8s fade-out for this already existed; the element itself
+     was missing, so the camera had no discoverable controls at all. -->
+<div id="hint">drag to orbit &middot; scroll to zoom &middot; shift-drag to pan</div>
+
 <div id="card">
   <div id="cardHead"><span id="cardName">specimen</span></div>
   <table>
@@ -3653,36 +3657,78 @@ class App {
 
   _bindInput() {
     const c = this.canvas;
-    let drag = false, lx = 0, ly = 0, pinch = 0;
-    const down = (x, y) => { drag = true; lx = x; ly = y; this.cam.idle = 0; this.cam.autoRot = false; this.takeOver(); };
+    let drag = false, panning = false, lx = 0, ly = 0, pinch = 0, pcx = 0, pcy = 0;
+
+    // Orbit and zoom alone cannot get you onto one leaf — they only ever circle
+    // the point the auto-framer chose, which is the middle of the plant. Panning
+    // moves that point in the camera's own screen plane, scaled so a pixel drags
+    // the same apparent distance however far out you are.
+    const pan = (dx, dy) => {
+      const cm = this.cam;
+      const fwd = v3(); v3norm(fwd, v3sub(fwd, cm.target, cm.eye));
+      const right = v3(); v3norm(right, v3cross3(right, fwd, v3(0, 1, 0)));
+      const up2 = v3(); v3norm(up2, v3cross3(up2, right, fwd));
+      const s = 2 * Math.tan(cm.fov / 2) * cm.dist / Math.max(1, this.renderer.H);
+      if (cm.cx === undefined) { cm.cx = cm.target[0]; cm.cz = cm.target[2]; }
+      cm.cx += (up2[0] * dy - right[0] * dx) * s;
+      cm.tgtY += (up2[1] * dy - right[1] * dx) * s;
+      cm.cz += (up2[2] * dy - right[2] * dx) * s;
+      cm.idle = 0;
+    };
+
+    const down = (x, y, isPan) => {
+      drag = true; panning = !!isPan; lx = x; ly = y;
+      this.cam.idle = 0; this.cam.autoRot = false; this.takeOver();
+    };
     const move = (x, y) => {
       if (!drag) return;
-      this.cam.az -= (x - lx) * 0.006;
-      this.cam.el = clamp(this.cam.el + (y - ly) * 0.005, -0.5, 1.35);
+      const dx = x - lx, dy = y - ly;
+      if (panning) pan(dx, dy);
+      else {
+        this.cam.az -= dx * 0.006;
+        this.cam.el = clamp(this.cam.el + dy * 0.005, -0.5, 1.35);
+      }
       lx = x; ly = y; this.cam.idle = 0;
     };
-    const up = () => { drag = false; };
-    c.addEventListener('pointerdown', e => { c.setPointerCapture(e.pointerId); down(e.clientX, e.clientY); });
+    const up = () => { drag = false; panning = false; };
+    c.addEventListener('pointerdown', e => {
+      c.setPointerCapture(e.pointerId);
+      // right button or shift-drag pans; shift is there for trackpads
+      down(e.clientX, e.clientY, e.button === 2 || e.button === 1 || e.shiftKey);
+    });
     c.addEventListener('pointermove', e => move(e.clientX, e.clientY));
     c.addEventListener('pointerup', up);
     c.addEventListener('pointercancel', up);
+    c.addEventListener('contextmenu', e => e.preventDefault());
     c.addEventListener('wheel', e => {
       e.preventDefault();
       this.takeOver();
+      // stop the idle drift too, exactly as pointerdown does — without this a
+      // wheel-only zoom left autoRot on, which picked the faster damping
+      this.cam.autoRot = false;
       this.cam.dist = clamp(this.cam.dist * (1 + Math.sign(e.deltaY) * 0.09), 3, 70);
       this.cam.idle = 0;
     }, { passive: false });
+    const centre = (t) => [(t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2];
     c.addEventListener('touchstart', e => {
       if (e.touches.length === 2) {
         pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        [pcx, pcy] = centre(e.touches);
         drag = false;
+        this.takeOver();
+        this.cam.autoRot = false;
       }
     }, { passive: true });
     c.addEventListener('touchmove', e => {
       if (e.touches.length === 2 && pinch) {
         const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         this.cam.dist = clamp(this.cam.dist * (pinch / Math.max(1, d)), 3, 70);
-        pinch = d; this.cam.idle = 0;
+        pinch = d;
+        // and two fingers moving together pan, so touch can reach a leaf too
+        const [nx, ny] = centre(e.touches);
+        pan(nx - pcx, ny - pcy);
+        pcx = nx; pcy = ny;
+        this.cam.idle = 0;
       }
     }, { passive: true });
     c.addEventListener('touchend', () => { pinch = 0; }, { passive: true });
@@ -3789,7 +3835,11 @@ class App {
     // camera: frame whatever the specimen has actually become
     const c = this.cam;
     c.idle += dtms;
-    if (c.idle > 6000) c.autoRot = true;
+    // Resuming the drift is the film's business, and giveBack() owns it. Flipping
+    // it back on after 6s while the viewer was still driving also switched the
+    // framing damping from 0.035 to 0.10, so a wheel zoom was dragged back three
+    // times faster than a drag was.
+    if (c.idle > 6000 && !this.userDriving) c.autoRot = true;
     if (c.autoRot) c.az += dtms * 0.000042;
     // The raw bounding box jumps every time an organ appears. Smooth it first,
     // then smooth the camera against it — two stages of damping is the
@@ -3842,11 +3892,21 @@ class App {
       // look down onto the dome — the spiral is only legible from above
       c.el = lerp(c.el, 0.78, damp(0.05));
     }
+    // While the viewer is driving, the auto-framer has to keep its hands off the
+    // camera. This block used to run unconditionally: a wheel event set `dist`,
+    // and the very next frame lerped it straight back to the fitted distance, so
+    // zooming in visibly sprang back out. Orbit escaped only because `az`/`el`
+    // are not fitted here — which is exactly how the bug presented, "zoom fights
+    // me, orbit is fine". `userDriving` gated the director's choice of shot but
+    // never the framing.
     const k = damp(c.autoRot ? 0.10 : 0.035);
-    c.dist = lerp(c.dist, want, k);
-    c.tgtY = lerp(c.tgtY, aimY, k);
-    c.cx = lerp(c.cx === undefined ? aimX : c.cx, aimX, k);
-    c.cz = lerp(c.cz === undefined ? aimZ : c.cz, aimZ, k);
+    if (c.cx === undefined) { c.cx = aimX; c.cz = aimZ; }
+    if (!this.userDriving) {
+      c.dist = lerp(c.dist, want, k);
+      c.tgtY = lerp(c.tgtY, aimY, k);
+      c.cx = lerp(c.cx, aimX, k);
+      c.cz = lerp(c.cz, aimZ, k);
+    }
     v3set(c.target, c.cx, c.tgtY, c.cz);
     // fog begins where the subject does
     c.fogNear = Math.max(0, c.dist - Math.max(hh, hw) * 1.1);
