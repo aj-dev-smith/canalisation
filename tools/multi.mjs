@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-  args: ['--use-gl=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
+import { pathToFileURL } from 'url';
+const pageUrl = pathToFileURL(process.cwd() + '/canalisation.html').href;
+const b = await chromium.launch({ args: ['--use-gl=swiftshader','--enable-unsafe-swiftshader','--no-sandbox'] });
 const cases = [
   { name: 'mobile-fern', vp: { width: 390, height: 844 }, species: null, wait: 22000 },
   { name: 'mobile-abyss', vp: { width: 390, height: 844 }, species: 'Abyssal Frond', wait: 22000 },
@@ -12,7 +13,7 @@ for (const c of cases) {
   const errs = [];
   pg.on('pageerror', e => errs.push('PAGEERROR: ' + e.message));
   pg.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-  await pg.goto('file://${process.cwd()}/canalisation.html');
+  await pg.goto(pageUrl);
   await pg.waitForTimeout(1500);
   if (c.species) await pg.evaluate((n) => { window.__app.newSpecimen(n); }, c.species);
   await pg.waitForTimeout(c.wait);
