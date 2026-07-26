@@ -258,7 +258,7 @@ export const SPECIES = {
 
 const BASE_PAL = {
   bloom: 0.38, bloomThresh: 1.15, exposure: 1.04, grain: 0.024, vignette: 0.60,
-  sway: 1.0, dof: 0.80, laminaMul: 0.86,
+  dof: 0.80, laminaMul: 0.86,
   pin: [0.62, 0.88, 1.0], spark: [1.0, 0.98, 0.86],
   fruit0: [0.10, 0.22, 0.14], fruit1: [0.85, 0.30, 0.22],
   petal0: [0.30, 0.24, 0.42], petal1: [0.72, 0.55, 0.95], petalVein: [1.0, 0.85, 1.0],
