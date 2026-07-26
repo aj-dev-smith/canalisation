@@ -35,3 +35,11 @@ inside **single** quotes, so it never interpolated.
   puts six hundred cells on one line and looks like an empty stalk, so check the
   `-mid` frame before believing a "nothing is drawn" report
 - `sway.mjs` — pixel-diffs two frames to prove the sway field animates
+- `senesce_shot.mjs prefix [species] [seed]` — runs until the specimen dismantles
+  itself and captures `-onset`, `-mid`, `-spent`. Picks its GL backend the way
+  `flower_shot.mjs` does. **The three frames are currently identical** — senescence
+  is simulated and nothing renders it, so what this verifies today is that the
+  state machine reaches `spent` in a real browser and that the stage bar follows.
+  It reads the lit stage chip out of the DOM rather than off the model, so a
+  display that silently stops matching the simulation shows up here. The frames
+  become worth diffing the moment `50_geom.js` or `60_render.js` reads `org.sen`

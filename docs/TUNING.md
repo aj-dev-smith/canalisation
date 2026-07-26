@@ -299,3 +299,46 @@ throwaway tracer; the numbers are here so a regression is recognisable.
 twelve seconds for the ~900 steps of canalisation. The margin phase before it is
 fast-forwarded at 400 steps a frame, because the outline is already on screen
 and running it at watchable speed opens the close-up on eight seconds of nothing.
+
+## Senescence, and the stream that does not drive it (2026-07-26)
+
+Only one constant matters for the shipped mechanism, because only one thing about
+it is a number:
+
+```
+senesceFor    2200    how long the slowest blade on a finished specimen takes
+vegGrace      1600    idle steps before a vegetative apex counts as stalled
+```
+
+`vegGrace` is not a taste knob — it is a leak-stopper, and it was chosen off
+measurements. Across all eight species the longest gap between organs on a healthy
+shoot is **500** steps and the longest a new lateral takes to found its first is
+**320**, so 1600 sits at 3.2x the worst real gap. Lower it below ~600 and you will
+start arresting shoots that were merely slow. Its counterpart for floral apices is
+`floralGrace: 320`, which is much tighter because a floral apex patterns faster.
+
+Everything else is a physical condition. Senescence starts when `Plant.spent()` —
+no growing point anywhere — and each blade's rate is `(age/oldest)²`, squared so
+the wave has a front instead of the plant fading uniformly. On Cathedral Fern at
+14000 steps that gives a shed running **4546 → 9115**, so roughly 4600 steps of
+wave rather than a cut, with `rho(age)` 1.00 and `rho(y)` 0.98 up the plant.
+
+`senesceFor` is the knob to reach for if a specimen strips too fast to read. Note
+it sets the *slowest* blade: the oldest tissue goes appreciably sooner because of
+the squared term, so halving it does not halve the wave.
+
+**The transport stream in `38_shoot.js` is off (`shootOpts.enabled: false`) and
+its constants are not tuned parameters — they are the settings the falsification
+was measured at.** Do not sweep them expecting the plant to change; nothing in the
+shipped plant reads them. They are:
+
+```
+rootDrain 3.0   turnover 0.05   apexSource 0.55   leafSource 1.10
+fruitSource 2.20   leafPeak 300   leafDecay 2600   maintain 0.55
+```
+
+For the record of what was already swept and found not to matter: mean blade
+export sat at 0.66-0.69 across `turnover` 0.05 → 0 and `rootDrain` 3 → 12, because
+the quantity is conserved. Shoot `T` 40 → 8 is the one change that does something
+— it starves apical organs and inverts the basipetal gradient — and that is a
+different claim, not a tuning of this one. JOURNAL.md has the tables.

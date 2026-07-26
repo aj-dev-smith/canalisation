@@ -56,6 +56,34 @@ the other. **Before reusing a display mapping on new tissue, measure its contras
 on that tissue** — `test/lamina.mjs` does exactly this, and reports which of three
 candidate channels actually separates.
 
+**A conserved quantity cannot be a scarcity signal.** Abscission was modelled on
+flux through the petiole: a leaf that cannot export is shed. But in steady state a
+leaf exports what it produces, so that flux measures the blade's own production and
+says nothing about its neighbours — mean export moved 0.66 → 0.69 across a 4x change
+in sink strength *and* turnover taken to zero. Nothing looked broken; the numbers
+were plausible and stable and meant something other than what they were read as.
+**Before building a decision on a transport number, check whether conservation
+already pins it.** If what flows out must equal what went in, the number is an
+accounting identity, not a measurement of competition. Same family as the
+self-referential normaliser below: the machinery was fine, the quantity was not.
+
+**Competition needs a contest that is still open.** Auxin transport competition is
+real in the Prusinkiewicz bud model because the contest there is over *establishing*
+a canal in unpolarised tissue — a transient, winner-take-all. A stem is fully
+canalised long before any leaf's fate is in question, so there is nothing left to
+win. Reusing a competitive mechanism on tissue that has already resolved gives a
+smooth monotonic field with no threshold in it: `a_stem/a_blade` came out reversed
+for **96 organs out of 96 at every timepoint**, mean 2.57. A signal present in 100%
+of cases is not a signal.
+
+**Exactly one mechanism may own a state variable.** With both the old and new
+senescence paths incrementing `org.sen`, they simply added, and the falsified path
+scored rho 0.42/0.47 — a partial success. Isolated, it was −0.05/+0.02. **Two
+mechanisms writing one variable cannot be measured against each other**, and the
+contaminated reading fails in the flattering direction, so it will not look like a
+bug. When replacing a mechanism, make the old one return early rather than leaving
+it to be additively harmless.
+
 **A primordium must stay a local MAXIMUM.** Model it as a strong decay sink and it
 becomes a pit; the up-the-gradient vectors around it then point *away*, and you get
 a ring of satellite maxima. How hard a maximum can drain is capped by what the
@@ -103,6 +131,25 @@ trap generalises: **an organ budget expressed as a count can only terminate a pr
 that reliably reaches the count.** If the process can stop early for physical
 reasons, the counter is not a terminating condition, and the failure shows up as
 something that never stops rather than as an error.
+
+**A whole-plant condition turns any per-axis leak fatal.** `Plant.spent()` is an
+AND over every growing point, so one shoot that never arrests freezes the entire
+organism's life cycle. Hoarfrost Thicket had exactly one such shoot — a `gen1`
+lateral stuck at a single organ, still holding a meristem after 30000 steps, because
+it elongates too slowly to clear `minInternode` and so discards every primordium it
+emits. It never reaches `maxOrgans` (1 of 34), never exhausts `organBudget` (84 of
+96), and cannot flower out because only `gen === 0` answers florigen. Harmless for
+as long as the consequence was a slightly odd twig; fatal the moment a whole-plant
+predicate depended on it, and the specimen simply never finished.
+
+This is the **third** instance of the same root trap now: *an organ budget expressed
+as a count can only terminate a process that reliably reaches the count.* Fixed the
+same way as the other two, with `apexStalled`/`vegGrace` alongside `floralGrace` and
+`spotGrace` — notice that something has stopped, rather than assert what it should
+have reached. **Adding an organism-level predicate is a new and much stricter test
+of every per-part termination rule you already have**, so expect it to surface the
+leaks, and check every part that can decline to terminate rather than only the one
+that broke.
 
 **A coordinate measured against a shrinking reference does not change.** Floral organ
 identity `q` was `1 - prim.r / meristem.rPZ` — the founding radius over the apex's

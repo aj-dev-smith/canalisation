@@ -2,11 +2,34 @@
 
 Ranked by what I would actually do next.
 
-## 1. Life cycle and senescence
-The piece still stops. Specimens should age, senesce (colour draining, veins dying
-last, blades releasing and drifting down) and give way to a new one germinating as
-the old fades. Turns it from a thing that finishes into an endless film. The camera
-director already exists and would shoot it.
+## 1. Life cycle and senescence — HALF DONE (2026-07-26)
+The simulation half is in: a specimen now **finishes**. `Plant.spent()` is true when
+every growing point has arrested or consumed itself, `senesceStep` dismantles the
+blades in a wave from there, and `dead()`/`stage()` report the end. Cathedral Fern
+sheds 96 of 96 over ~4600 steps and reaches stage `dead`. The CI gate asserts a
+spent specimen senesces.
+
+Getting there falsified three hypotheses about deriving abscission from auxin
+transport, and the whole-plant stream that was built to test them is kept, off, in
+`38_shoot.js`. **Read the JOURNAL entry before reopening this** — the honest
+summary is that the *timing* of senescence is emergent and the *order* is imposed
+(SCIENCE.md item 6), and the route to deriving the order away is light, not
+another molecule.
+
+**Still to do, and this is the visible half.** `node tools/senesce_shot.mjs` is the
+tool for it — it already captures `-onset`, `-mid` and `-spent`, and today all
+three come back identical at 63594 triangles and 141528 lines, which is the
+measurement of exactly how much of this is unbuilt:
+- Nothing renders it yet. `org.sen` (0→1) and `org.shed` exist and no geometry or
+  shader reads them. Wanted: colour draining, and **veins dying last** — the
+  per-blade `veinDistanceField` is already computed and is exactly the channel for
+  it, so this should not need new simulation.
+- Shed blades should release and drift down rather than blinking out. `org.shed`
+  is currently a boolean the renderer ignores.
+- A new specimen germinating as the old one fades. `dead()` is the trigger; the
+  camera director already exists and would shoot it.
+- The stem and fruit persist after every blade has gone, which is right for a
+  seed head but has never been looked at on screen.
 
 ## 2. Cell-level view on a leaf — DONE (2026-07-25)
 The **look closer** treatment now exists on the blade as well as the meristem, so

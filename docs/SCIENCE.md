@@ -52,7 +52,17 @@ meristem runs `'grad'`, leaf venation runs `'flux'`, the switch is what `'auto'`
 | Leaf margin | 1D closed-ended chain | grad | outline, teeth, lobes, leaf shape |
 | Leaf blade | triangular lattice | flux | vein network and its hierarchy |
 | Ovary wall | icosphere shell | grad then flux | ovule number/arrangement, fruit lobing |
-| Whole shoot | — | — | flowering time, branching, stem taper |
+| Whole shoot | — | — | flowering time, branching, stem taper, when the specimen finishes |
+| Transport stream | tree over the whole plant | flux | *nothing that ships* — see below |
+
+The last row is an honest failure, kept runnable and switched off (`shootOpts.enabled`).
+`38_shoot.js` runs the solver over the entire organism — a node per organ, per stem
+segment, laterals tapping where they branch, the root the only sink — and produces
+a real basipetal gradient. It was built to derive abscission and could not: auxin is
+*made* by each organ rather than competed for, so flux through a petiole is conserved
+and carries no scarcity signal. Three hypotheses and the diagnosis are in JOURNAL.md.
+It is left in place the way `rhoI: 0` leaves the falsified second inhibitor in
+`10_auxin.js`, so the negative result stays reproducible.
 
 ## What emerges
 
@@ -71,6 +81,10 @@ Nobody wrote any of these numbers:
 - Stem thickness (Murray's law on the traffic it carries)
 - How many seeds a fruit has, and therefore how lobed it is
 - Where the ripening wave starts and how it crosses
+- When a specimen is finished and begins to senesce — every growing point has
+  either arrested on its budget or consumed itself founding a flower, so nothing
+  anywhere is still patterning. Downstream of how much leaf it built, which set
+  when it flowered, which set when its apices were spent
 
 ## What is imposed
 
@@ -93,6 +107,16 @@ Keep this list short. Every entry is a debt.
 5. **Radial fruit growth.** Wall cells keep their direction and change only their
    distance from the centre, so a fruit is always star-shaped. Prevents
    self-intersection during deep lobing. Costs overhangs; almost nothing has them.
+6. **The order blades senesce in.** A wave up the plant, oldest tissue first. That
+   a specimen senesces *at all* is emergent (`Plant.spent()`, above); which blade
+   goes first is stated. This entry was paid for rather than assumed — a
+   whole-plant auxin transport network was built specifically to derive it and
+   could not, four experiments in JOURNAL.md. Note what is NOT imposed here: no
+   leaf has a lifespan, and nothing counts down.
 
 Not simulated at all: pollination (parthenocarpy is real — auxin alone sets fruit),
-turgor and wall mechanics, light, nutrients, senescence.
+turgor and wall mechanics, light, nutrients.
+
+Light is the interesting absence now. It is the resource leaves actually compete
+for, and shading is what orders senescence in a real canopy — the one honest route
+to deriving imposition 6 away.

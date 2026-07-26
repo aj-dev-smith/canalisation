@@ -445,6 +445,175 @@ The two large frames that remain are entering and leaving the mode, which are
 cuts. Worth writing down that none of this was visible in a still capture — the
 three-frame `leaf_shot.mjs` triptych looked correct throughout.
 
+## Senescence: a whole-plant transport stream, and why it does not drive it (2026-07-26)
+
+The piece stopped instead of ending (ROADMAP 1). Specimens needed to finish and
+give way. The tempting version of that is a leaf lifespan constant, which would be
+a clock, so the first attempt tried to derive it — and the derivation failed. Three
+hypotheses tested, all falsified, and the diagnosis is worth more than the feature.
+
+### The mechanism that was tried
+
+Abscission by auxin flux. A blade drives auxin down its petiole; that basipetal
+flux holds the abscission zone at the petiole base shut, and a leaf that loses its
+share of the stream is shed (Addicott & Lynch 1955; Sexton & Roberts 1982). To
+have a share to lose, the whole shoot became one auxin network — a node per organ,
+a node per stem segment carrying one, laterals tapping the node they branch from,
+the root the only sink. `stepAuxin` again, on a tree. That part works: 242 nodes,
+finite, canalised, and it produces a real basipetal gradient, **a_stem 17.1 at the
+base to 0.10 at the tip.** It fills the row SCIENCE.md had left blank.
+
+### Experiment 1 — is flux through the zone a scarcity signal?
+
+No. **Flux through the zone is conserved.** In steady state a leaf exports what it
+produces, so the number measures the blade's own production and nothing about its
+neighbours. Swept the two things that should have starved it:
+
+```
+                          mean export    a_root    a_max
+turnover 0.05  root 3        0.662        11.52     50.5
+turnover 0.05  root 12       0.665         3.02     50.4
+turnover 0.005 root 3        0.682        18.50     60.0
+turnover 0     root 12       0.687         6.20     19.7
+```
+
+Mean export does not move — 0.66 to 0.69 across a 4x change in sink strength and
+turnover taken to zero. The stream cannot refuse a leaf: a stem edge carries
+`T·p·φ` ≈ 200 against sources of ≈ 1. There is no scarcity in it.
+
+### Experiment 2 — is a reversed gradient across the zone the signal?
+
+This is the textbook one: abscission is promoted by auxin applied to the stem side
+and prevented by auxin applied to the blade side, so the zone reads a *ratio*, not
+a flux. Measured `a_stem/a_blade` for every organ at four timepoints:
+
+```
+t=2000   n=73   min 1.99  mean 2.59  max 4.51   reversed(>1) 73/73
+t=4000   n=96   min 1.29  mean 2.57  max 3.97   reversed(>1) 96/96
+t=9000   n=96   min 1.29  mean 2.57  max 3.96   reversed(>1) 96/96
+```
+
+**Reversed for every organ at every time.** Of course it is — a stem carries the
+sum of everything above it and a leaf carries only its own. The ratio is a smooth
+function of depth in the stream with no threshold anywhere in it.
+
+### Experiment 3 — correlative control (take the fruit off, leaves stay green)
+
+Not reproduced. Removing the fruit's auxin contribution entirely moved the mean
+ratio from **2.57 to 2.55**. A fruit source of 2.2 is nothing against ~100 units of
+leaf production. Whatever ends a plant here, it is not the fruit's auxin.
+
+### The diagnosis
+
+**Auxin is made by each organ, not competed for.** Auxin transport competition is
+real in the Prusinkiewicz 2009 bud model because there the contest is over
+*establishing* a canal in unpolarised tissue — a transient, winner-take-all. A stem
+is already fully canalised long before any leaf's fate is in question, so there is
+no contest left to lose. A transport stream with an unlimited sink and a pipe two
+orders of magnitude wider than its traffic contains no "this organ is losing" signal.
+
+The steelman was tested too: narrowing the pipe (shoot `T` 40 → 8) does starve
+organs, min export −0.487. But it starves the *apical* ones and inverts the
+gradient that made the model attractive (a_base 17.1 → 1.3, a_top 0.10 → 20.8).
+That is distance-to-sink, not competition, and it is a different claim.
+
+### Experiment 4 — the one that decided the shape of the feature
+
+Given all that, does the stream at least *order* the shed? No — and the way it
+fails is more damning than a flat zero would have been. Rank correlation of shed
+time against founding order, `stream drives`, all eight species, seeds 21/137,
+14000 steps:
+
+```
+Cathedral Fern     -0.05      Hoarfrost Thicket   0.53
+Spiral Ossuary      0.57      Ember Creeper       0.13
+Abyssal Frond      -0.00      Sulphur Rosette     0.57
+Sun Coral           0.10      Nightglass Parasol  0.36
+```
+
+**−0.05 to 0.57.** Not zero, but not anything: the stream's ordering wanders with
+the species, which is the signature of an incidental correlate rather than a
+mechanism. A mechanism would hold its sign.
+
+The decisive row is the knockout. With the age-linked decline in leaf export
+switched off, `dead` is **0/2 on every one of the eight species** — the stream
+alone cannot finish a plant at all, on any preset, at any seed. So the decline was
+ending the leaves and nothing was ordering them. **The implementation was an age
+timer routed through 200 lines of auxin network**, which is worse than an honest
+age timer, because it is dishonest about itself.
+
+For contrast, the shipped rule scores rho(age) 1.00 and rho(y) 0.97–1.00 across
+all eight — as it must, because there the ordering is stated rather than derived.
+That is the number to distrust on sight: a coefficient of exactly 1.00 is a
+restatement of the rule, not evidence for it.
+
+One trap on the way to that number, and it is a general one: the first run of this
+comparison read rho 0.42/0.47 and looked like a partial success. Both mechanisms
+were incrementing `sen` at once, so they simply added. **Two mechanisms writing one
+variable cannot be measured against each other** — exactly one must own it, and
+`Plant.senesceStep` now returns early when the stream is driving.
+
+### What shipped
+
+Split honestly in two:
+
+- **WHEN a specimen senesces is emergent**, and this is the good half. `Plant.spent()`
+  — every growing point has either arrested on its budget or consumed itself
+  founding a flower, so no tissue anywhere is still patterning. Nothing schedules
+  it. It sits downstream of how much leaf the plant built, which set when it
+  flowered, which set when its apices were spent. It is the same kind of physical
+  condition as `apexSpent`, and it is why a fruit ends a plant: not through auxin,
+  but by arresting the apex that set it.
+- **The ORDER is asserted**, a wave up the plant with the oldest tissue letting go
+  first, and SCIENCE.md now carries it as imposition 6. It is stated plainly rather
+  than derived, because the attempt to derive it is the four experiments above.
+
+The stream stays in the tree, off by default, the same way `rhoI: 0` leaves the
+falsified second inhibitor in `10_auxin.js` — a negative result you cannot
+re-measure is just a story. `node test/shoot.mjs` turns it on and reproduces every
+number here.
+
+### The bug the feature exposed: one stalled shoot froze the organism
+
+Building `Plant.spent()` turned a long-standing cosmetic leak into a fatal one.
+Hoarfrost Thicket came out of the first full run **0 shed, 0/2 dead on all four
+variants** — it never finished at all. The harness's own `NOTHING SENESCED` warning
+caught it, which is the argument for harnesses that shout rather than just print.
+
+One shoot of nine, stuck: `gen1 organs=1 alive=true meristem=true`, still holding a
+growing point after 30000 steps.
+
+- `vegOrganCount` 84 against `organBudget` 96 → `budgetLeft` never hits zero
+- `organs.length` 1 against `maxOrgans` 34 → the count never arrests it
+- it is `gen1`, and only `gen === 0` converts on florigen → it can never flower out
+
+It elongates too slowly to clear `minInternode`, so it discards every primordium
+its meristem emits and sits on one organ forever. **Exactly the trap PITFALLS
+already records** for floral axes — an organ budget expressed as a count can only
+terminate a process that reliably reaches the count — in its vegetative form.
+
+It had been survivable because a stalled twig is just a slightly odd twig. But
+`spent()` is an AND over every growing point, so one leaked axis froze the entire
+life cycle. **A whole-plant condition turns any per-axis leak fatal**, and that is
+the general lesson: adding an organism-level predicate is a new, much stricter test
+of every per-part termination rule you already had.
+
+Fixed with `apexStalled` / `vegGrace`, the vegetative twin of `floralGrace`. The
+constant came off measurements rather than a guess — across all eight species the
+longest gap between organs on a healthy shoot is **500** steps and the longest any
+lateral takes to found its first is **320**, so 1600 is 3.2x the worst real gap.
+Before/after on `test/species.mjs`: every column identical on all eight species
+except Hoarfrost seed 137 divergence, 114±97 → 126±112, which is the retired apex
+now handing in its reading and is well inside a ±100 sd. All eight species now
+reach `dead`.
+
+**What I would try next, if anyone wants to reopen it:** the missing scarce
+resource is not auxin. Leaves compete for *light*, and shading is what actually
+orders senescence in a real canopy. The plant already knows where every blade is
+in space, so an occlusion term is computable — and unlike a second inhibitor field
+it would be a genuinely new axis of information rather than another scalar on the
+same disc.
+
 ## Design forks and why
 
 - **Cell-based CPU sim, not GPU.** The tissue divides and rewires its topology every
