@@ -777,3 +777,169 @@ ROADMAP 4b with the numbers attached.
 4. Silent no-op string replacements — three times; see PITFALLS.
 5. Asymmetric leaf outline vs symmetric interior lattice — veins hanging outside
    the blade. Introduced *by* making leaves honestly asymmetric.
+
+## The falling leaf was the last authored thing in the piece (2026-07-26)
+
+Asked what to do next, I offered the ROADMAP. The answer was better than the list:
+*everything here reads as fully simulated, but then a leaf falls and it's clearly a
+crappy animation.* That was right, and the code admitted it — the comment above the
+old `SHED_*` constants in `70_app.js` called the fall "stated motion... NOT a claim
+about chemistry". Four constants and a hash of the attachment point, so every blade
+fell at one speed, swung one distance, pitched at one rate, and a canopy came down
+in parallel.
+
+### The fix is not "add gravity", and the old comment knew why
+
+The comment being replaced argued that a blade hits terminal velocity within a
+length of letting go and never accelerates again, so a constant descent is *closer*
+to the truth than an integrated one. That is correct, and it is the trap: integrate
+gravity and drag alone and you get something worse than the sine, because you have
+added the boring half of the physics. What makes a leaf worth watching is that **its
+attitude sets the drag and the drag changes its attitude.** Broadside it stalls;
+stalled it slips edgewise, sheds the stall, and pitches through.
+
+So: the quasi-steady falling plate — added mass, circulation with translational and
+rotational parts, drag resolved along and across the chord, rotational damping
+(Andersen, Pesavento & Wang, JFM 541, 2005). The result worth having is theirs: a
+falling plate has no single behaviour. It picks steady descent, flutter, or tumble,
+and which one is selected by a dimensionless moment of inertia that comes down to
+width. **Width is the one thing `30_leaf.js` overwrites with whatever the margin
+grew**, which is why this belongs in this project rather than merely working.
+
+### The plan was one honest fudge. It turned out not to be needed
+
+The intention was to trade four animation constants for one: a scaled gravity,
+chosen to put the fall on the same compressed clock as the growth, and labelled as a
+fudge. Then I checked the calibration against real numbers instead of picking it.
+
+Leaf mass per area is one of the most measured traits in plant ecology (50-150
+g/m2). Air is 1.2. Gravity is 9.81. And the two exchange rates needed to put those
+in world units were **already fixed by things that shipped months ago** — a 16-unit
+plant reads as a metre, and `App.step` runs plant time at 125 units per second. With
+those five numbers there is nothing left to choose.
+
+It also lands better than the chosen version did. Terminal velocity for a drained
+blade comes out at 0.78 m/s, which is what a dead leaf does. And the dimensionless
+moment of inertia across the blades these species actually grow comes out **0.1-1.8,
+straddling the flutter/tumble transition** instead of piled up on one side of it. An
+earlier draft picked the density by hand *trying to arrange exactly that* and put
+every blade on the same side. **The measured constants beat the tuned ones**, which
+is this project's whole argument in miniature.
+
+### Four things were wrong, and the harness found all four
+
+Worth recording because none of them would have been visible on screen — they would
+have looked like "the fall needs tuning".
+
+1. **The Munk torque had the wrong sign.** The added-mass torque must turn a plate
+   *broadside* to its own motion; that is why a dropped card falls flat. With the
+   sign as first written, plates settled **edge-on and knifed down at twice terminal
+   velocity.** Frame conventions differ between write-ups of this model; the falling
+   card does not. The sign in the code is the one that reproduces the card, and it
+   is commented as having been established by measurement rather than by reading.
+2. **The integrator was under-resolved by a factor of four.** Six sub-steps per
+   plant-time unit; mid-range chords ran away to **1e124 within a hundred units.**
+   Now adaptive on the plate's current spin, so a barely-rocking plate is cheap and
+   a tumbling one pays for itself.
+3. **The regime classifier was wrong twice.** First it measured *net* rotation, so a
+   plate that went round and came back read as barely rotating. Then it measured
+   amplitude, which called a 14-degree transient "flutter". The real discriminator
+   is whether the pitch angle is **bounded**: the fraction of travelled rotation that
+   ended up as net rotation, near 1 for a tumbler and near 0 for a flutterer.
+4. **The physics was about the wrong object.** `70_app.js` draws a blade at 0.80 of
+   its organ's length and shrinks it 12% more as it dries. Using the organ length
+   made every plate 1.4x too big. The factor now lives in one place and both the
+   picture and the fall read it.
+
+**And one assertion was wrong, which is a different kind of mistake.** The
+validation check demanded the regime be monotonic in I* all the way down the sweep,
+and it failed — on rows in the middle that flipped label from one chord to the next.
+That is not a bug, it is the chaotic band the papers put *between* flutter and
+tumble, and a single run inside it is genuinely unclassifiable. The check was
+asserting something the literature does not claim. It now tests the ends — flutter
+low, tumble high, chaos allowed in between — which is falsifiable and true.
+
+### "Way too flappy spinny"
+
+First reaction to watching it, and the diagnosis was in the model, not the dials.
+
+**The integrator is 2D — an infinitely long plate — and a leaf is a stub.** Air
+escapes round the ends of a short plate instead of being turned by it, so the
+circulation actually developed is a fraction of the two-dimensional prediction, and
+circulation is what drives both the lift and the spin. Uncorrected 2D lift on a
+leaf-shaped plate is roughly double reality. The standard finite-span correction
+`AR/(AR+2)` fixes it, and it *adds* emergence rather than damping it uniformly:
+AR is length over width, so how much lift a blade keeps is its own silhouette's
+business. Long narrow leaves stay lively; broad stubby ones fall steeply.
+
+Second, and embarrassing: **rotational damping was not an independent coefficient
+and I had been treating it as one.** It is the same normal-force drag as `cPerp`,
+integrated over a chord with local speed `omega*r`. It sat at an invented 0.90,
+quietly halving the damping.
+
+| | tumbling | sideways, med/worst | spin, med/worst |
+|---|---|---|---|
+| 2D, `cRot: 0.9` | 43% | 0.68 / 4.63 | 1.67 / 7.37 rev/s |
+| finite span | 41% | 0.53 / 2.71 | 2.46 / 6.25 |
+| + consistent damping | **14%** | **0.37 / 2.11** | **2.05 / 5.01** |
+
+Median spin *rises* slightly across that table while the worst case falls and
+tumbling collapses — because the corrected falls are steeper and shorter, so
+rotations per second can go up while rotations per fall go down. Read the tumbling
+column, not the median.
+
+### A fixed fade budget cannot survive a variable fall
+
+The old animation faded a blade over 620 plant-time units from letting go, which was
+safe precisely because descent was constant: it always covered the same distance in
+that time. Real falls vary nearly tenfold in speed, and the fixed budget left blades
+half transparent before they were halfway down — **the CI gate caught it at 36 of 96
+reaching the ground.** They were evaporating in mid-air.
+
+The fade now keys off *landing*: fully drawn for the whole descent however long it
+takes, lies on the ground for `settle`, then goes. 547 of 547 blades across all
+eight species now land. `life` is only a backstop for the rare glider. Blades also
+now land at all, which they could not before — there was no ground, and the old
+comment said so.
+
+### What emerged, and what it cost
+
+Deleted: four animation constants, a positional hash, and the claim in SCIENCE.md
+item 6 that the falling was presentation. Added: no spatial priors, and no chosen
+numbers.
+
+Now emergent per blade: the regime (flutter/chaotic/tumble/steady, 30/20/14/9% and
+**all eight species show more than one among their own leaves**), descent speed
+(8.7x spread where it was identical for every blade), drift, and which way it turns
+— that last from the margin's own left-right asymmetry, which comes out 50/50 across
+a canopy without anything asking it to.
+
+### The limitation this leaves, and it is the interesting one
+
+Also from watching it: *there's clearly some gravity/wind field on the leaves, but
+ONLY the moment they die do they become alive and fall — the rest of the plant has
+no response to gravity or wind.*
+
+That is exactly right and the mechanism is worse than it sounds. The piece now has
+**two unrelated models of the same air.** A shed blade is a properly loaded
+aerodynamic body on the CPU. Everything still attached is a rigid card in dead calm,
+displaced by `SWAY` in `60_render.js` — three sines of position and time, evaluated
+in the vertex shader, which the simulation cannot see. The falling blade even gets
+that decorative displacement added on top of its own physics. Abscission is a
+discontinuity between the two, and nothing in the scene establishes that there is
+air in it until a leaf needs some.
+
+The fix is one field, defined once, read by everything: attached blades loaded by it
+through the same plate model, the stem genuinely bending under it, and the handover
+at abscission continuous in attitude and angular velocity. Two things make that
+worth more than it costs. It would let **`droop` stop being eight stated numbers in
+the species table** and become a force balance — deleting a spatial prior. And
+ROADMAP 3, the third phyllotaxis hypothesis and the project's headline limitation,
+already names *a mechanical-stress term* as one of its two candidate routes. So a
+real mechanics engine is shared infrastructure for the wind and for the open
+question, not a detour from it.
+
+The condition to hold it to: stiffness must come from `EI ∝ r⁴` on radii the plant
+already grows, so the whole thing costs one or two material constants rather than
+eight species-specific ones. If it cannot be done that way it is a net loss by this
+project's own accounting, and that is the signal to stop rather than push on.

@@ -351,10 +351,7 @@ eye. They live in `50_geom.js` and in the organ loop in `70_app.js`.
 ```
 VEIN_LAG     0.45    how far behind the lamina the vasculature drains
 dd -> dd*dd          what counts as "held against a vein"   <- the measured one
-SHED_LIFE    620     plant-time a shed blade is still drawn for (~5s at 1x)
-SHED_FALL    0.030   terminal velocity, world units per plant-time
-SHED_SWING   0.55    lateral flutter, in blade lengths
-SHED_TUMBLE  0.017   end-over-end pitch, radians per plant-time
+(the four SHED_* constants that used to be here are gone — see "The fall" below)
 curl  x(1 + sen*2.2)   a drying blade curls
 len   x(1 - sen*0.12)  ...and shrivels, slightly
 ```
@@ -372,13 +369,86 @@ of the contrast between roughly sen 0.2 and 0.65 — verify with `test/senesce.m
 which prints the ASCII map. Push it above ~0.6 and the lamina drains before the
 wave has travelled; below ~0.3 the blade goes as one card.
 
-`SHED_LIFE` against `SHED_FALL` is the pair to keep in step: 620 x 0.030 is 18
-world units of descent, which clears the frame from anywhere on a specimen of
-normal height (Cathedral Fern reaches ~16). Shorten the life without slowing the
-fall and blades vanish in mid-air; slow the fall without shortening the life and
-they pile up in shot, because there is no ground for them to land on.
-
 The senescence colour itself has **no per-species constants and should not grow
 any** — `senesceTint()` derives the drained colour from the blade's own, which is
 the only reason adding a species does not mean picking a brown for it. See
 JOURNAL.md.
+
+## The fall (`39_fall.js`, 2026-07-26)
+
+**Read this section differently from the rest of the file.** Everywhere else here
+is hard-won parameter regimes — numbers found by sweeping until something looked
+right. This one is the opposite, and the point of it is that there was nothing to
+sweep. If you find yourself reaching for a dial in this file to change how the fall
+*looks*, that is the signal that something is wrong with the model instead.
+
+### The inputs, and where each one comes from
+
+```
+unitM      0.0625   metres per world unit      already fixed: 16u plant reads as 1m
+ptPerSec   125      plant-time units / second  already fixed: 70_app.js:743
+gEarth     9.81     m/s^2                      gravity
+rhoAir     1.2      kg/m^3                     air
+lmaFresh   0.120    kg/m^2   leaf mass per area, turgid  (real trait, 50-150 g/m2)
+lmaDry     0.072    kg/m^2   ...once drained into its own veins
+thickM     0.0004   m        lamina thickness
+cPar 0.18  cPerp 1.95  cT 1.20  cR pi    quasi-steady plate coefficients (JFM 541)
+cRot       null     rotational damping = cPerp. NOT independent — see below
+arCorrect  true     finite-span correction, AR/(AR+2)
+```
+
+Everything the fall does is derived from those. `g` in world units is
+`gEarth/(unitM*ptPerSec^2)`, areal density is `lma/(rhoAir*unitM)`, and both drop
+out of requiring the dimensionless groups to match — there is no freedom in either.
+A drained blade's broadside terminal velocity comes out at **0.78 m/s**, which is
+what a dead leaf does, and it was not aimed at.
+
+### The two that are not what they look like
+
+**`cRot: null` means "use `cPerp`", and that is a correction, not a shortcut.** The
+torque resisting spin is the same normal-force drag as `cPerp`, integrated over a
+chord whose local speed is `omega*r` rather than uniform, so it takes the same
+coefficient. It sat at an invented `0.90` for several revisions, which silently
+halved the damping. Fixing it took tumbling from 41% of blades to **14%**.
+
+**`arCorrect` is the difference between "flappy and spinny" and a fall.** The
+integrator solves a cross-section — a plate of infinite span. A leaf is a stub, air
+escapes round its ends, and the circulation actually developed is a fraction of
+what 2D theory gives. Since circulation drives both lift and spin, uncorrected 2D
+is roughly twice reality and it showed. Set `arCorrect: false` to see what it looks
+like without; the numbers are in the table below. Note that AR is the blade's length
+over its width, which `30_leaf.js` overwrites with what the margin grew — so this
+term damps each blade by an amount its own silhouette decided.
+
+| | tumbling | sideways travel, med/worst | spin, med/worst |
+|---|---|---|---|
+| 2D, `cRot: 0.9` | 43% | 0.68 / 4.63 | 1.67 / 7.37 rev/s |
+| finite span, `cRot: 0.9` | 41% | 0.53 / 2.71 | 2.46 / 6.25 |
+| **shipped** (finite span, `cRot: cPerp`) | **14%** | **0.37 / 2.11** | **2.05 / 5.01** |
+
+Sideways travel is per unit of height dropped; much over 1.5 and a blade leaves the
+frame before it lands. Spin much over 1-3 rev/s reads as flapping rather than
+falling. Both are cues to go and look, not pass/fail — `test/fall.mjs` prints them.
+
+### The two that ARE presentation
+
+```
+life     1800   plant-time backstop before a blade is dropped, ~14s at 1x
+settle   420    plant-time it lies on the ground before fading, ~3.4s
+```
+
+**The fade keys off landing, not off a clock, and it has to.** The old animation
+faded over a fixed 620 units from letting go, which was safe when descent was a
+constant — it always covered the same distance in that time. Real falls vary nearly
+tenfold in speed, so the fixed budget had blades half transparent before they were
+halfway down: **36 of 96 reached the ground.** Keyed off landing it is 547 of 547
+across all eight species. `life` is now only a backstop for the rare glider.
+
+### Coupled to the renderer, on purpose
+
+`BLADE_DRAWN` (0.80) and `BLADE_DRY_SHRINK` (0.12) live in `39_fall.js` although
+they are rendering numbers, because **the physics has to be about the blade on the
+screen.** `70_app.js` draws a blade at 0.80 of its organ's length; using the organ
+length made every plate 1.4x too big and pushed the whole population toward
+fluttering. One definition, read by both. If you change how long a blade is drawn,
+you are changing the aerodynamics, and that is the correct coupling.

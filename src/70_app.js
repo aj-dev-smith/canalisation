@@ -6,6 +6,7 @@ import { DEFAULT_PRM } from './10_auxin.js';
 import { MERISTEM_DEFAULTS } from './20_meristem.js';
 import { Leaf, LEAF_DEFAULTS } from './30_leaf.js';
 import { Plant, SPECIES_DEFAULTS } from './40_plant.js';
+import { fallFrame, drawnBladeLen, BLADE_DRAWN } from './39_fall.js';
 import {
   Buffers, tube, blade, laminaCells, meristemDome, fruitShell, setView, senesceTint,
 } from './50_geom.js';
@@ -267,60 +268,20 @@ const BASE_PAL = {
 // A SHED BLADE LETTING GO
 //
 // Abscission separates the organ at the base of its stalk, so what leaves is the
-// whole leaf — stalk and all — and what is left behind is bare stem. Everything
-// after that is stated motion, in the same category as the sway in 60_render.js
-// and NOT a claim about chemistry: nothing in this simulation knows what gravity
-// is, and there is no ground for a leaf to land on, so a fall here is drift and
-// fade rather than a landing.
+// whole leaf — stalk and all — and what is left behind is bare stem.
 //
-// Why it flutters rather than drops. A blade is almost all area and almost no
-// mass, so it reaches terminal velocity within a length of letting go and never
-// accelerates again; what you actually watch is the drag alternating from side
-// to side. Constant descent plus a lateral swing plus an end-over-end pitch, and
-// no gravity term at all, is closer to the real thing than integrating one.
+// What happens after that used to live here, as four constants and a hash: a fixed
+// terminal velocity, a fixed swing, a fixed pitch rate, and a per-organ phase so
+// that a canopy did not come down in step. It was the one piece of motion in the
+// piece that was authored rather than simulated, and next to everything around it
+// that showed. It is now integrated in `39_fall.js` and stepped by the plant, and
+// the only thing left here is reading the answer.
 //
-// Time here is plant time, ~125 units per real second at 1x — see App.step.
-const SHED_LIFE = 620;      // how long a shed blade is still drawn for
-const SHED_FALL = 0.030;    // terminal velocity, world units per plant-time
-const SHED_SWING = 0.55;    // lateral flutter, in blade lengths
-const SHED_TUMBLE = 0.017;  // end-over-end pitch, radians per plant-time
-
-// deterministic per-organ phase, so one specimen's leaves do not fall in step
-// and a replayed seed drops them the same way twice
-function shedPhase(org) {
-  if (org._fall === undefined) {
-    const o = org.frame.o;
-    const h = Math.sin(o[0] * 12.9898 + o[1] * 4.1414 + o[2] * 78.233) * 43758.5453;
-    org._fall = h - Math.floor(h);
-  }
-  return org._fall;
-}
-
-// The organ's frame, displaced by however far it has fallen. Returns null once
-// it has been gone long enough to stop drawing.
-const _shedFr = { o: v3(), x: v3(), y: v3(), z: null, t: 0 };
+// The frame the blade is drawn on is its frame at the moment it let go, not its
+// live one — the axis keeps swaying after the leaf has gone, and a shed organ
+// reading its live frame is a leaf still hinged to a stem it has left.
+const _shedFr = { o: v3(), x: v3(), y: v3(), z: v3(), t: 0 };
 const _petC = v3();
-function fallenFrame(org, time, out) {
-  const t = time - (org.shedAt || 0);
-  if (t > SHED_LIFE) return null;
-  const f = org.frame, ph = shedPhase(org);
-  const sw = Math.sin(t * 0.026 + ph * TAU) * SHED_SWING * org.len;
-  // swing across the blade's own width, which is the axis a leaf rocks about,
-  // and drift a little the way it was already pointing
-  out.o[0] = f.o[0] + f.z[0] * sw + f.x[0] * sw * 0.35;
-  out.o[1] = f.o[1] - SHED_FALL * t;
-  out.o[2] = f.o[2] + f.z[2] * sw + f.x[2] * sw * 0.35;
-  const a = t * SHED_TUMBLE * (0.6 + ph * 0.8);
-  const c = Math.cos(a), s = Math.sin(a);
-  // pitch about z: the blade goes over its own tip
-  for (let k = 0; k < 3; k++) {
-    out.x[k] = f.x[k] * c + f.y[k] * s;
-    out.y[k] = f.y[k] * c - f.x[k] * s;
-  }
-  out.z = f.z;
-  out.t = clamp(t / SHED_LIFE, 0, 1);
-  return out;
-}
 
 export class App {
   constructor(canvas, hud) {
@@ -836,7 +797,7 @@ export class App {
       // width of the frame and the needles come up on their own.
       const w = this._watch;
       if (w) {
-        const bl = w.org.len * 0.80;
+        const bl = w.org.len * BLADE_DRAWN;
         const f = w.org.frame.o, fx = w.org.frame.x;
         const pet = w.org.len * 0.34 + w.org.radius * 1.8;
         // aim at the middle of the blade, not at where it joins the stalk
@@ -946,7 +907,7 @@ export class App {
       }
     } else if (this.focus === 'leaf' && this._watch) {
       const org = this._watch.org;
-      const pet = org.len * 0.34 + org.radius * 1.8, bl = org.len * 0.80;
+      const pet = org.len * 0.34 + org.radius * 1.8, bl = org.len * BLADE_DRAWN;
       const d = pet + bl * 0.45;
       const at = [org.frame.o[0] + org.frame.x[0] * d,
         org.frame.o[1] + org.frame.x[1] * d,
@@ -1000,9 +961,10 @@ export class App {
         // reads `oFr` rather than `org.frame`.
         let oFr = org.frame, gone = 0;
         if (org.shed) {
-          const ff = fallenFrame(org, P.time, _shedFr);
-          if (!ff) continue;
-          oFr = ff; gone = ff.t;
+          // no fall state means it never had a blade to drop
+          if (!org.fall || org.fall.done) continue;
+          oFr = fallFrame(org.fall, org.fallFrom, org.fallAxis, _shedFr);
+          gone = oFr.t;
         }
         // Occlusion clearing, with hysteresis.
         //
@@ -1062,7 +1024,7 @@ export class App {
         // open, which is also why it curls (below). Small: this is the tissue
         // contracting, not the leaf being scaled away, and scaling it away is
         // the cheat that would make the fall read as a dissolve.
-        const bl = org.len * 0.80 * (1 - sen * 0.12);
+        const bl = drawnBladeLen(org.len, sen);
         if (bl < 0.02) continue;
         const bp = org.petal ? this.petalPal
           : org.floral ? this.innerPals[clamp(

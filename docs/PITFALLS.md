@@ -254,6 +254,77 @@ of an empty shot. The framing was wrong long before anything could show it.
 **When you add the first mechanism that removes something, re-read
 every loop that walks the collection it came out of.**
 
+## Physics borrowed from a paper
+
+**Sign conventions do not travel; behaviours do.** The added-mass (Munk) torque in
+the falling-plate model must turn a plate *broadside* to its own motion — that is
+why a dropped card falls flat. Written with the sign as it appears in one write-up,
+plates settled **edge-on and knifed down at twice terminal velocity.** Different
+presentations of the same model use different frames, so the sign you copy may be
+right for a frame you are not in. **Validate against a behaviour everybody has
+seen** rather than against the page. On screen this would have looked like "the fall
+needs tuning".
+
+**Reduced-order models have a dimensionality, and yours is probably not 2D.** The
+plate model solves a cross-section, i.e. an infinitely long plate. A leaf is a stub.
+Uncorrected, that over-predicts lift by roughly 2x and produced motion whose first
+review was "way too flappy spinny". The finite-span correction `AR/(AR+2)` is one
+line. Ask what the borrowed model assumes about the dimension you are not solving.
+
+**Check whether two coefficients are actually one.** `cRot` (rotational damping) and
+`cPerp` (broadside drag) are the same normal-force drag coefficient, one integrated
+over a rotating chord and one uniform. Treating them as independent and inventing
+0.90 for the first silently halved the damping and survived several revisions,
+because a wrong-but-plausible coefficient does not announce itself the way a wrong
+sign does.
+
+**Simulate the object you draw.** `70_app.js` draws a blade at 0.80 of its organ's
+length and shrinks it a further 12% as it dries. The fall was computed from the
+organ length, making every plate 1.4x too big and pushing the whole population
+toward fluttering. The factor now lives in exactly one place (`39_fall.js`) and both
+the picture and the physics read it. **If a renderer scales something, the physics
+about that something has to use the same scale.**
+
+**Classify a trajectory by the thing that actually distinguishes it.** Two attempts
+at naming flutter-vs-tumble were wrong before the third worked: *net* rotation calls
+a plate that went round and came back "barely rotating", and *amplitude* calls a
+14-degree transient "flutter". The discriminator is whether the pitch angle is
+bounded — the fraction of travelled rotation that ended up as net rotation.
+
+**Do not assert a monotonicity the literature does not claim.** The regime sweep
+demanded a clean ordering in I* and failed on rows in the middle that flipped label
+between adjacent chords. That is the *chaotic band* the papers put between flutter
+and tumble; a single run inside it is genuinely unclassifiable. The check now tests
+the ends and allows chaos between them. **When a physics check fails in the middle
+of a range, ask whether the middle is supposed to be clean.**
+
+## Simulation that rides inside the frame loop
+
+**Step it in plant time, not frame time.** The fall integration was first written
+into `buildScene()`, which runs once per frame — so the speed of a falling leaf
+depended on the machine and ignored the time slider. It belongs in `Plant.step`,
+which is advanced a bounded number of times per frame from an accumulator
+(`70_app.js:743`). Anything that is *simulation* has to go there; only reading goes
+in the scene builder.
+
+**A stiff sub-system needs its own step size.** Flutter is an order of magnitude
+stiffer than the growth loop it rides inside, and tumbling is stiffer again. At six
+sub-steps per plant-time unit mid-range plates ran away to **1e124 within a hundred
+units.** The sub-step is now set from the plate's current spin, with a hard ceiling
+so an unforeseen state cannot take the frame with it.
+
+**A shed organ must stop reading its live frame.** The axis keeps swaying after the
+leaf has gone; a falling blade that reads `org.frame` is hinged to a stem it has
+left. Snapshot the frame at abscission.
+
+**A fade budget calibrated against a constant breaks when the constant becomes a
+variable.** The old fade ran over a fixed 620 plant-time units from letting go,
+which was safe only because descent speed was fixed — it always covered the same
+distance in that time. Once falls varied nearly tenfold, blades were half
+transparent before they were halfway down and **vanished in mid-air; 36 of 96
+reached the ground.** The fade now keys off landing. Look for this wherever a
+duration was tuned against something that has since become emergent.
+
 ## Process
 
 **Script edits fail silently.** A Python `str.replace` that matches nothing returns

@@ -55,6 +55,7 @@ node test/focus.mjs '[{"tag":"a"}]'                # meristem probe: divergence,
 node test/ring.mjs                                 # T/D/geometry map on STATIC tissue, checked for stationarity
 node test/shoot.mjs                                # senescence: does the specimen finish, and in what order
 node test/senesce.mjs                              # senescence, drawn: does a dying blade change, and do the veins go last
+node test/fall.mjs                                 # a shed blade: is the fall a falling plate, and do real blades differ
 ```
 
 Two more are **archived experiments**, not live checks. They are the code that
@@ -84,6 +85,13 @@ knob still moves the number before trusting the table.
 **Always test the science headlessly before touching the renderer.** A visual bug
 and a simulation bug look identical on screen, and the headless harnesses give you
 numbers in seconds instead of minutes.
+
+`test/fall.mjs` is the one harness here that can **fail on the physics rather than
+report on it**. Its first section sweeps the dimensionless moment of inertia and
+asserts the published ordering — flutter at low `I*`, tumble at high, chaos allowed
+in between — because if that ordering does not hold, `39_fall.js` is not a falling
+plate and nothing else it prints means anything. The other two sections print and do
+not judge. The same validation runs inside `smoke.mjs`, so it gates.
 
 **The gate covers geometry as well as simulation now.** `smoke.mjs` imports
 `50_geom.js` and asserts that a senescing blade is drawn differently from a live
@@ -144,6 +152,7 @@ src/25_margin.js    leaf outline grown from margin convergence points
 src/30_leaf.js      blade: interior lattice, vein canalisation, bake
 src/35_fruit.js     ovary wall as icosphere shell; ovule placement, swelling, ripening wave
 src/38_shoot.js     FALSIFIED EXPERIMENT, ships disabled. Whole-plant auxin transport
+src/39_fall.js      a shed blade falling: quasi-steady plate aerodynamics
 src/40_plant.js     the organism: axes, elongation, branching, florigen, fruit set, senescence
 src/50_geom.js      simulation state -> triangles, ribbons, points; senescence colour
 src/60_render.js    WebGL2: forward pass, sway, bloom, depth of field, grade
@@ -175,26 +184,55 @@ The stage bar along the bottom of the page tells you where a run has got to, and
 At default speed a Cathedral Fern reaches `senescing` around 19s and `spent`
 around 73s. The time slider goes to 4x.
 
+**A shed blade falls by aerodynamics, not by animation.** Four stated constants and
+a positional hash were replaced by an integrated quasi-steady plate
+(`39_fall.js`), and nothing about the fall is chosen — gravity, air and leaf mass
+per area are physical, and the two exchange rates needed to express them in world
+units were already fixed by things that shipped months ago. Which of flutter,
+tumble, chaos or glide a blade picks is selected by the width its own margin grew,
+so the blades on one specimen do not fall alike: all eight species show more than
+one regime among their own leaves. Blades also land now, which they could not
+before.
+
+**But the air only exists for blades that have let go, and that is the top of the
+roadmap.** Everything still attached is a rigid card in dead calm, and the stem's
+motion is a decorative vertex displacement in the shader (`SWAY` in `60_render.js`)
+that the simulation cannot see. So there are two unrelated models of the same air
+and abscission is the seam between them. The first person to watch it said so
+unprompted. Fixing it properly is ROADMAP 7, it is the route to deleting `droop`,
+and it shares its machinery with the phyllotaxis question — read that entry before
+touching either.
+
 ### Where the work goes next
 
 [docs/ROADMAP.md](docs/ROADMAP.md) is the ranked list and has the reasoning; the
 short version, in order:
 
-1. **The handover** — a new specimen germinating as the old one fades. The last
+1. **One air** — a real wind field the whole plant responds to, replacing the
+   shader's decorative sway, with attached blades loaded through the same plate
+   model the fall already uses. Fixes the discontinuity above, deletes `droop`,
+   and is shared infrastructure with 4. Days, not an afternoon — and it has a
+   stop condition written into ROADMAP 7 that is worth honouring.
+2. **The handover** — a new specimen germinating as the old one fades. The last
    piece of the cycle. `Plant.dead()` is the trigger and the camera director
-   already exists. It also owns an open question this branch left: the final
-   frame is a dim, small silhouette and the end of the film is not composed yet.
-2. **Petiole radius at flower scale** — an afternoon, with a clean repro shot.
-3. **The third phyllotaxis hypothesis** — the honest headline limitation, below.
+   already exists. It also owns an open question: the final frame is a dim, small
+   silhouette and the end of the film is not composed yet.
+3. **Petiole radius at flower scale** — an afternoon, with a clean repro shot.
+4. **The third phyllotaxis hypothesis** — the honest headline limitation, below.
    Pure science, and a negative result is as publishable as a positive one here.
-4. **Lamina tensioning its own margin** — real quality jump, real work.
+5. **Lamina tensioning its own margin** — real quality jump, real work.
 
-### Two live limitations, both with diagnoses rather than excuses
+### Three live limitations, all with diagnoses rather than excuses
 
 **Phyllotaxis is ordered but does not lock to the golden angle** — it wanders
 90–160°. Do not add a fudge factor to force 137.5°. Displaying the real measured
 number, spread and all, is the point. Two hypotheses have been tested and
 falsified; the third is ROADMAP 3.
+
+That limitation now has a sibling worth stating in the same breath: **the piece
+simulates air for a leaf that has let go and not for anything else.** Unlike the
+phyllotaxis one this is not a mystery — the fix is known, it is ranked first, and it
+pays for itself by removing an imposed constant.
 
 **Senescence is built and drawn, but it is split down the middle.** *When* a
 specimen senesces is emergent — `Plant.spent()`, a physical condition with nothing
