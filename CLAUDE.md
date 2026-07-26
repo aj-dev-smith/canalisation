@@ -50,6 +50,7 @@ node test/whorl.mjs                                # floral organ identity — d
 node test/flower.mjs                               # one isolated axis: florigen, floralCount, fruit set
 node test/focus.mjs '[{"tag":"a"}]'                # meristem probe: divergence, lock, primordium peak ratio
 node test/ring.mjs                                 # T/D/geometry map on STATIC tissue, checked for stationarity
+node test/shoot.mjs                                # senescence: does the specimen finish, and in what order
 ```
 
 Two more are **archived experiments**, not live checks. They are the code that
@@ -61,6 +62,13 @@ diagnostic:
 node test/inhib.mjs 0 1     # falsified: a second inhibitor with its own length scale
 node test/ring2.mjs 0 1     # falsified: confining initiation to a thin generative ring
 ```
+
+`test/shoot.mjs` is both at once. It checks the shipped senescence, and it also
+reproduces a falsified hypothesis — abscission driven by auxin transport — by
+switching the whole-plant stream on (`shootOpts.enabled`, off everywhere else).
+The stream in `src/38_shoot.js` ships disabled for the same reason `rhoI: 0` keeps
+the dead second inhibitor in `10_auxin.js`: **a negative result you cannot
+re-measure is just a story.** Nothing in the running piece reads it.
 
 Both take `<shard> <nshard>` so a long sweep can be split across processes.
 

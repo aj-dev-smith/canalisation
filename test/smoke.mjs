@@ -137,6 +137,27 @@ section('plant life cycle');
   for (const a of P.axes) {
     if (!Number.isFinite(a.length)) { ok(false, 'axis lengths are finite', `${a.length}`); break; }
   }
+
+  // --- senescence: does the specimen FINISH? -------------------------------
+  // Structural only. That a plant which has run out of growing points then
+  // dismantles itself is an invariant; how fast, in what order, and how much of
+  // it completes inside the step budget are not, and are not asserted.
+  let spentAt = null, sen = 0, wentBackwards = false;
+  for (let s = 5001; s <= 20000; s++) {
+    P.step(1);
+    if (spentAt === null && P.spent()) spentAt = s;
+    const v = P.senescence();
+    if (v < sen - 1e-6) wentBackwards = true;
+    sen = v;
+    if (P.dead()) break;
+  }
+  ok(spentAt !== null, 'every growing point was eventually spent', `at step ${spentAt}`);
+  ok(Number.isFinite(sen) && sen >= 0 && sen <= 1, 'senescence is a finite fraction', sen);
+  ok(sen > 0, 'a spent specimen begins to senesce', `senescence=${sen.toFixed(2)}`);
+  ok(!wentBackwards, 'senescence never runs backwards');
+  const shed = P.axes.reduce((n, a) => n + a.organs.filter(o => o.shed).length, 0);
+  ok(shed > 0, 'blades were shed', `${shed} of ${P.vegOrganCount()}`);
+  ok(['senescing', 'dead'].includes(P.stage()), 'stage reaches senescing or dead', P.stage());
 }
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@
 import { Meristem } from './20_meristem.js';
 import { Leaf } from './30_leaf.js';
 import { Fruit } from './35_fruit.js';
+import { Vasculature } from './38_shoot.js';
 import {
   v3, v3set, v3copy, v3add, v3sub, v3scale, v3addScaled, v3dot, v3cross,
   v3norm, v3len, v3lerp, v3rotAxis, TAU, clamp, lerp, smoothstep, mulberry32,
@@ -64,6 +65,7 @@ class Axis {
     this.meristem.lastAngle = null;
     this.age = 0;
     this.lastOrganLen = -1e9;
+    this.lastOrganAt = 0;
     this.florigen = 0;
     this.floral = false;
     this.fruit = null;
@@ -147,7 +149,8 @@ class Axis {
     // arrests. The specimen finishes instead of growing off the top of the
     // frame forever — and the meristem stops costing anything.
     const budgetLeft = sp.organBudget - this.plant.vegOrganCount();
-    if ((!this.floral && (this.organs.length >= sp.maxOrgans || budgetLeft <= 0))) {
+    if ((!this.floral && (this.organs.length >= sp.maxOrgans || budgetLeft <= 0
+      || this.apexStalled(sp)))) {
       this.alive = false; this.arrested = true;
       this.retireMeristem();  // an arrested shoot has no growing point to pay for
     }
@@ -201,7 +204,7 @@ class Axis {
         // competent plant → this bud makes a flower rather than a branch
         const flowering = this.plant.florigen > sp.florigenThresh;
         if (flowering && this.plant.flowerCount() >= sp.maxFlowers) break;
-        const ax = this.plant.addAxis(org.frame.o, dir, this.gen + 1);
+        const ax = this.plant.addAxis(org.frame.o, dir, this.gen + 1, org.vStem);
         if (flowering) ax.goFloral(sp, true);
         break;
       }
@@ -249,6 +252,26 @@ class Axis {
   // ends, and it needs both — measured, because the geometric one alone misses
   // half of them: an apex can stall with 40–70 cells still in the dome, having
   // simply lost the room to sharpen another maximum.
+  // The vegetative twin of `apexSpent`, and it exists for the same reason: a
+  // shoot arrests on `maxOrgans` or the plant's organ budget, and **a count can
+  // only terminate a process that reliably reaches the count.** A lateral that
+  // elongates too slowly to clear `minInternode` throws away every primordium
+  // its meristem emits, so it sits on one or two organs, never reaches either
+  // ceiling, and never converts — only `gen === 0` answers florigen. Measured on
+  // Hoarfrost Thicket: one shoot of nine stuck at a single organ, still holding a
+  // meristem after 30000 steps.
+  //
+  // Harmless until senescence, which is why it survived this long — it read as a
+  // slightly odd twig. But `Plant.spent()` is an AND over every growing point, so
+  // one stalled shoot froze the entire organism's life cycle and the specimen
+  // could never finish. A whole-plant condition turns any per-axis leak fatal.
+  //
+  // Same shape of rule as `floralGrace` and the meristem's `spotGrace`: how you
+  // notice something has stopped, not a statement about what it should be.
+  apexStalled(sp) {
+    return this.age - this.lastOrganAt > sp.vegGrace;
+  }
+
   apexSpent(sp) {
     const m = this.meristem;
     if (!m) return true;
@@ -299,6 +322,7 @@ class Axis {
     org.lift = (org.rnd() - 0.5) * 0.22;
     org.leafAt = 0;
     org.birthLen = this.length;
+    this.lastOrganAt = this.age;
     if (this.floral) {
       this.floralCount++;
       // identity read off the radius the organ was founded at: the floral
@@ -319,6 +343,8 @@ class Axis {
       this.consumeApex();
     }
     this.organs.push(org);
+    // give it a place in the transport stream; from here it has to hold it
+    this.plant.vasc.addOrgan(this, org);
   }
 
   // A shoot does not only grow at its tip. The tissue just below the apex goes
@@ -563,6 +589,11 @@ export const SPECIES_DEFAULTS = {
   florigenThresh: 12,    // how much has to reach the tip before it converts
   floralOrgans: 9,      // ceiling on floral organs; the apex usually stops first
   floralGrace: 320,     // idle steps before a floral apex counts as spent
+  // Idle steps before a VEGETATIVE apex counts as stalled. Chosen from measured
+  // gaps, not guessed: across all eight species the longest a healthy shoot ever
+  // went between founding organs is 500 steps, and the longest any new lateral
+  // took to found its first is 320. 1600 is 3.2x the worst real gap.
+  vegGrace: 1600,
   floralCZ: 0.42,       // how much of the central zone survives conversion
   fruitFlow: 0.0060,     // a swelling fruit is a huge sink; the stem answers
   fruitScale: 0.55,
@@ -594,6 +625,10 @@ export const SPECIES_DEFAULTS = {
   leafBudget: 60,
   leafLibrary: 5,
   leafOpts: {},
+  // How long the slowest blade on a finished specimen takes to let go. Only the
+  // rate is set here — whether it happens at all is `Plant.spent()`.
+  senesceFor: 2200,
+  shootOpts: {},     // per-species overrides on the transport stream (38_shoot)
   // per-species multipliers on the leaf margin's own chemistry (see LeafPool).
   // ay slenderness, g1/gExp how hard a convergence point pushes, D how far
   // apart those points can sit. Empty means "the generic leaf".
@@ -609,10 +644,17 @@ export class Plant {
     this.axes = [];
     this.time = 0;
     this.florigen = 0;
+    // one transport stream for the whole organism, built before the first shoot
+    // taps into it
+    this.vasc = new Vasculature(prm, this.sp.shootOpts || {});
     this.addAxis(v3(0, 0, 0), v3(0, 1, 0), 0);
   }
-  addAxis(base, dir, gen) {
+  // `parentNode` is the stem node of the organ this shoot came out of, so a
+  // branch joins the transport stream where it physically joins the plant.
+  // Undefined means the leader, which taps the root directly.
+  addAxis(base, dir, gen, parentNode) {
     const a = new Axis(this, base, dir, gen, (this.seed * 31 + this.axes.length * 6151) >>> 0);
+    a.vApex = this.vasc.startAxis(parentNode);
     this.axes.push(a);
     return a;
   }
@@ -625,6 +667,38 @@ export class Plant {
     return n;
   }
   flowerCount() { let n = 0; for (const a of this.axes) if (a.floral) n++; return n; }
+
+  // The organism has nothing left to build: every growing point has either
+  // arrested on its budget or spent itself into a flower, so there is no tissue
+  // anywhere still patterning. This is the same kind of statement as
+  // `apexSpent` — a physical condition, read off the plant, not a time. It is
+  // what senescence waits for, because a plant with a meristem left is still
+  // investing in itself and does not dismantle its leaves.
+  spent() {
+    for (const a of this.axes) if (a.meristem) return false;
+    return this.axes.length > 0;
+  }
+
+  // ...and nothing left to ripen or hold up. The end of one specimen.
+  dead() {
+    if (!this.spent()) return false;
+    for (const a of this.axes) {
+      if (a.fruit && !a.fruit.barren && !a.fruit.mature) return false;
+      for (const o of a.organs) if (!o.floral && !o.shed) return false;
+    }
+    return true;
+  }
+
+  // how far through dismantling itself the specimen is, for the display and for
+  // whatever decides to start the next one
+  senescence() {
+    let n = 0, s = 0;
+    for (const a of this.axes) for (const o of a.organs) {
+      if (o.floral) continue;
+      n++; s += o.shed ? 1 : (o.sen || 0);
+    }
+    return n ? s / n : 0;
+  }
 
   // cut the apex off and watch dominance lift
   prune() {
@@ -643,6 +717,50 @@ export class Plant {
       a.step(dt, this.sp);
       // the fruit runs faster than the shoot; there is a lot to resolve
       if (a.fruit) for (let k = 0; k < 3; k++) a.fruit.step(dt);
+    }
+    // the stream is stepped once the sources have moved, so it always sees the
+    // plant as it is this frame. Off by default — see 38_shoot.js.
+    if (this.vasc.o.enabled) this.vasc.step(this, dt);
+    this.senesceStep(dt);
+  }
+
+  // SENESCENCE
+  //
+  // Be plain about which half of this is emergent, because the interesting half
+  // is not the half that looks interesting.
+  //
+  // WHEN it starts is a physical state of the organism and nothing else: every
+  // growing point on the plant has either arrested on its budget or spent itself
+  // founding a flower, so there is no tissue anywhere still patterning. Nothing
+  // schedules that. It is downstream of how much leaf the plant managed to build,
+  // which set when it flowered, which set when its apices were consumed. A shoot
+  // that never flowers still gets there by arresting on its organ budget — the
+  // point is that both routes are conditions the plant reaches, not times.
+  //
+  // The ORDER is a wave up the plant, oldest tissue letting go first, and that
+  // is asserted here rather than derived. A whole-plant auxin transport network
+  // was built to derive it (38_shoot.js) and could not: its shed order correlates
+  // with age anywhere from -0.05 to 0.57 depending on the species, and with its
+  // age decline removed it cannot finish a plant at all. See JOURNAL.md.
+  // What that experiment did establish is that this is one of the places where
+  // the chemistry has nothing to say, so the honest thing is a stated rule rather
+  // than a stated rule wearing a transport model.
+  senesceStep(dt) {
+    // exactly one mechanism may own `sen`, or the falsified path cannot be
+    // measured against this one — they simply add, and both look like they work
+    if (this.vasc.o.enabled && this.vasc.o.senesceFromStream) return;
+    if (!this.spent()) return;
+    const sp = this.sp;
+    let oldest = 0;
+    for (const a of this.axes) for (const o of a.organs)
+      if (!o.floral && o.age > oldest) oldest = o.age;
+    if (oldest <= 0) return;
+    for (const a of this.axes) for (const o of a.organs) {
+      if (o.floral || o.shed) continue;
+      // squared, so the wave has a front instead of everything fading together
+      const rel = clamp(o.age / oldest, 0, 1);
+      o.sen = clamp((o.sen || 0) + dt * rel * rel / sp.senesceFor, 0, 1);
+      if (o.sen >= 1) { o.shed = true; o.shedAt = this.time; }
     }
   }
 
@@ -671,6 +789,8 @@ export class Plant {
   stage() {
     const fr = [];
     for (const a of this.axes) if (a.fruit && !a.fruit.barren) fr.push(a.fruit);
+    if (this.dead()) return 'dead';
+    if (this.senescence() > 0.04) return 'senescing';
     if (fr.length && fr.every(f => f.done)) return 'ripe';
     if (fr.some(f => f.phase === 'grow')) return 'fruiting';
     if (this.axes.some(a => a.floral)) return 'flowering';
