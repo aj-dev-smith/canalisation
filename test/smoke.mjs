@@ -18,6 +18,9 @@ import { Fruit } from '../src/35_fruit.js';
 import { Plant } from '../src/40_plant.js';
 import { DEFAULT_PRM } from '../src/10_auxin.js';
 import { MERISTEM_DEFAULTS } from '../src/20_meristem.js';
+import {
+  FALL_DEFAULTS, plateOf, fallState, fallStep, fallRegime, drawnBladeLen,
+} from '../src/39_fall.js';
 
 let failures = 0;
 let checks = 0;
@@ -227,6 +230,93 @@ section('senescence is drawn');
   for (let i = 0; i < live.length; i++) { glowLive += live[i][3]; glowDead += dead[i][3]; }
   ok(glowDead < glowLive * 0.05, 'dead tissue has stopped glowing',
     `${glowDead.toFixed(2)} against ${glowLive.toFixed(2)}`);
+}
+
+section('a shed blade falls like a plate');
+{
+  // WHAT IS AND IS NOT ASSERTED HERE. Consistent with the note at the top of this
+  // file, nothing below pins an emergent quantity: not a descent speed, not a
+  // drift, not which regime any particular blade picks. What is asserted is that
+  // the mechanism is a mechanism — that it is finite, that it terminates, and that
+  // the dimensionless moment of inertia actually SELECTS the behaviour rather than
+  // decorating it. That last one is the whole claim of 39_fall.js, and it is cheap
+  // to check, so it gates.
+
+  // A plate that cannot rotate at all is not a falling plate. Sweep the chord,
+  // which is the only way to move I* without touching anything else, and confirm
+  // the ends of the range do the two different things the literature says.
+  const drop = (plate, h) => {
+    const st = fallState(plate, h);
+    for (let i = 0; i < FALL_DEFAULTS.life; i++) {
+      fallStep(st, 1);
+      if (!Number.isFinite(st.y) || !Number.isFinite(st.th) || !Number.isFinite(st.s)) return null;
+      if (st.landed) break;
+    }
+    return st;
+  };
+  const bare = (c) => {
+    const p = plateOf(null, 1, 0, {});
+    const o = p.o, sg = p.sigma;
+    p.c = c; p.m = sg * c; p.I = p.m * c * c / 12;
+    p.m22 = 0.25 * Math.PI * o.rhoF * c * c;
+    p.Ia = Math.PI * o.rhoF * c * c * c * c / 128;
+    p.Istar = sg / (o.rhoF * c); p.skew = 0.05;
+    const AR = Math.max(0.05, 1 / c), arf = o.arCorrect ? AR / (AR + 2) : 1;
+    p.AR = AR; p.cT = o.cT * arf; p.cR = o.cR * arf;
+    return p;
+  };
+  const wide = [16.0, 12.0, 8.0].map(c => drop(bare(c), Infinity));
+  const narrow = [0.26, 0.18, 0.12].map(c => drop(bare(c), Infinity));
+  ok(wide.every(Boolean) && narrow.every(Boolean),
+    'the integrator stays finite across the whole range of chords');
+  if (wide.every(Boolean) && narrow.every(Boolean)) {
+    const wr = wide.map(fallRegime), nr = narrow.map(fallRegime);
+    ok(!wr.includes('tumble'), 'a broad plate does not tumble', wr.join(' '));
+    ok(nr.every(r => r === 'tumble'), 'a narrow plate does', nr.join(' '));
+  }
+
+  // The fall has to be worth its cost: if every blade a real specimen grows lands
+  // on the same behaviour, this is an expensive way to have one constant.
+  const P = new Plant(DEFAULT_PRM, MERISTEM_DEFAULTS, undefined, 21);
+  for (let i = 0; i < 5200; i++) P.step(1);
+  const organs = P.axes.flatMap(a => a.organs).filter(o => !o.floral && o.leaf && o.len > 0);
+  ok(organs.length > 0, 'the specimen grew blades that could fall', `${organs.length}`);
+
+  let baseY = Infinity;
+  for (const o of organs) if (o.frame.o[1] < baseY) baseY = o.frame.o[1];
+  const seen = {};
+  let landed = 0, bad = 0;
+  for (const o of organs) {
+    const h = Math.max(0.2, o.frame.o[1] - baseY);
+    const st = drop(plateOf(o.leaf, drawnBladeLen(o.len, 1), 1, undefined), h);
+    if (!st) { bad++; continue; }
+    if (st.landed) landed++;
+    const r = fallRegime(st);
+    seen[r] = (seen[r] || 0) + 1;
+  }
+  ok(bad === 0, 'every real blade integrates to a finite trajectory', `${bad} bad`);
+  ok(Object.keys(seen).length > 1,
+    'real blades do not all fall the same way',
+    Object.entries(seen).map(([k, v]) => `${k}:${v}`).join(' '));
+  ok(landed > organs.length * 0.4, 'most blades reach the ground before they fade',
+    `${landed} of ${organs.length}`);
+
+  // And the handover: a plant that has started shedding has handed its blades to
+  // the aerodynamics. This is the wiring check — the gate cannot see the scene, but
+  // it can see that `Plant` starts and steps a fall, because the first version of
+  // this stepped it in the renderer and it ran at frame rate instead of plant time.
+  // 8000 rather than 6000: the DEFAULT parameter set is slower through the arc than
+  // any of the species presets and does not shed its first blade until about 7000.
+  const Q = new Plant(DEFAULT_PRM, MERISTEM_DEFAULTS, undefined, 21);
+  for (let i = 0; i < 8000; i++) Q.step(1);
+  const shed = Q.axes.flatMap(a => a.organs).filter(o => o.shed && o.leaf);
+  ok(shed.length > 0, 'the specimen got far enough to shed something', `${shed.length}`);
+  ok(shed.every(o => o.fall), 'every shed blade was handed to the aerodynamics');
+  ok(shed.some(o => o.fall && o.fall.t > 0), 'and the plant is stepping those falls');
+  ok(shed.every(o => o.fall && Number.isFinite(o.fall.y) && Number.isFinite(o.fall.th)),
+    'with finite state throughout');
+  ok(shed.every(o => o.fallFrom && o.fallAxis),
+    'and each kept the frame it let go from');
 }
 
 // ---------------------------------------------------------------------------

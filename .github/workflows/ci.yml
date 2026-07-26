@@ -66,3 +66,8 @@ jobs:
         run: node test/margin.mjs
       - name: Fruit
         run: node test/fruit.mjs
+      # The sweep in this one CAN fail — it asserts that the falling-plate model
+      # actually selects a regime. It also runs inside smoke.mjs, which does gate;
+      # it is here so the numbers land in the PR log next to the others.
+      - name: Falling blade
+        run: node test/fall.mjs sweep

@@ -10,6 +10,7 @@ import { Meristem } from './20_meristem.js';
 import { Leaf } from './30_leaf.js';
 import { Fruit } from './35_fruit.js';
 import { Vasculature } from './38_shoot.js';
+import { plateOf, fallState, fallStep, fallAxis, drawnBladeLen } from './39_fall.js';
 import {
   v3, v3set, v3copy, v3add, v3sub, v3scale, v3addScaled, v3dot, v3cross,
   v3norm, v3len, v3lerp, v3rotAxis, TAU, clamp, lerp, smoothstep, mulberry32,
@@ -722,6 +723,48 @@ export class Plant {
     // plant as it is this frame. Off by default — see 38_shoot.js.
     if (this.vasc.o.enabled) this.vasc.step(this, dt);
     this.senesceStep(dt);
+    this.stepFalls(dt);
+  }
+
+  // A blade lets go: hand it to the aerodynamics in 39_fall.js.
+  //
+  // Everything the fall needs is already known about this organ, which is why this
+  // is short. The plate comes from the silhouette the margin grew and how far the
+  // blade had drained; the plane it falls in is the direction it was pointing, which
+  // phyllotaxis set; and the distance it has to travel is its own height above the
+  // base of the plant. Nothing here is chosen and nothing is hashed.
+  startFall(o) {
+    if (!o.leaf) return;                          // never got a blade to fall
+    const groundY = this.main.pts[0][1];
+    // the DRAWN length, not the organ's — see 39_fall.js
+    const plate = plateOf(o.leaf, drawnBladeLen(o.len, o.sen || 1), o.sen || 1,
+                          this.sp.fallOpts);
+    o.fall = fallState(plate, Math.max(0.05, o.frame.o[1] - groundY));
+    o.fallAxis = fallAxis(o.frame, v3());
+    // The frame is snapshotted because the axis keeps moving after the blade has
+    // gone — it still sways, and a shed organ that kept reading its live frame was
+    // hanging off a stem it was no longer attached to.
+    o.fallFrom = {
+      o: v3(o.frame.o[0], o.frame.o[1], o.frame.o[2]),
+      x: v3(o.frame.x[0], o.frame.x[1], o.frame.x[2]),
+      y: v3(o.frame.y[0], o.frame.y[1], o.frame.y[2]),
+      z: v3(o.frame.z[0], o.frame.z[1], o.frame.z[2]),
+    };
+  }
+
+  // Advance every blade still in the air. This lives in `Plant.step` rather than in
+  // the renderer on purpose: a fall is simulation, so it runs on plant time and
+  // answers to the time slider like everything else. Stepping it in `buildScene`
+  // instead would have tied the speed of the fall to the frame rate.
+  stepFalls(dt) {
+    for (const a of this.axes) for (const o of a.organs) {
+      if (!o.fall || o.fall.done) continue;
+      fallStep(o.fall, dt);
+      const fo = o.fall.plate.o;
+      // done once it has faded where it landed, or once the backstop runs out
+      if (o.fall.t > fo.life ||
+          (o.fall.landed && o.fall.t - o.fall.tLand > fo.settle)) o.fall.done = 1;
+    }
   }
 
   // SENESCENCE
@@ -764,7 +807,7 @@ export class Plant {
       // squared, so the wave has a front instead of everything fading together
       const rel = clamp(o.age / oldest, 0, 1);
       o.sen = clamp((o.sen || 0) + dt * rel * rel / sp.senesceFor, 0, 1);
-      if (o.sen >= 1) { o.shed = true; o.shedAt = this.time; }
+      if (o.sen >= 1) { o.shed = true; o.shedAt = this.time; this.startFall(o); }
     }
   }
 

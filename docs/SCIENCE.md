@@ -85,6 +85,17 @@ Nobody wrote any of these numbers:
   either arrested on its budget or consumed itself founding a flower, so nothing
   anywhere is still patterning. Downstream of how much leaf it built, which set
   when it flowered, which set when its apices were spent
+- **How a shed blade falls.** Not the fact that it falls — that is gravity — but
+  everything about the way it comes down: whether it flutters, tumbles, or settles
+  into a glide, how fast, how far sideways, and which way it turns. A falling plate
+  picks one of those behaviours according to a dimensionless moment of inertia, and
+  for a leaf that number is set by the width of the silhouette its own margin grew.
+  So the blades on one specimen do not fall alike, and nothing chose which of them
+  does what. Which way a blade turns comes from the same place: the two halves of a
+  margin pattern independently and do not come out equal, and that asymmetry is the
+  off-centre pressure that breaks the symmetry of the fall. The plane it falls in is
+  the direction the leaf was pointing, which phyllotaxis set. See `39_fall.js`,
+  measured in `test/fall.mjs`
 - The pattern a dying blade drains in. Tissue next to a vein is held longest, and
   *what counts as next to a vein* is the distance field of a network that
   canalised itself — so the green-island tracery on a senescing leaf is that
@@ -123,13 +134,34 @@ Keep this list short. Every entry is a debt.
    nitrogen leaves, so it works until the withdrawal is over — but it is asserted,
    not derived. One number, and it is only a lag: **what** is spared is the
    distance field of a vein network that canalised itself, so the pattern on a
-   dying leaf is not drawn any more than the network was. The falling itself, and
-   the colour the dead tissue goes, are presentation in the same category as the
-   sway — see JOURNAL.md.
+   dying leaf is not drawn any more than the network was. The colour the dead tissue
+   goes is presentation, in the same category as the sway — though it is derived
+   from each species' own palette rather than painted per species.
+
+   **The falling used to be listed here and is not any more.** It was four stated
+   constants and a hash; it is now integrated aerodynamics whose every input is
+   either physics, air, or something the margin grew. That is a debt paid off rather
+   than a new one — see the 2026-07-26 JOURNAL entry, and the honest limitation it
+   left behind, below.
 
 Not simulated at all: pollination (parthenocarpy is real — auxin alone sets fruit),
-turgor and wall mechanics, light, nutrients.
+turgor and wall mechanics, light, nutrients, and — newly conspicuous — **air.**
 
-Light is the interesting absence now. It is the resource leaves actually compete
+Air is conspicuous because half of it now exists. A blade that has let go is a
+properly loaded aerodynamic body; a blade still attached is a rigid card in dead
+calm, and the stem it hangs from moves to a decorative vertex displacement in the
+shader that the simulation cannot see (`SWAY` in `60_render.js`). So the piece has
+two unrelated models of the same air, and the moment of abscission is a
+discontinuity between them: nothing establishes that the scene has air in it until
+a leaf needs some. The first person to watch it said so unprompted, and they were
+describing this. It is the top of the ROADMAP now.
+
+Note which direction that debt runs. Wind and gravity are *environment*, not shape,
+so responding to them is not an imposition in the sense this list means — and the
+force balance that would make an attached blade hang correctly under its own weight
+is the one thing that could delete `droop`, which is currently eight stated numbers
+in the species table.
+
+Light is the other interesting absence. It is the resource leaves actually compete
 for, and shading is what orders senescence in a real canopy — the one honest route
 to deriving imposition 6 away.
