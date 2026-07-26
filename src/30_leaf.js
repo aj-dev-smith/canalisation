@@ -50,6 +50,11 @@ export class Leaf {
     this.o = { ...LEAF_DEFAULTS, ...opts };
     // the blade runs both polarisation modes; that is the whole point
     this.prm = { ...prm, rho: 0, mu: 0 };
+    // Kept so this leaf can be grown again. `(prm, o, seed)` reproduces a blade
+    // exactly — same lattice, same sources, same vein network down to the last
+    // segment — which is what lets the close-up replay a leaf's own
+    // canalisation slowly enough to watch. `test/lamina.mjs` asserts it.
+    this.seed = seed;
     this.rnd = mulberry32(seed);
     this.age = 0;
     this.scale = 0.06;      // blades start tiny and expand

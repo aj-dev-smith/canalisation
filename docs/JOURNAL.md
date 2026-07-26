@@ -324,6 +324,127 @@ implied. In 39 of 39 flowers the petals reach full development **before** the sh
 is first drawn, by 21-504 steps (median ~154). It is short, not absent — about a
 second of wall time at 4x, which is why polling from outside the page steps over it.
 
+## The other half of the claim: a blade at cell resolution (2026-07-25)
+
+ROADMAP 2. The meristem close-up shows needles **converging**, and that
+convergence is a leaf. The blade was supposed to show the same needles falling
+into **line**, and that line being a vein — the argument that both organs are one
+solver on different geometry. It had never been drawn.
+
+### The display channel does not transfer
+
+The obvious move is to point `meristemDome()`'s drawing language at the leaf's
+cell field. Measuring first (`test/lamina.mjs`) said that would have produced a
+blank-looking leaf. Needle length on the meristem is `|polarity|`, and on the
+blade polarity is **constant**: 0.966 on a vein, 0.957 between veins, 1.01x, on
+all three seeds tried. Every cell in a blade is fully polarised, because the
+competence gate that blurs the meristem's central zone has no counterpart there.
+
+The channel that does separate is traffic — flux 11.4 against 4.0, 2.9x, and
+4.9x and 3.2x on the other two seeds. That is not a fudge: traffic is what
+canalisation selects for, and it is the quantity `bake()` already keeps a vein
+by. Needle *direction* still comes from the PIN allocation exactly as on the
+meristem, and it is worth having: a needle sits at 0.85-0.88 |cos| to its own
+vein, against 0.5 for random. So the picture is honest — direction is the cell's
+decision, brightness is what that decision is carrying.
+
+Generalised into PITFALLS.md, because the same shape will recur: a mapping that
+is informative on one tissue can be a constant on another, and it fails silently
+by looking bland rather than by looking wrong.
+
+### Fork: adopt a canalising leaf, or replay one
+
+The thing worth watching is over almost before it starts. The library canalises a
+blade in ~900 steps at 60 steps a frame — fifteen frames, a quarter of a second —
+and then freezes it for the rest of the specimen's life. So there is essentially
+never a leaf on the plant caught in the act.
+
+**First attempt: let one organ adopt the leaf the library is currently growing**,
+so its vasculature would grow in place instead of arriving fully plumbed. It is a
+small change and it costs nothing, since the leaf is being simulated anyway. Then
+`test/species.mjs` came back byte-identical to `main`, which is the exact shape of
+the dead-sweep trap already in PITFALLS.md, so it got instrumented rather than
+believed. The path fired **once in 5000 steps**, and put an unbaked blade on
+screen for 15 of them. The reason is structural: once the library is full the pool
+stops growing leaves entirely, so the window only exists early, and an organ has to
+request a leaf during it. Reverted — a feature that fires 0.3% of the time is not
+a feature, and the fix for it (keep a leaf canalising for the specimen's whole
+life) changes what every specimen looks like and deserves its own argument.
+
+**What shipped: the close-up grows the blade again.** A leaf is reproducible from
+`(prm, opts, seed)` — same lattice, same sources, same vein network segment for
+segment, verified on three seeds and asserted in `test/lamina.mjs`. So the view
+re-runs the identical computation that produced the blade you are pointing at,
+slowly, and ends on exactly the vasculature that blade already has. Not a
+recording and not an approximation of one. It is reliable, it costs one leaf
+simulation only while someone is looking, and it leaves the plant untouched —
+`test/species.mjs` is identical to `main` and now *provably* so, which is the
+difference between that and the first attempt.
+
+### Three things were wrong once it was on screen
+
+None were simulation bugs and none were visible headlessly.
+
+1. **The camera never went there.** `takeOver()` sets `userDriving`, which locks
+   the auto-framer out, and the close-up buttons call it before switching mode. So
+   asking to go into the cells set the mode and guaranteed the camera would not
+   travel to it. This was true of the existing apex view too, and had been since
+   the manual-camera work.
+2. **The blade was seen edge-on**, putting 616 cells on one line. Read exactly
+   like the cells were being drawn in the wrong place. The camera now steers to
+   the organ's own normal.
+3. **The lamina outshone the tissue.** The blade is an opaque lit sheet and the
+   cells sit on it; at full strength the first capture showed a bright slab with a
+   row of lit cells around the margin, where the auxin sources are, and nothing in
+   between. Drawing correctly, invisible. The surface now fades as the cells come
+   up, and depth of field goes shallow so the blade behind stops competing.
+
+All three are in PITFALLS.md. The general lesson is narrower than "test visually":
+each of these produced a picture that looked like a *different* bug than it was,
+and the headless harness was green throughout.
+
+### And then everything snapped
+
+First review of the working view: "things seem to be snapping in and out of the
+scene." Tracing every frame across entering, holding and leaving the view found
+three separate causes, none of which had anything to do with the tissue.
+
+**The reveal was distance-driven, and blades are not meristems.** Copying the
+growing tip's "no mode to find, just come closer" idiom meant *every* blade near
+the lens refined its mesh and grew needles. Around the apex that is several at
+once, all sitting a hair from both the refinement threshold and the occlusion
+cull, flickering in and out together: **13k triangles to 40k and back, frame to
+frame, camera dead still.** The close-up now applies to the blade being
+inspected and nothing else. Distance still does the fading, so arriving still
+feels like arriving; it just no longer picks the subject.
+
+**Depth of field switched in one frame** — 5.09 to 0.45 going in, 1.12 to 7.45
+coming out. Eased.
+
+**The cull was binary against a moving subject.** The tip it measures from grows
+and circumnutates, so the sight line never settles and organs near the boundary
+crossed it repeatedly. Fading them was the obvious fix and is wrong — the forward
+pass writes depth, so a blade dimmed to black still hides what is behind it,
+which is the whole point of clearing it. Hysteresis instead.
+
+Also dropped: swapping the whole leaf over to the replay, which made the
+vasculature blink out when the replay took over and back when it finished. The
+veins now always come from the real leaf and only the cells and needles come from
+the replay. That removed a pop *and* reads better — the network being present
+throughout is what makes the needles legible as falling into it rather than
+merely milling about.
+
+```
+                            before   after
+p95 frame-to-frame dGeom     1482      336
+frames moving >3000 verts      36        7
+largest depth-of-field step  6.34     0.37
+```
+
+The two large frames that remain are entering and leaving the mode, which are
+cuts. Worth writing down that none of this was visible in a still capture — the
+three-frame `leaf_shot.mjs` triptych looked correct throughout.
+
 ## Design forks and why
 
 - **Cell-based CPU sim, not GPU.** The tissue divides and rewires its topology every

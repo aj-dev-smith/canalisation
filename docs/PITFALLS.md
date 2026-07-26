@@ -43,6 +43,19 @@ mapped to a visual channel, normalise against the subset.** Nothing looks broken
 when this happens — it just quietly looks bland, which is far harder to spot than
 a crash.
 
+**A visual channel that discriminates on one tissue can be flat on another.**
+The meristem close-up draws needle length from `|polarity|`, and it works: the
+competence gate keeps the central zone blurred, so an uncommitted cell genuinely
+has a short needle. Reusing that on the blade renders the lamina as one uniform
+lamp. The blade runs in flux mode with no competence gate, so *every* cell ends
+up essentially fully polarised — measured 0.966 on a vein against 0.957 between
+veins, a ratio of **1.01x**, on three seeds. The quantity that separates a vein
+from an areole there is traffic: 2.9-5.0x on the same cells. Nothing is broken in
+either case; the same channel is simply informative on one tissue and constant on
+the other. **Before reusing a display mapping on new tissue, measure its contrast
+on that tissue** — `test/lamina.mjs` does exactly this, and reports which of three
+candidate channels actually separates.
+
 **A primordium must stay a local MAXIMUM.** Model it as a strong decay sink and it
 becomes a pit; the up-the-gradient vectors around it then point *away*, and you get
 a ring of satellite maxima. How hard a maximum can drain is capped by what the
@@ -123,8 +136,60 @@ gains a point. This was most of the "jitter".
 
 **Lift veins off the blade along the normal** or they z-fight into speckle.
 
+**A reveal driven purely by distance does not survive many instances of the
+thing.** The growing-tip close-up has no mode to find: come close enough and the
+mechanism fades up. That works because there is one meristem and the camera is
+pointed at it. Blades are twenty to a hundred, several sit near the lens at once
+around the apex, and every one of them then refined its mesh and grew needles —
+which put them all a hair from both the refinement threshold and the occlusion
+cull, so they flickered in and out together. **13k triangles to 40k and back,
+frame to frame, with the camera dead still.** Distance can still do the fading;
+what it cannot do on its own is choose the subject. A microscope looks at one
+thing, and which thing has to be decided, not inferred from proximity.
+
+**An occlusion cull cannot be softened into a fade while the pass writes depth.**
+The obvious cure for organs blinking in and out is to dim them instead of
+dropping them — the blade already takes a `fade`. It does not work: the forward
+pass runs with `depthMask(true)`, so a blade faded to black still hides
+everything behind it, and hiding what is behind it is the entire job of the cull.
+What a binary test *can* be is **sticky**. The subject these are measured from is
+a growing, circumnutating tip, so the sight line moves even when the camera does
+not; organs near the boundary crossed it back and forth every few frames. With
+hysteresis — clearly inside to be dropped, clearly outside to return — a wobble
+at the boundary decides once instead of once per frame.
+
+**A full geometry buffer drops triangles silently.** `Buffers` returns early when
+a write would overrun, so saturation looks like a picture that is merely missing
+things, not like an error. Going into a blade at cell resolution on Sun Coral
+(104 organs) pinned **both** the triangle and the line buffers at exactly their
+caps, and what was being thrown away was the needles — the entire point of the
+view. The specimen alone was already at 86% of the old triangle buffer, so the
+margin had been thin for a while and nothing had said so. **`nTri` or `nLine`
+sitting on a suspiciously round number is the tell**: compare against
+`B.tri.length/10` and `B.line.length/7`, and if they match you are not looking at
+a busy frame, you are looking at a truncated one. Lines saturate first — every
+vein and every needle is a six-vertex camera-facing ribbon.
+
 **Measure fog from the subject, not the eye.** Fog tuned at 10 units dissolves the
 plant entirely once the camera sits at 30.
+
+**Asking to go somewhere is not driving the camera.** `userDriving` locks the
+auto-framer out so the wheel does not fight the director — correct, and it fixed a
+real bug. But the close-up buttons call `takeOver()` before switching mode, so
+"into the cells" set the mode and then guaranteed the camera would never travel to
+it. The mechanism faded up only if you also scrolled in by hand, which nobody
+does. A focus change now buys a short window (`focusFly`) in which the framer may
+still fly, and any touch of the camera spends it. **A flag that means "the human
+is steering" must not also swallow the human's explicit request to be taken
+somewhere.**
+
+**A flat subject needs the camera oriented to its normal, not to a fixed
+elevation.** The apex close-up looks down from `el = 0.78` and that is fine
+because a meristem is always roughly horizontal. A blade hangs at whatever its
+tilt, droop and roll produce, and a leaf seen edge-on projects its whole cell
+sheet onto a single line — the first captures showed a bare stalk with a row of
+lights along it and looked exactly like the cells were being drawn in the wrong
+place. They were in the right place; the camera was in the wrong one.
 
 **Additive passes need `blendFuncSeparate`** so they don't corrupt linear depth
 packed into the scene alpha (used by the depth-of-field pass).

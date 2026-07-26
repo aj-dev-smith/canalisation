@@ -28,4 +28,10 @@ inside **single** quotes, so it never interpolated.
 - `fruit_shot.mjs` — runs at speed until a fruit sets, then captures
 - `flower_shot.mjs out.png [species] [seed]` — catches the brief window where the
   flower is open and the ovary is not yet drawn, and frames it
+- `leaf_shot.mjs prefix [species] [seed]` — goes into a blade at cell resolution
+  and captures it three times while it canalises (`-early`, `-mid`, `-done`).
+  Picks its GL backend the same way `flower_shot.mjs` does. The needles falling
+  into line only read if the camera is square to the blade — a leaf seen edge-on
+  puts six hundred cells on one line and looks like an empty stalk, so check the
+  `-mid` frame before believing a "nothing is drawn" report
 - `sway.mjs` — pixel-diffs two frames to prove the sway field animates

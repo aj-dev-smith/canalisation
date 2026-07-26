@@ -8,11 +8,26 @@ last, blades releasing and drifting down) and give way to a new one germinating 
 the old fades. Turns it from a thing that finishes into an endless film. The camera
 director already exists and would shoot it.
 
-## 2. Cell-level view on a leaf
-The **look closer** treatment currently only exists on the meristem, where needles
-converge to make a leaf. The other half of the claim — the same needles falling
-into *line* to make a vein — has never been shown. This would complete the
-unification argument visually. Probably the highest ratio of insight to work left.
+## 2. Cell-level view on a leaf — DONE (2026-07-25)
+The **look closer** treatment now exists on the blade as well as the meristem, so
+both halves of the claim are visible: needles converging to make a leaf, and the
+same needles falling into line to make a vein. "into the cells" walks through
+both.
+
+Two things had to be true that were not. The meristem's display channel does not
+transfer — polarity is constant across a blade (1.01x vein against areole) and
+traffic is what separates (2.9-5.0x), so needle direction comes from PIN and
+brightness from flux. And canalisation is over in a quarter of a second, so the
+close-up regrows the blade from its seed, which reproduces it exactly. Details and
+the reverted first attempt in JOURNAL.md, constants in TUNING.md, three new
+rendering traps in PITFALLS.md.
+
+Follow-up worth doing, deliberately left out: **keep one leaf canalising for the
+whole life of a specimen.** The pool stops making leaves once the library is full,
+so after the first second every blade on the plant is frozen and the library never
+refreshes. Growing replacements continuously would give later organs different
+leaves from juvenile ones, which is botanically right — but it changes what every
+specimen looks like, so it wants its own branch and its own before/after.
 
 ## 3. Third phyllotaxis hypothesis
 A second length scale from structure rather than chemistry: two cell layers (L1

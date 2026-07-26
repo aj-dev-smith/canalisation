@@ -44,6 +44,7 @@ node test/margin.mjs                               # grow a leaf outline, ASCII 
 node test/fruit.mjs                                # grow fruits, ASCII radius map
 node test/flower2.mjs                              # full life cycle incl. axillary flowers
 node test/vein.mjs                                 # vein network + hierarchy ratios, ASCII
+node test/lamina.mjs                               # blade at cell resolution: is there contrast to draw?
 node test/species.mjs                              # grow every species, print what each one does
 node test/whorl.mjs                                # floral organ identity — does q span its range?
 node test/flower.mjs                               # one isolated axis: florigen, floralCount, fruit set
