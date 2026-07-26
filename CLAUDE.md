@@ -63,14 +63,14 @@ node test/inhib.mjs 0 1     # falsified: a second inhibitor with its own length 
 node test/ring2.mjs 0 1     # falsified: confining initiation to a thin generative ring
 ```
 
-`test/shoot.mjs` is both at once. It checks the shipped senescence, and it also
-reproduces a falsified hypothesis — abscission driven by auxin transport — by
+Both take `<shard> <nshard>` so a long sweep can be split across processes.
+
+`test/shoot.mjs` is both kinds at once. It checks the shipped senescence, and it
+also reproduces a falsified hypothesis — abscission driven by auxin transport — by
 switching the whole-plant stream on (`shootOpts.enabled`, off everywhere else).
 The stream in `src/38_shoot.js` ships disabled for the same reason `rhoI: 0` keeps
 the dead second inhibitor in `10_auxin.js`: **a negative result you cannot
 re-measure is just a story.** Nothing in the running piece reads it.
-
-Both take `<shard> <nshard>` so a long sweep can be split across processes.
 
 **A harness can outlive the parameters it sweeps.** `test/sweep.mjs` was removed
 because it swept two meristem options that no longer exist, so two thirds of its
@@ -80,6 +80,13 @@ knob still moves the number before trusting the table.
 **Always test the science headlessly before touching the renderer.** A visual bug
 and a simulation bug look identical on screen, and the headless harnesses give you
 numbers in seconds instead of minutes.
+
+When you *do* need pixels, `tools/` drives a real browser with Playwright and
+[tools/README.md](tools/README.md) lists each capture script. Read that file first —
+it documents which tools ask for the wrong GL backend and hand you a **black PNG
+while still reporting a full triangle count**, which is a failure that does not
+announce itself. None of them can judge performance or motion; use a real browser
+for both.
 
 ## Branching
 
@@ -117,7 +124,8 @@ src/20_meristem.js  growing tip: dividing cell sheet, organ initiation, divergen
 src/25_margin.js    leaf outline grown from margin convergence points
 src/30_leaf.js      blade: interior lattice, vein canalisation, bake
 src/35_fruit.js     ovary wall as icosphere shell; ovule placement, swelling, ripening wave
-src/40_plant.js     the organism: axes, internode elongation, branching, florigen, fruit set
+src/38_shoot.js     FALSIFIED EXPERIMENT, ships disabled. Whole-plant auxin transport
+src/40_plant.js     the organism: axes, elongation, branching, florigen, fruit set, senescence
 src/50_geom.js      simulation state -> triangles, ribbons, points
 src/60_render.js    WebGL2: forward pass, sway, bloom, depth of field, grade
 src/70_app.js       species presets, camera director, scene assembly
@@ -138,8 +146,19 @@ conditions. **When adding an organ, reach for that function before writing anyth
 
 ## The honest state of it
 
-It grows, flowers and fruits. Phyllotaxis is **ordered but does not lock to the
-golden angle** — it wanders 90–160°. That is a real limitation with a diagnosis,
-not a bug to be papered over; see [docs/JOURNAL.md](docs/JOURNAL.md). Do not add a
-fudge factor to force 137.5°. Displaying the real measured number, spread and all,
-is the point.
+It grows, flowers, fruits, and now **finishes** — a specimen runs out of growing
+points, dismantles its blades and reports `dead`. All eight species complete.
+
+Two live limitations, both with diagnoses rather than excuses:
+
+**Phyllotaxis is ordered but does not lock to the golden angle** — it wanders
+90–160°. Do not add a fudge factor to force 137.5°. Displaying the real measured
+number, spread and all, is the point.
+
+**Senescence is only half built, and the built half is split.** *When* a specimen
+senesces is emergent; *the order its blades go in* is imposed, and is SCIENCE.md
+item 6. Three separate attempts to derive that order from auxin transport were
+falsified — read the 2026-07-26 JOURNAL entry before reopening it, because the
+machinery is still in the tree and it is easy to mistake for live code. Nothing
+renders senescence at all yet: `org.sen` and `org.shed` are set and no geometry or
+shader reads them. That is the top of [docs/ROADMAP.md](docs/ROADMAP.md).

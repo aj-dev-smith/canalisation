@@ -1,6 +1,19 @@
 # Roadmap
 
-Ranked by what I would actually do next.
+Entries keep their original numbers as they are finished, and finished ones stay
+here for the reasoning they record — so **the section numbers are history, not
+priority.** The list below is the priority.
+
+**Start here, in this order:**
+
+1. **[#1, the visible half of senescence](#1-life-cycle-and-senescence--half-done-2026-07-26)** — the simulation
+   is done and nothing draws it. Best ratio of payoff to work in the file.
+2. **[#5, petiole radius at flower scale](#5-smaller-things)** — an afternoon, with a clear repro shot.
+3. **[#3, the third phyllotaxis hypothesis](#3-third-phyllotaxis-hypothesis)** — the honest headline limitation.
+   Pure science; a negative result is as publishable as a positive one here.
+4. **[#4, lamina tensioning its own margin](#4-lamina-pulls-on-its-own-margin)** — meaningful quality jump, meaningful work.
+
+#2 and #4b are **done**; their entries are kept for what they record.
 
 ## 1. Life cycle and senescence — HALF DONE (2026-07-26)
 The simulation half is in: a specimen now **finishes**. `Plant.spent()` is true when
@@ -9,7 +22,7 @@ blades in a wave from there, and `dead()`/`stage()` report the end. Cathedral Fe
 sheds 96 of 96 over ~4600 steps and reaches stage `dead`. The CI gate asserts a
 spent specimen senesces.
 
-Getting there falsified three hypotheses about deriving abscission from auxin
+Getting there falsified four hypotheses about deriving abscission from auxin
 transport, and the whole-plant stream that was built to test them is kept, off, in
 `38_shoot.js`. **Read the JOURNAL entry before reopening this** — the honest
 summary is that the *timing* of senescence is emergent and the *order* is imposed
@@ -87,6 +100,10 @@ too. Details in JOURNAL.md and TUNING.md.
 
 ## Known-good verification loop
 `node build.js` then open in a real browser (not headless — software rendering is
-~16fps and cannot judge motion). Let a specimen run all the way to ripe fruit and
-watch the camera work. That full-arc observation is the thing that was never
-possible in the original session.
+~16fps and cannot judge motion). Let a specimen run the whole arc — seed, leaves,
+flower, fruit, ripe, and now on through `senescing` to `spent` — and watch the
+camera work. The stage bar at the bottom tells you where it has got to.
+
+At the default speed a Cathedral Fern reaches `senescing` around 19s and `spent`
+around 73s; the time slider goes to 4x if you want it sooner. `tools/senesce_shot.mjs`
+does the same run headlessly and dumps the state at each mark.
