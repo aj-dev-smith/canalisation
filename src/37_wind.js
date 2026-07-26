@@ -9,8 +9,10 @@
 // `60_render.js` — three sines of position and wall-clock time evaluated in the
 // vertex shader, which the simulation could not see. So abscission was a
 // discontinuity between two airs, and the first person to watch it said so
-// unprompted. ROADMAP 7 is the fix, and its first step is this: the field, before
-// anything reads it.
+// unprompted. ROADMAP 7 is the fix, and its first step is this file: the field,
+// before anything read it. Attached blades read it now (`flapStep` in `39_fall.js`,
+// driven from `Plant.stepFlaps`); the stem does not yet, and `SWAY` is still what
+// visibly moves the scene.
 //
 // "DEFINED ONCE" IS THE WHOLE POINT, and it is the one claim here that cannot be
 // checked by looking at the screen. Two functions that resemble each other is
@@ -94,12 +96,28 @@ export function velToWorld(w) { return 1 / (w.unitM * w.ptPerSec); }
 export const WIND_DEFAULTS = {
   // --- the weather: the one number here that is a choice ---------------------
   //
-  // Mean wind speed in metres per second at `yRefM` above the ground. 1.2 m/s at a
-  // metre is the top of Beaufort 1 / bottom of 2 — "light air", the condition where
-  // leaves rustle and a stem moves without being thrashed. Set it to 0 for a dead
-  // calm and the whole field is identically zero, which is what `test/wind.mjs`
-  // checks: still air has to cost nothing and do nothing.
-  uRef: 1.2,
+  // Mean wind speed in metres per second at `yRefM` above the ground.
+  //
+  // THE BEAUFORT SCALE IS THE RIGHT PLACE TO GET THIS, and it is a nicer answer than
+  // "pick a number that looks good", because Beaufort's descriptions are *defined by
+  // what the wind does to plants*:
+  //
+  //   force 1, 0.3-1.5 m/s   smoke drifts; leaves do not move
+  //   force 2, 1.6-3.3       wind felt on the face; LEAVES RUSTLE
+  //   force 3, 3.4-5.4       LEAVES AND SMALL TWIGS IN CONSTANT MOTION
+  //   force 4, 5.5-7.9       dust and loose paper raised; small branches move
+  //
+  // This piece is about leaves and small twigs in constant motion, so it is standing
+  // in a force 3, and 4.0 m/s is the low-middle of that band. The measurements say the
+  // same thing quantitatively: the aerodynamic load is quadratic in speed, so an
+  // attached blade twists by fractions of a degree at 1.2 m/s and by several degrees
+  // at 4, and the pressure on a stem is eleven times higher. A first draft of this
+  // file shipped 1.2 — force 1, where by definition leaves do not move — and then
+  // reported that the mechanics was invisible. It was: correctly.
+  //
+  // Set it to 0 for a dead calm and the whole field is identically zero, which is what
+  // `test/wind.mjs` checks: still air has to cost nothing and do nothing.
+  uRef: 4.0,
   yRefM: 1.0,       // the height that speed is quoted at, metres. A plant's height.
 
   // --- the profile: the law of the wall -------------------------------------
@@ -241,10 +259,14 @@ export function windAt(out, f, x, y, z, t) {
 // told: the modes are fixed the moment the scene picks its weather, and a shader
 // recompile is the cheaper of the two ways to change the wind.
 //
-// `float32` is why this needs a tolerance rather than an equality when it is
-// checked against `windAt`: 9 significant figures go in and about 7 survive. The
-// measured agreement is in tools/wind_check.mjs and is better than 1e-5 of the mean
-// speed, which is four orders below anything that could be seen.
+// `float32` is why this needs a tolerance rather than an equality when it is checked
+// against `windAt`: 9 significant figures go in and about 7 survive. Measured on
+// ANGLE/Metal by tools/wind_check.mjs, the disagreement is 1.6e-5 of the mean wind
+// speed early in a run and 1.1e-4 late in one — it grows LINEARLY with plant time,
+// because a mode's phase is `om*t` and float32 holds it to a fixed fraction of its own
+// magnitude. Both are orders below anything that could be seen. If it ever matters,
+// the fix is to quantise the frequencies onto a common fundamental so the field is
+// exactly periodic and the shader can be handed `mod(t, T)`.
 function glf(x) {
   if (!Number.isFinite(x)) throw new Error('windGLSL: non-finite constant ' + x);
   let s = x.toPrecision(9);

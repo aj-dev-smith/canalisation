@@ -1051,3 +1051,121 @@ It does not survive turning the wind up. At `uRef: 6` the small eddies advect pa
 12-36 Hz and only 44% of the gust variance is still in band. A gale moves the plant
 *less* per unit of wind than it looks like it should — correct physics, and worth
 knowing before somebody reads a stiff-looking plant as a solver bug.
+
+## One air, step 2: the attached blade is loaded, and it barely moves (2026-07-26)
+
+Step 2 of ROADMAP 7 asked for attached blades loaded through the same plate model the
+fall already uses, rocking on a petiole with elastic restoring torque and damping. That
+is built, wired into `Plant.step`, and measured. **The mechanism is right and the motion
+is nearly invisible**, for a reason that is worth more than the mechanism.
+
+### What was built
+
+One degree of freedom per blade: the rock of the chord about the midrib, which is the
+same angle `org.roll` already turned and the same angle the fall integrates. Choosing
+that DOF rather than a more obvious one (the petiole bending, which is bigger) was
+deliberate — it is the only choice that makes abscission continuous without translating
+anything, which is step 4.
+
+Three torques, all the fall's, evaluated on the wind rather than on the blade's own
+velocity: the added-mass (Munk) couple that turns a plate's face into the flow, the
+normal force acting through a centre of area the margin put off the midrib, and
+rotational damping. Held by the petiole as a torsional spring, `k = GJ/L`, integrated
+over the real taper, off the pre-flight's one material constant.
+
+Asserted in `test/wind.mjs`: zero in still air; growing faster than linearly with wind
+speed (it is a load, and loads go as U²); larger for a bigger blade on the same stalk;
+bounded by the stop in a gale rather than diverging; and — the one that checks the sign
+of the Munk term the way the fall's was checked, by behaviour rather than by reading —
+a blade with its spring removed turns its face to the wind, wind-along-chord going from
+62% to 19%.
+
+### The finding: an order of magnitude in the petiole is four orders in the answer
+
+| | measured |
+|---|---|
+| petiole base radius | 7.4-8.2 mm, i.e. **0.14-0.27 of the blade's own chord** |
+| a real leaf | nearer 0.02 |
+| first torsional frequency | 374-4040 Hz |
+| rock at the shipped weather | 0.28° rms, 4.6° peak over 110 blades |
+
+The petiole is drawn at half the stem's radius at the node. Nobody derived that, and
+until now nothing depended on it — it was a tube in a picture. Torsional stiffness goes
+as the fourth power of the radius, so a stalk that is ten times too thick is ten
+thousand times too stiff, and the blade hanging off it is mechanically a rigid card
+being held by a rubber rod 8 mm through.
+
+**Do not fix this by softening `eModulus`.** 60 MPa is already a soft answer chosen
+because this plant's radii are stout — the pre-flight says so plainly, and reaching for
+it again would make a petiole out of jelly to compensate for a radius nobody defended.
+Three candidate ways out, with numbers, in preference order:
+
+1. **The petiole radius should come off the blade it carries, not off the stem.** This
+   is ROADMAP 5's existing complaint ("at flower scale the stalks are fat opaque tubes
+   and the petals read as blades bolted to scaffolding") arriving from a completely
+   different direction, which is usually a sign it is the real defect. The pipe model —
+   petiole conducting area proportional to the leaf area it supplies — is the same
+   Murray's-law reasoning the stem taper already uses, so it needs no new mechanism,
+   only a measured proportionality. At a plausible one it gives a 0.4-0.5 mm petiole
+   and about 2.5 Hz, which is plant-like. It also thins every stalk in the piece, which
+   is a visual change to every specimen and wants its own before/after.
+2. **The compliance that ought to dominate is the blade's own midrib, and it is
+   missing.** A rigid blade on a sprung petiole puts all the give in the stalk. In a
+   real leaf the lamina twists along its length, and the member that resists is the
+   midrib — which this project *canalises a width for*. Putting the midrib's torsion in
+   series with the petiole's, using the width the vein hierarchy grew, is the most
+   *interesting* fix by this project's standards: it makes the flap frequency emergent
+   from the vein network. Rough arithmetic says the midrib is some 600x more compliant
+   than the petiole, so it would dominate completely and give about 2° of rock. It is
+   also the most speculative, because a one-DOF rigid blade is a crude stand-in for a
+   lamina that twists progressively.
+3. **Accept it.** These are succulent-stemmed things with short fat stalks and small
+   blades, and such a plant's leaves genuinely do not rock much; the visible response
+   to wind was always going to be the stem (step 3) and the force-balance droop (7b).
+   This is the honest null option and it is not absurd — but it does leave step 2 as a
+   mechanism nobody can see.
+
+### And a weather that was wrong for a stated reason
+
+The field shipped at 1.2 m/s. Measuring the blade at 0.03° prompted the obvious
+question — is 1.2 m/s much wind? — and **the Beaufort scale answers it in terms of
+plants**: force 1 (0.3-1.5 m/s) is "leaves do not move"; force 2 is "leaves rustle";
+force 3 (3.4-5.4) is **"leaves and small twigs in constant motion"**. The piece is about
+leaves in constant motion, so it was standing in the one force where by definition
+nothing happens. It now stands in a force 3 at 4.0 m/s, which is a *cited* choice rather
+than a taste, and being quadratic in speed that is eleven times the pressure.
+
+That change alone took the peak rock from 0.45° to 4.6°. It also costs something worth
+recording: at 1.2 m/s all four gust modes sat in the 0.3-6 Hz band the stems will
+resonate in, and at 4.0 m/s it is 72% — Taylor scaling sweeps the small eddies past
+faster, so their forcing moves out of the range anything structural answers to.
+
+### The seam, measured — and it is not the rock (ROADMAP 7 step 4)
+
+`startFall` now hands the fall the attitude and the angular rate the blade already had
+instead of guessing both from the margin's asymmetry. The attitude is read off the drawn
+chord, which is what the viewer has been looking at; the rate carries over directly,
+reduced by the cosine of the blade's droop, because the fall pitches about the
+*levelled* long axis.
+
+Measured over 24 blades caught in the act of letting go:
+
+| | median | max |
+|---|---|---|
+| chord jump at release | 4.0° | 19.6° |
+| **long-axis jump at release** | **27.1°** | **44.3°** |
+
+The second row is a bug this branch found rather than caused, and it is much larger than
+anything the rock does. `fallFrame` draws a falling blade with its long axis
+**levelled** — `fallAxis` flattens it deliberately, because the 2D plate model requires
+gravity to lie in the pitch plane, which requires a horizontal pitch axis. So a blade
+hanging at 27° straightens out in the frame it detaches on. That is precisely the tell
+step 4 says must not exist: *you should not be able to tell from the motion which frame
+a blade detached on.*
+
+It is left in place rather than half-fixed, because the honest fix is a second rotational
+degree of freedom — the roll about the chord — integrated with the same coefficients in
+the perpendicular plane. Two coupled 2D solvers is a defensible reduction of a 3D
+problem and costs no new constants, and it would let a released blade level *over a
+timescale* instead of instantly, which is what a real one does. That is its own branch:
+it changes the drawn fall, which shipped, so it wants its own before/after.

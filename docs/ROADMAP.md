@@ -7,19 +7,21 @@ priority.** The list below is the priority.
 **Start here, in this order:**
 
 1. **[#7, one air, and a plant that responds to it](#7-one-air-and-a-plant-that-responds-to-it)** —
-   went to the top on 2026-07-26. A shed blade is now properly loaded aerodynamics
-   while everything still attached is a rigid card in dead calm, so abscission is a
-   discontinuity between two unrelated models of the same air. It is also the route
-   to deleting `droop` ([#7b](#7b-droop-as-a-force-balance)), and it shares its
-   machinery with #3 below. **Scoped, pre-flighted, and started** — the stem bends
-   for real, the stiffness stop-condition passes on one material constant, and step
-   1 (the field itself, `37_wind.js`) landed on 2026-07-26. **Start at step 2,
-   attached blades.**
-2. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
+   went to the top on 2026-07-26, and **steps 1, 2 and half of 4 have landed.** There
+   is one field now (`37_wind.js`), attached blades are loaded through the plate model
+   the fall uses, and a blade hands its attitude and rate to the fall instead of
+   guessing them. It is the route to deleting `droop`
+   ([#7b](#7b-droop-as-a-force-balance)) and shares machinery with #3 below.
+   **The next thing to do is #5, not step 3** — see below.
+2. **[#5, the petiole's radius](#5-smaller-things)** — was an afternoon's cosmetic fix
+   and is now the blocking item for #7. Step 2 measured an attached blade rocking by a
+   quarter of a degree because the petiole is drawn at half the *stem's* radius and
+   torsional stiffness goes as r⁴. Two independent routes arrived at the same defect,
+   which usually means it is the real one.
+3. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
    of the life cycle, and the only part of senescence still unbuilt. `dead()` is
    the trigger and the camera director already exists. It carries the ending as a
    *shot* too: a run currently tails off rather than finishing.
-3. **[#5, petiole radius at flower scale](#5-smaller-things)** — an afternoon, with a clear repro shot.
 4. **[#3, the third phyllotaxis hypothesis](#3-third-phyllotaxis-hypothesis)** — the honest headline limitation.
    Pure science; a negative result is as publishable as a positive one here. **Read
    #7 first**: its second candidate route is a mechanical-stress term, which is #7's
@@ -201,15 +203,44 @@ Do not start by writing a solver. In order, each step measurable before the next
    - **The smallest mode is 2 world units and up to 6 Hz.** Nothing filters that yet.
      The plant's own dynamics is the filter — that is the point of replacing `SWAY` —
      so do not smooth the field to make step 2 look calmer.
-2. **Attached blades.** Petiole as a damped torsional spring driven by the existing
-   plate model. A new harness — `test/wind.mjs` — should show blade response scaling
-   with gust strength and with the blade's own area, and going quiet in still air.
+2. **Done (2026-07-26), and it found the real obstacle.** Attached blades are loaded
+   through the plate model on a damped torsional petiole, stepped in `Plant.step`, and
+   `test/wind.mjs` asserts all three of the things asked for — response quadratic in
+   gust strength, larger for a bigger blade on the same stalk, exactly zero in still
+   air — plus stability in a gale and the sign of the added-mass couple.
+
+   **It is correct and nearly invisible: 0.28° rms, 4.6° peak.** Torsional stiffness
+   goes as r⁴ and the petiole is drawn at half the STEM's radius — 8 mm through, 0.14-0.27
+   of the blade's own chord where a real leaf is nearer 0.02 — giving 374-4040 Hz. So the
+   blade is a rigid card on a rubber rod. **Do not soften `eModulus` to compensate**;
+   that compensation was already spent once on the stem. Read the JOURNAL entry: it
+   ranks three ways out, and the first is #5's petiole radius, which arrived here from a
+   completely different direction and is now blocking rather than cosmetic.
+
+   Also: the weather was wrong for a *stated* reason. The field shipped at 1.2 m/s,
+   which the Beaufort scale defines as the force where "leaves do not move". It is now
+   4.0 — force 3, "leaves and small twigs in constant motion" — which is a cited choice
+   rather than a taste, and eleven times the pressure.
 3. **The stem.** Axes as damped cantilevers off `E` and `ax.radii`. Check measured
    frequencies against the table above; if they disagree, the solver is wrong, and
    that is a genuinely valuable check to have precomputed.
-4. **The seam.** Continuity of attitude and angular velocity at abscission. Assert
-   it: the angular velocity a blade starts its fall with must equal the one it had
-   while attached, to within a step.
+4. **Half done (2026-07-26), and the other half is a bug this found rather than
+   caused.** `startFall` now measures the attitude off the drawn chord and carries the
+   rock's rate over, reduced by the cosine of the blade's droop, instead of guessing
+   both off the margin's asymmetry. Measured over 24 blades caught letting go, the
+   chord jumps a median 4.0°.
+
+   But **the long axis jumps a median 27° and up to 44°**, because `fallFrame` draws a
+   falling blade with its long axis levelled — `fallAxis` flattens it deliberately,
+   since the 2D plate model needs gravity in the pitch plane and therefore a horizontal
+   pitch axis. A blade hanging at 27° straightens out on the frame it detaches on, which
+   is exactly the tell this step forbids.
+
+   The honest fix is a **second rotational degree of freedom** — roll about the chord,
+   integrated with the same coefficients in the perpendicular plane. Two coupled 2D
+   solvers is a defensible reduction of a 3D problem, costs no new constants, and lets a
+   released blade level over a *timescale* rather than instantly, which is what a real
+   one does. Own branch: it changes a fall that shipped.
 5. **Delete `SWAY`.** Only once 1–4 hold. Two air models is the bug; adding a third
    temporarily is fine, shipping two is not.
 
@@ -285,11 +316,21 @@ from slow patterning near the wavelength limit, so it takes a geometric conditio
 too. Details in JOURNAL.md and TUNING.md.
 
 ## 5. Smaller things
-- **Organ petioles dominate a flower close-up.** At flower scale the stalks are fat
-  opaque tubes and the petals read as blades bolted to scaffolding. Pre-existing and
-  unrelated to whorls, but the flower shot is where it shows — reproduce with
-  `node tools/flower_shot.mjs shots/f.png 'Sulphur Rosette' 424242`. Probably wants
-  petiole radius to scale with the organ it carries rather than with the stem.
+- **Organ petioles dominate a flower close-up — and this is no longer cosmetic.**
+  At flower scale the stalks are fat opaque tubes and the petals read as blades bolted
+  to scaffolding. Reproduce with
+  `node tools/flower_shot.mjs shots/f.png 'Sulphur Rosette' 424242`.
+
+  **ROADMAP 7 step 2 arrived at the same defect from the mechanics side and it is now
+  the blocking item there.** The radius is `0.5` of the stem's radius at the node, which
+  nobody derived, and torsional stiffness goes as r⁴ — so an attached blade sits on a
+  spring four orders of magnitude too stiff and rocks by a quarter of a degree. The fix
+  this entry already proposed is the right one: petiole radius from the organ it
+  carries, via the pipe model (conducting area proportional to the leaf area supplied),
+  which is the same Murray's-law reasoning the stem taper already uses. At a plausible
+  proportionality it gives a 0.4-0.5 mm petiole and about 2.5 Hz, which is plant-like.
+  It thins every stalk in the piece, so it wants its own branch and its own
+  before/after across all eight species.
 - Flowers do not announce themselves against heavy foliage; make them larger and open wider
 - Fruit is a little small against the plant (`fruitScale`)
 - Fenestrated species get blocky holes at low blade LOD

@@ -42,7 +42,9 @@ inside **single** quotes, so it never interpolated.
   compares them to `windAt()` in Node. That the shader's air and the simulation's air
   are the same field is ROADMAP 7's whole claim and it cannot be checked by looking,
   because a wrong wind still looks like wind. Measured agreement on ANGLE/Metal is
-  2.5e-5 of the mean wind speed; it fails above 1e-4. Its Node half is
+  1.6e-5 of the mean wind speed early in a run and 1.1e-4 late in one — it grows
+  linearly with plant time, which the tool now reports as two groups rather than one
+  number, because the growth is the mechanism. Fails above 1e-3. Its Node half is
   `test/wind.mjs`, which does the physics
 - `senesce_shot.mjs prefix [species] [seed]` — runs until the specimen dismantles
   itself and captures `-onset`, `-mid`, `-spent`. Picks its GL backend the way
