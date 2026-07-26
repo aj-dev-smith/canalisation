@@ -59,7 +59,12 @@ node test/fall.mjs                                 # a shed blade: is the fall a
 node test/wind.mjs '{"uRef":3}'                    # the wind field: profile, gusts, spectrum, divergence, GLSL round trip
 ```
 
-Two more are **archived experiments**, not live checks. They are the code that
+`test/fall.mjs` has a fourth section that is an archived experiment rather than a check:
+`node test/fall.mjs tilt` switches on `FALL_DEFAULTS.tiltPlane` — a second rotational
+plane for the falling blade, which closes the abscission seam exactly and then pumps
+itself end over end whenever the pitch tumbles. Ships off. Nothing reads it.
+
+Two more files are **archived experiments** in whole, not live checks. They are the code that
 produced the negative results in [docs/JOURNAL.md](docs/JOURNAL.md), kept so those
 results stay reproducible. Both still run; neither should be read as a current
 diagnostic:
