@@ -6,23 +6,16 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
-1. **[#7, one air, and a plant that responds to it](#7-one-air-and-a-plant-that-responds-to-it)** —
-   went to the top on 2026-07-26, and **steps 1, 2 and half of 4 have landed.** There
-   is one field now (`37_wind.js`), attached blades are loaded through the plate model
-   the fall uses, and a blade hands its attitude and rate to the fall instead of
-   guessing them. It is the route to deleting `droop`
-   ([#7b](#7b-droop-as-a-force-balance)) and shares machinery with #3 below.
-   **The next thing to do is #5, not step 3** — see below.
-2. **[#5, the petiole's radius](#5-smaller-things), together with
+1. **[#5, the petiole's radius](#5-smaller-things), together with
    [#7b](#7b-droop-as-a-force-balance)** — was an afternoon's cosmetic fix and is now the
-   blocking item for #7. Step 2 measured an attached blade rocking by a quarter of a
-   degree because the petiole is drawn at half the *stem's* radius and torsional
-   stiffness goes as r⁴; two independent routes arrived at the same defect, which
-   usually means it is the real one. **Pre-flighted (#5 below):** the pipe model puts
-   every species' flap at 6.3-9.5 Hz off one constant, but the twist then saturates
-   against its stop, and the degree of freedom that behaves is *bending* — which is 7b.
-   Do them together, or the radius change trades one stated constant for a leaf pinned
-   at a stop.
+   blocking item. An attached blade rocks by a quarter of a degree because the petiole is
+   drawn at half the *stem's* radius and torsional stiffness goes as r⁴; two independent
+   routes arrived at the same defect, which usually means it is the real one.
+   **Pre-flighted (#5 below):** the pipe model puts every species' flap at 6.3-9.5 Hz off
+   one constant, but the twist then saturates against its stop, and the degree of freedom
+   that behaves is *bending* — which is 7b. Do them together, or the radius change trades
+   one stated constant for a leaf pinned at a stop. It also **deletes an entry from
+   SCIENCE.md's imposed list**, which almost nothing else here does.
 3. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
    of the life cycle, and the only part of senescence still unbuilt. `dead()` is
    the trigger and the camera director already exists. It carries the ending as a
@@ -33,7 +26,8 @@ priority.** The list below is the priority.
    machinery, so the two are cheaper together than apart.
 5. **[#4, lamina tensioning its own margin](#4-lamina-pulls-on-its-own-margin)** — meaningful quality jump, meaningful work.
 
-#1, #2, #4b and #8 are **done**; their entries are kept for what they record.
+#1, #2, #4b, #7 (bar 7b) and #8 are **done**; their entries are kept for what they
+record.
 
 ## 1. Life cycle and senescence — DONE (2026-07-26)
 Both halves, simulated and drawn, in one day and two branches.
@@ -255,8 +249,12 @@ Do not start by writing a solver. In order, each step measurable before the next
    reproduce the validated 2D flutter/tumble ordering as its in-plane limit), or 7b: a
    derived droop hands this plane 5-13° instead of 27, and at tilts that size it never
    misbehaves. **Third independent argument for 7b.**
-5. **Delete `SWAY`.** Only once 1–4 hold. Two air models is the bug; adding a third
-   temporarily is fine, shipping two is not.
+5. **Done (2026-07-26).** `SWAY` is deleted. The geometry moves for real, so the vertex
+   shader has nothing to pretend about, and `pal.sway` is gone with it.
+
+   One number worth keeping: the hand-tuned displacement peaked at about 0.34 world units
+   at the top of a Cathedral Fern, and the physics, asked independently, says 0.30.
+   Whoever tuned that sine had a good eye.
 
 ### Decide this up front rather than discovering it in the docs
 

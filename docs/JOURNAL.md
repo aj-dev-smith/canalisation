@@ -1276,3 +1276,96 @@ flutter and tumble take them up. That is the expected direction and it is right:
 released exactly broadside can settle into a straight glide, and one released a few
 degrees off starts rocking immediately. Every species still shows more than one regime,
 which is #8's headline and the thing that had to survive.
+
+## One air, steps 3 and 5: the stem bends, and the fake sway is deleted (2026-07-26)
+
+The last two steps of ROADMAP 7, and the ones that make the branch visible. The axes are
+damped cantilevers loaded by the wind field and their own canopy, and `SWAY` — three
+sines of position and wall-clock time in the vertex shader — is gone. That was the last
+authored motion in the piece.
+
+### The pre-flight paid for itself
+
+The value of ROADMAP 7's step 0 was never the table; it was that the table existed
+*before the solver did*, so there was a number to be wrong against. Three separate bugs
+were caught by that comparison and **not one of them would have been visible on screen** —
+each produced a plant that swayed pleasantly at a frequency that happened to be wrong.
+
+| species | analytic | solver mode 1 | ringdown | ratio |
+|---|---|---|---|---|
+| Cathedral Fern | 1.17 | 1.26 | 1.25 | 1.07 |
+| Spiral Ossuary | 0.48 | 0.58 | 0.57 | 1.21 |
+| Abyssal Frond | 0.84 | 0.75 | 0.75 | 0.90 |
+| Sun Coral | 1.49 | 1.57 | 1.56 | 1.05 |
+| Hoarfrost Thicket | 3.06 | 3.51 | 3.48 | 1.15 |
+| Ember Creeper | 0.53 | 0.62 | 0.62 | 1.16 |
+| Sulphur Rosette | 15.06 | 9.35 | 9.15 | 0.62 |
+| Nightglass Parasol | 4.57 | 4.53 | 4.47 | 0.99 |
+
+Seven of eight within 0.90-1.21 of the paper answer, off one material constant, with the
+eigenvalue and the stopwatch agreeing to under 1% and the discretisation converged to
+0.3% across 4 to 24 stations.
+
+### The three bugs, because the shape of them generalises
+
+**A diagonal mass matrix is not a beam.** Each station an independent oscillator, `EI/ds`
+against the inertia above it. `ds` goes as `1/M`, so every spring stiffens as the mesh
+refines while its inertia does not: 1.57 Hz at four stations, 2.76 at sixteen, still
+climbing. The coordinates genuinely share inertia — rotating station j carries the mass
+above station k as well — so the mass matrix has off-diagonal terms, and with them
+compliances add in series the way a cantilever's do.
+
+**Then it would not integrate.** The coupled mass matrix is ill-conditioned by
+construction (neighbouring stations see nearly the same mass at nearly the same
+distance), so `M⁻¹K` spans a huge range and an explicit step rang at exactly Nyquist with
+zero damping. Backward Euler and one Cholesky per axis per step.
+
+**And then it was 20% fast.** The rotations should stay perpendicular to the axis they
+bend, so the state was projected onto that plane every substep — which on a curving stem
+deletes a fixed fraction of the deflection each time. A constraint enforced by wiping
+part of the state is a damper with no physics in it. The torque already drops its axial
+component, which is where the exclusion belongs.
+
+Two harness bugs sat on top of those, and they are the same lesson from the other side:
+counting zero crossings into the decayed tail measured float noise, and a uniform kick
+excited every mode the mesh carried so the count read a mixture. **When the eigenvalue
+and the stopwatch disagree, suspect both.**
+
+### Gravity had to stay in the rest shape, and the arithmetic is pretty
+
+The obvious move is to load the stem with its own weight as well as the wind. It does not
+survive contact with the numbers. A cantilever's static sag and its first frequency are
+the same stiffness-to-mass group, and eliminating `EI` between them leaves
+
+    delta = 1.545 g / omega_1^2
+
+with nothing free in it at all. At the measured 1.26 Hz, a Cathedral Fern's tip hangs
+**27 cm** below where it grew, on a plant 1.08 m tall. Wanting the sag under 5% of the
+height forces the first mode above 2.8 Hz, which is not a plant-like sway. **There is no
+stiffness that gives both.**
+
+Real plants are not exempt from that arithmetic; they escape it by not being static
+structures. A stem is continuously remodelled toward its target orientation, so the shape
+it has grown into *is* its static equilibrium and the sag is already spent. `40_plant.js`
+grows that shape and `39a_stem.js` solves the deviations about it — which also means the
+whole branch changes no silhouette at all.
+
+That same rigid link is the real content of ROADMAP 7b, and it is the third independent
+argument today that 7b is the keystone: a petiole bending under its blade's weight is the
+same trade between hanging and swaying.
+
+### What it looks like, in numbers
+
+Force-3 tip sway spans **fiftyfold** across the catalogue with no per-species value
+anywhere: Spiral Ossuary 1.53 world units, Ember Creeper 1.18, Abyssal Frond 0.82,
+Cathedral Fern 0.30, Sun Coral 0.14, and Hoarfrost, Nightglass and Sulphur Rosette
+essentially nothing. `EI` goes as r⁴ and the load goes as canopy area, so a tall shoot
+carrying a lot of leaf moves and a cushion does not. The pre-flight had already written
+down "if a fix makes Sulphur Rosette's stem sway, that fix is wrong"; it does not.
+
+And the number that made the whole exercise feel worthwhile: **the hand-tuned `SWAY`
+peaked at about 0.34 world units at the top of a Cathedral Fern, and the physics, asked
+independently, says 0.30.** Whoever tuned that sine had a very good eye. What changes is
+not the amplitude — it is that the motion now has the plant's own frequency, gusts that
+arrive as gusts, a stem and its leaves that move as one thing, and a response that
+differs by species because the species differ.

@@ -648,3 +648,79 @@ pitch tumbles, 32-39 of 40 blades take the long axis past 90° with median excur
 600-900°, because two independently-solved 2D planes do not exchange angular momentum.
 Full reasoning in JOURNAL.md. **Do not switch it on to see if it looks better** — it
 manufactures energy, which is not a thing to ship whatever it looks like.
+
+## The stem as a beam (`39a_stem.js`, ROADMAP 7 step 3, 2026-07-26)
+
+Nothing here is a dial either. The whole section exists so that the next person can tell
+which numbers are physics, which are resolution, and which one is the weather.
+
+```
+eModulus   60e6   Pa      the pre-flight's one material constant. `39_fall.js` shares it
+rhoTissue  800    kg/m^3  hydrated plant tissue. The pre-flight shares it
+zeta       0.10   -       structural damping, as the petiole. Same tissue
+cdStem     1.2    -       circular cylinder in crossflow. Textbook
+cPerp/cPar 1.95/0.18      the plate model's, so a blade earns the drag its attitude gives
+stations   8      -       a RESOLUTION, and section 3 of test/stem.mjs proves it
+```
+
+### The check that mattered
+
+The pre-flight computed the first cantilever mode analytically, off `EI ∝ r⁴` on the
+radii the plant grows, **before any solver existed.** That is the whole value of it:
+
+| species | analytic | solver mode 1 | ringdown | ratio |
+|---|---|---|---|---|
+| Cathedral Fern | 1.17 | 1.26 | 1.25 | 1.07 |
+| Spiral Ossuary | 0.48 | 0.58 | 0.57 | 1.21 |
+| Abyssal Frond | 0.84 | 0.75 | 0.75 | 0.90 |
+| Sun Coral | 1.49 | 1.57 | 1.56 | 1.05 |
+| Hoarfrost Thicket | 3.06 | 3.51 | 3.48 | 1.15 |
+| Ember Creeper | 0.53 | 0.62 | 0.62 | 1.16 |
+| Sulphur Rosette | 15.06 | 9.35 | 9.15 | **0.62** |
+| Nightglass Parasol | 4.57 | 4.53 | 4.47 | 0.99 |
+
+`analytic` is a uniform beam on the base radius; the solver is tapered and carries a
+real canopy, so agreement to ±20% is as close as those two things can be. Sulphur
+Rosette is the stubby outlier the pre-flight already called — a 31 cm plant on an 18.5 mm
+base — and it is the one species where the uniform approximation is worst.
+
+Three numbers to check first if this ever looks wrong:
+
+1. **mode 1 against ringdown.** An eigenvalue and a stopwatch, computed independently.
+   They agree to under 1% on every species. If they diverge, the integrator is not
+   solving the system it assembled — which is exactly how the projection bug was found.
+2. **the first mode against `stations`.** 1.261 / 1.262 / 1.259 / 1.264 / 1.264 / 1.263
+   Hz at 4, 6, 8, 12, 16 and 24 stations: 0.3% across the range. A number that moves
+   with the mesh is a dial wearing a physical name.
+3. **`zeta` measured off the decay**, which comes back 0.103-0.113 against the 0.10 set.
+   The excess is backward Euler's own dissipation and it is small enough to ignore.
+
+### Sway, which is emergent and enormous in spread
+
+Tip displacement from the grown shape, world units, at each Beaufort force:
+
+| species | force 2 | force 3 | force 4 | tip angle at f3 |
+|---|---|---|---|---|
+| Spiral Ossuary | 0.39 | **1.53** | 5.69 | 3.4° |
+| Ember Creeper | 0.31 | 1.18 | 4.39 | 2.6° |
+| Abyssal Frond | 0.22 | 0.82 | 3.16 | 2.3° |
+| Cathedral Fern | 0.08 | 0.30 | 1.17 | 1.0° |
+| Sun Coral | 0.04 | 0.14 | 0.53 | 0.5° |
+| Hoarfrost Thicket | 0.01 | 0.03 | 0.07 | 0.2° |
+| Nightglass Parasol | 0.00 | 0.02 | 0.05 | 0.1° |
+| Sulphur Rosette | 0.00 | 0.00 | 0.01 | 0.0° |
+
+Fiftyfold between the extremes, off no per-species number: `EI` goes as r⁴ and the load
+goes as the canopy area, so a tall thin shoot with a big canopy moves and a cushion does
+not. **Do not "fix" the bottom of that table.**
+
+### Gravity is in the rest shape, and it is not a shortcut
+
+`delta = 1.545 g / omega_1^2` — a cantilever's self-weight sag and its first frequency are
+the same stiffness-to-mass group, with nothing free between them. At the measured 1.26 Hz
+a Cathedral Fern's tip would hang **27 cm** below where it grew, on a plant 1.08 m tall;
+holding the sag under 5% of the height needs the first mode above 2.8 Hz, which is not a
+plant-like sway. Real stems escape the trade by being continuously remodelled toward
+their target orientation, so the grown shape *is* the static equilibrium. This solves
+deviations about it. **If you add self-weight loading here, every specimen will lie
+down.**
