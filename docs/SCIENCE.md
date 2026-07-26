@@ -85,6 +85,10 @@ Nobody wrote any of these numbers:
   either arrested on its budget or consumed itself founding a flower, so nothing
   anywhere is still patterning. Downstream of how much leaf it built, which set
   when it flowered, which set when its apices were spent
+- The pattern a dying blade drains in. Tissue next to a vein is held longest, and
+  *what counts as next to a vein* is the distance field of a network that
+  canalised itself — so the green-island tracery on a senescing leaf is that
+  leaf's own vasculature, seen a second time. Only the lag is stated (item 6)
 
 ## What is imposed
 
@@ -113,6 +117,15 @@ Keep this list short. Every entry is a debt.
    whole-plant auxin transport network was built specifically to derive it and
    could not, four experiments in JOURNAL.md. Note what is NOT imposed here: no
    leaf has a lifespan, and nothing counts down.
+
+   The same rule now runs *within* a blade: tissue against a vein drains last
+   (`VEIN_LAG` in `50_geom.js`), which is real — the vein is how the recovered
+   nitrogen leaves, so it works until the withdrawal is over — but it is asserted,
+   not derived. One number, and it is only a lag: **what** is spared is the
+   distance field of a vein network that canalised itself, so the pattern on a
+   dying leaf is not drawn any more than the network was. The falling itself, and
+   the colour the dead tissue goes, are presentation in the same category as the
+   sway — see JOURNAL.md.
 
 Not simulated at all: pollination (parthenocarpy is real — auxin alone sets fruit),
 turgor and wall mechanics, light, nutrients.

@@ -745,6 +745,10 @@ export class Plant {
   // What that experiment did establish is that this is one of the places where
   // the chemistry has nothing to say, so the honest thing is a stated rule rather
   // than a stated rule wearing a transport model.
+  // `sen` (0..1) and `shed` are read by the scene: `blade()` drains the lamina
+  // against them and `70_app.js` flies a shed organ down and stops drawing it.
+  // They are the whole interface between finishing and the picture of finishing,
+  // so changing what they mean changes what the last minute of a run looks like.
   senesceStep(dt) {
     // exactly one mechanism may own `sen`, or the falsified path cannot be
     // measured against this one — they simply add, and both look like they work
@@ -774,6 +778,12 @@ export class Plant {
         if (p[2] < z0) z0 = p[2]; if (p[2] > z1) z1 = p[2];
       }
       for (const o of a.organs) {
+        // "currently alive" was aspirational until something drew senescence:
+        // a shed blade kept its full reach in here long after it stopped being
+        // on the plant, so a specimen that had dropped everything was still
+        // framed for the canopy it used to have and sat tiny in the middle of
+        // an empty shot. Skipping them closes the camera in as it dismantles.
+        if (o.shed) continue;
         const f = o.frame.o, r = o.len;
         if (f[0] - r < x0) x0 = f[0] - r; if (f[0] + r > x1) x1 = f[0] + r;
         if (f[1] - r < y0) y0 = f[1] - r; if (f[1] + r > y1) y1 = f[1] + r;

@@ -72,7 +72,12 @@ node test/phyllo.mjs                               # divergence angle statistics
 node test/margin.mjs                               # leaf outline, ASCII silhouette
 node test/fruit.mjs                                # fruits, ASCII radius map
 node test/flower2.mjs                              # full life cycle incl. axillary flowers
+node test/species.mjs                              # grow all eight species, print what each does
+node test/senesce.mjs                              # a dying blade, drawn: ASCII map of what still holds colour
 ```
+
+`CLAUDE.md` lists the full set — there are fifteen of them, plus two archived
+experiments kept so their falsified results stay reproducible.
 
 If your change touches the simulation, **paste the relevant before/after numbers in
 the PR.** That is the review currency here, far more than a screenshot.
@@ -80,9 +85,12 @@ the PR.** That is the review currency here, far more than a screenshot.
 ## Source layout
 
 `src/` is numbered so that concatenation order is dependency order — `build.js`
-simply concatenates the files, strips `import`/`export`, and warns about duplicate
-top-level declarations. The bundle is **one shared scope**, so a name collision
-between two files is silent otherwise and costs a debugging cycle. Heed the warning.
+concatenates the files, strips `import`/`export`, warns about duplicate top-level
+declarations, and then compiles the bundle before writing it, exiting non-zero if
+it does not parse. The bundle is **one shared scope**, so a name collision between
+two files is otherwise silent: it used to only warn, and a collision that the
+warning missed once shipped a page that was a `SyntaxError` while the CI gate
+passed. Heed the warning, and if the build refuses to write, read the message.
 
 `stepAuxin()` in [src/10_auxin.js](src/10_auxin.js) runs on any topology — a growing
 2D sheet, a 1D chain, an icosphere. Meristem, leaf margin, leaf venation and fruit
@@ -95,8 +103,8 @@ are all that same solver with different geometry and boundary conditions.
 - Numbers from the headless harnesses, before and after.
 - A note in [docs/JOURNAL.md](docs/JOURNAL.md) if you tried something and it did not
   work. Negative results are genuinely valued here — two falsified phyllotaxis
-  hypotheses are recorded there and they are more useful than a success would have
-  been.
+  hypotheses and four falsified senescence ones are recorded there, with their
+  numbers, and they are more useful than the successes would have been.
 - If you changed a constant, say which regime in [docs/TUNING.md](docs/TUNING.md)
   you were moving between and why.
 

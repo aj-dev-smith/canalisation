@@ -6,13 +6,19 @@
 // Writes three frames — `-onset`, `-mid`, `-spent` — at senescence 0.02, 0.50 and
 // `Plant.dead()`. Pass a seed to make it reproducible.
 //
-// WHAT THIS CURRENTLY PROVES, AND WHAT IT DOES NOT. As of the branch that added
-// senescence, **nothing renders it**: `org.sen` and `org.shed` are set by the
-// simulation and no geometry or shader reads either, so all three frames show the
-// same intact plant. What the tool verifies today is that the state machine runs
-// in a real browser — that a specimen reaches `spent`, that the stage bar follows
-// it, and that no console error appears on the way. The three frames become worth
-// comparing the moment anything in `50_geom.js` or `60_render.js` reads `sen`.
+// WHAT THIS PROVES, AND WHAT IT DOES NOT. The three frames are now worth
+// comparing: senescence is drawn, so `-onset`, `-mid` and `-spent` differ. On
+// Cathedral Fern seed 21 the triangle count holds at 63594 while the plant is
+// merely draining — a colour change costs no geometry — and falls to 16-22k at
+// `dead`, which is the canopy having physically left. The spread is the poll:
+// `dead()` is caught a few frames either side, and a few frames is the difference
+// between six blades still falling through shot and none. Watch it anyway —
+// **a count that does not fall by `spent` means shed blades are not going
+// anywhere**, whatever the frames look like.
+//
+// What it still cannot tell you is whether the drain reads. Colour is the whole
+// point here and the counts are blind to it, so look at the PNGs, and use
+// `test/senesce.mjs` for the numbers underneath them.
 //
 // Do not read the fps off this — see tools/README.md.
 //
@@ -82,7 +88,13 @@ async function runTo(want, label) {
   }
   const caught = await pg.evaluate(() => !!window.__caught);
   await pg.evaluate(() => { window.__app.speedMul = 0; });
-  await pg.waitForTimeout(600);
+  // Let the camera settle before the shutter. The framer is damped by a time
+  // constant against a bounding box that is itself damped, and once shed blades
+  // stopped counting toward that box the end of the run became the biggest
+  // reframe in the piece — at 600ms the `-spent` frame caught the camera still
+  // flying out and reported it as an empty shot. Simulation is stopped here, so
+  // this waits on the camera and nothing else.
+  await pg.waitForTimeout(3000);
   const st = await state();
   console.log(`${label.padEnd(7)} caught=${caught}  ${JSON.stringify(st)}`);
   await pg.screenshot({ path: `${prefix}-${label}.png` });
