@@ -34,7 +34,21 @@ inside **single** quotes, so it never interpolated.
   into line only read if the camera is square to the blade — a leaf seen edge-on
   puts six hundred cells on one line and looks like an empty stalk, so check the
   `-mid` frame before believing a "nothing is drawn" report
-- `sway.mjs` — pixel-diffs two frames to prove the sway field animates
+- `clip.mjs OUTDIR SECONDS [species] [seed] [speed] [waitSeconds] [w] [h]` — **records a
+  webm.** The only artifact in the repo that shows the piece MOVING, which everything
+  else here explicitly cannot judge. Records square by default (1000×1000): the camera
+  fits the specimen's height into 66% of the frame, so a tall narrow plant on a 16:10
+  viewport is framed correctly and looks lost. Also drops a matching still. `waitSeconds`
+  runs at 4x and decides which act gets filmed — 3-5s for a full canopy, 20s+ for the
+  seed head. Same GL-backend choice as `flower_shot.mjs`; **never read a clip recorded on
+  the software path**, it runs at ~16fps and reads as the simulation stuttering.
+
+  To compare against an older build, add a git worktree at the earlier commit, symlink
+  `node_modules` into it, and run *this* copy of the tool with the worktree as cwd — the
+  page URL comes from `process.cwd()` and the playwright import resolves from the script.
+- `sway.mjs` — **obsolete.** It pixel-diffed two frames to prove the old shader sway field
+  animated, and that field was deleted in ROADMAP 7 step 5. Kept only until something
+  wants its diffing trick; `clip.mjs` is what to reach for now
 - `wind_check.mjs ['{"uRef":3}'] [nSamples]` — **not a capture tool.** The one thing
   in here that returns a number and an exit code instead of a picture, and the only
   check in the repo that has to leave Node. Compiles the GLSL `windGLSL()` emits,
