@@ -4,9 +4,9 @@
 
 import { DEFAULT_PRM } from './10_auxin.js';
 import { MERISTEM_DEFAULTS } from './20_meristem.js';
-import { LEAF_DEFAULTS } from './30_leaf.js';
+import { Leaf, LEAF_DEFAULTS } from './30_leaf.js';
 import { Plant, SPECIES_DEFAULTS } from './40_plant.js';
-import { Buffers, tube, blade, meristemDome, fruitShell, setView } from './50_geom.js';
+import { Buffers, tube, blade, laminaCells, meristemDome, fruitShell, setView } from './50_geom.js';
 import { Renderer } from './60_render.js';
 import {
   v3, v3set, v3copy, v3add, v3sub, v3scale, v3addScaled, v3norm, v3len, v3lerp,
@@ -570,8 +570,91 @@ export class App {
     this.subject = (sh.kind === 'fruit' || sh.kind === 'flower' || sh.kind === 'organ') ? sh : null;
   }
 
+  // The blade worth looking at down the microscope. A leaf that is still
+  // canalising wins outright — that is the one where the needles are visibly
+  // falling into line — and the biggest opened blade is the fallback, where
+  // they are already in line and only the traffic still moves.
+  watchOrgan() {
+    let live = null, big = null, bigA = 0;
+    for (const ax of this.plant.axes) {
+      for (const o of ax.organs) {
+        const L = o.leaf;
+        if (o.floral || !L || !L.margin || !L.margin.mature) continue;
+        if ((o.dev || 0) < 0.35 || o.len < 0.05) continue;
+        if (!L.mature) { if (!live || o.len > live.org.len) live = { ax, org: o }; }
+        else if (o.len * (o.dev || 0) > bigA) { bigA = o.len * (o.dev || 0); big = { ax, org: o }; }
+      }
+    }
+    return live || big;
+  }
+
+  // ---------------------------------------------------------------------
+  // Watching a blade canalise.
+  //
+  // The library canalises a blade in about 900 steps at 60 steps a frame —
+  // fifteen frames, a quarter of a second — and then the leaf is frozen for
+  // the rest of its life. So there is essentially never a leaf on the plant
+  // caught in the act, and the one thing worth seeing is over before the
+  // camera arrives.
+  //
+  // A leaf is reproducible from `(prm, opts, seed)`: same lattice, same
+  // sources, same vein network segment for segment. So the close-up grows
+  // this leaf AGAIN, slowly, in place. It is not a recording and not an
+  // approximation of one — it is the identical computation that produced the
+  // blade being pointed at, run at a rate an eye can follow, and it ends on
+  // exactly the vasculature that blade already has. `test/lamina.mjs` checks
+  // that the replay lands on the original.
+  // ---------------------------------------------------------------------
+  watchStep(dtms) {
+    if (this.focus !== 'leaf') { this._watch = null; this._replay = null; return; }
+    // Latch the blade being inspected rather than re-picking it every frame:
+    // the pick would change under the viewer as leaves open and the camera
+    // would cut to a different one mid-shot.
+    const w = this._watch;
+    if (!w || !w.org.leaf || w.ax.organs.indexOf(w.org) < 0) {
+      this._watch = this.watchOrgan();
+      this._replay = null;
+    }
+    if (!this._watch) return;
+    const L = this._watch.org.leaf;
+    if (!this._replay || this._replay.of !== L) {
+      this._replay = { of: L, leaf: new Leaf(this.prm, L.o, L.seed) };
+    }
+    const R = this._replay.leaf;
+    if (R.mature) return;
+    // The outline is not the point and the viewer can already see it on the
+    // blade in front of them, so run the margin phase at full speed and only
+    // slow down for the part worth watching. Without this the close-up opens
+    // on eight seconds of empty leaf while the margin patterns.
+    if (!R.built) { for (let k = 0; k < 400 && !R.built && !R.mature; k++) R.step(1); return; }
+    // ~900 steps of canalisation at this rate is about twelve seconds. The
+    // time slider scales it like everything else, and at zero the replay stops
+    // with the plant rather than running on under a paused specimen.
+    if (this.speedMul <= 0) return;
+    const n = clamp(Math.round(dtms * 0.075 * this.speedMul), 1, 12);
+    for (let k = 0; k < n && !R.mature; k++) R.step(1);
+    if (R.mature) R.veinDistanceField(30);    // so the finished blade tints
+  }
+
+  // Go and look at something, and mean it.
+  //
+  // The close-up buttons hand the camera to the viewer before switching mode,
+  // and `userDriving` deliberately locks the auto-framer out — that is what
+  // stopped the wheel fighting the director. But it also means asking to go
+  // into the cells never actually took the camera there: the mechanism faded
+  // up only if you then scrolled in far enough by hand, which nobody does.
+  //
+  // So a focus change buys a short window in which the framer may still fly,
+  // and any touch of the camera spends it immediately. Ask to be somewhere and
+  // you are taken there; touch the controls and it lets go for good.
+  enterFocus(f) {
+    this.focus = f;
+    this.focusFly = f ? 2600 : 0;
+  }
+
   takeOver() {
     this.idleT = 0;
+    this.focusFly = 0;
     if (this.userDriving) return;
     this.userDriving = true;
     this.subject = null;
@@ -579,7 +662,7 @@ export class App {
   }
   giveBack() {
     this.userDriving = false;
-    this.focus = null;
+    this.focus = null; this.focusFly = 0;
     this.shot = null; this.shotT = 0;
     this.cam.autoRot = true;
   }
@@ -595,6 +678,8 @@ export class App {
     this.t += dtms;
 
     this.directorStep(dtms);
+
+    this.watchStep(dtms);
 
     // camera: frame whatever the specimen has actually become
     const c = this.cam;
@@ -674,6 +759,41 @@ export class App {
       // look down onto the dome — the spiral is only legible from above
       c.el = lerp(c.el, 0.78, damp(0.05));
     }
+    if (this.focus === 'leaf') {
+      // Sit close enough that individual cells resolve. The detail ramp in
+      // buildScene fades the mechanism up on apparent blade size, so this is
+      // the same knob seen from the other end: put the blade at roughly the
+      // width of the frame and the needles come up on their own.
+      const w = this._watch;
+      if (w) {
+        const bl = w.org.len * 0.80;
+        const f = w.org.frame.o, fx = w.org.frame.x;
+        const pet = w.org.len * 0.34 + w.org.radius * 1.8;
+        // aim at the middle of the blade, not at where it joins the stalk
+        const mid = 0.45 * bl;
+        aimX = f[0] + fx[0] * (pet + mid);
+        aimY = f[1] + fx[1] * (pet + mid);
+        aimZ = f[2] + fx[2] * (pet + mid);
+        want = clamp(bl * 1.05, 0.5, 40);
+        // Face the blade. The apex close-up can just look down from a fixed
+        // elevation because a meristem is always more or less horizontal, but
+        // a leaf hangs at whatever angle its tilt, droop and roll put it, and
+        // a blade seen edge-on projects six hundred cells onto a single line —
+        // which is exactly what the first captures showed, and it reads as a
+        // bare stalk with a row of lights on it rather than as a sheet of
+        // tissue. So steer to the organ's own normal instead of a constant.
+        const n = w.org.frame.y;
+        const sgn = n[1] < 0 ? -1 : 1;         // approach from above, not below
+        const nx = n[0] * sgn, ny = clamp(n[1] * sgn, -0.95, 0.95), nz = n[2] * sgn;
+        if (!this.userDriving || this.focusFly > 0) {
+          let d = Math.atan2(nx, nz) - c.az;
+          while (d > Math.PI) d -= TAU;
+          while (d < -Math.PI) d += TAU;
+          c.az += d * damp(0.045);
+          c.el = lerp(c.el, Math.asin(ny), damp(0.045));
+        }
+      }
+    }
     // While the viewer is driving, the auto-framer has to keep its hands off the
     // camera. This block used to run unconditionally: a wheel event set `dist`,
     // and the very next frame lerped it straight back to the fitted distance, so
@@ -683,7 +803,8 @@ export class App {
     // never the framing.
     const k = damp(c.autoRot ? 0.10 : 0.035);
     if (c.cx === undefined) { c.cx = aimX; c.cz = aimZ; }
-    if (!this.userDriving) {
+    if (this.focusFly > 0) this.focusFly -= dtms;
+    if (!this.userDriving || this.focusFly > 0) {
       c.dist = lerp(c.dist, want, k);
       c.tgtY = lerp(c.tgtY, aimY, k);
       c.cx = lerp(c.cx, aimX, k);
@@ -694,6 +815,11 @@ export class App {
     c.fogNear = Math.max(0, c.dist - Math.max(hh, hw) * 1.1);
     // only things well off the plane the camera is looking at go soft
     c.dofRange = Math.max(2.0, Math.max(hh, hw) * 0.62);
+    // Under the microscope that range is the whole specimen, so nothing ever
+    // defocuses and the blade behind the one being looked at is drawn just as
+    // sharply — it reads as part of the same surface and swamps the tissue.
+    // Shallow depth of field is what a microscope actually has.
+    if (this.focus === 'leaf') c.dofRange = Math.max(0.4, c.dist * 0.22);
     const ce = Math.cos(c.el), se = Math.sin(c.el);
     v3set(c.eye,
       c.target[0] + Math.sin(c.az) * ce * c.dist,
@@ -718,7 +844,7 @@ export class App {
     this.detail = 0;
     // when the camera has gone in to look at a growing tip, anything between it
     // and that tip is in the way — drop it rather than let a leaf fill the frame
-    let cullFrom = null, cullR = 0, cullRad = 0, cullKeep = null;
+    let cullFrom = null, cullR = 0, cullRad = 0, cullKeep = null, cullKeepOrg = null;
     const sb = this.subject;
     if (sb && (sb.kind === 'fruit' || sb.kind === 'flower')) {
       cullFrom = sb.ax.tipPos();
@@ -742,6 +868,15 @@ export class App {
         cullFrom = best.tipPos();
         cullRad = Math.max(0.35, best.radii[best.radii.length - 1] * 5.5) * 1.15;
       }
+    } else if (this.focus === 'leaf' && this._watch) {
+      const org = this._watch.org;
+      const pet = org.len * 0.34 + org.radius * 1.8, bl = org.len * 0.80;
+      const d = pet + bl * 0.45;
+      cullFrom = [org.frame.o[0] + org.frame.x[0] * d,
+        org.frame.o[1] + org.frame.x[1] * d,
+        org.frame.o[2] + org.frame.x[2] * d];
+      cullRad = bl * 0.85;
+      cullKeepOrg = org;      // never clear away the leaf we came to look at
     }
     // Clear a cylinder along the line of sight rather than a sphere around the
     // eye. The old test compared each organ's BASE distance to the subject
@@ -772,7 +907,7 @@ export class App {
       }
       for (const org of ax.organs) {
         if (org.len < 0.02) continue;
-        if (cullFrom && !(ax === cullKeep && org.floral)) {
+        if (cullFrom && org !== cullKeepOrg && !(ax === cullKeep && org.floral)) {
           const ox = org.frame.o[0] - this.cam.eye[0];
           const oy = org.frame.o[1] - this.cam.eye[1];
           const oz = org.frame.o[2] - this.cam.eye[2];
@@ -783,7 +918,13 @@ export class App {
             if (Math.hypot(px2, py2, pz2) - (org.len || 0) < cullRad) continue;
           }
         }
-        const L = org.leaf;
+        // The blade under the microscope is drawn from its own replay, so the
+        // vasculature arrives when the canalisation being watched actually
+        // produces it rather than being there from the start as a spoiler.
+        // Same outline either way — the replay reproduces this leaf exactly.
+        const rp = this._replay;
+        const L = (rp && this._watch && org === this._watch.org && rp.of === org.leaf
+          && rp.leaf.built) ? rp.leaf : org.leaf;
         // petiole
         const a = org.frame.o;
         // a longer stalk carries the blade clear of the shoot and its neighbours
@@ -805,8 +946,29 @@ export class App {
             Math.round(((org.q - this.sp.petalQ) / Math.max(1e-3, 1 - this.sp.petalQ)) * (INNER_STEPS - 1)),
             0, INNER_STEPS - 1)]
             : pal;
-        blade(B, L, fr, bl, bl, bp, -bl * (org.petal ? 0.05 : 0.16), bl * 0.014,
-          bp.glow, this.bladeMU, this.bladeMV, dev);
+        const curl = -bl * (org.petal ? 0.05 : 0.16), ripple = bl * 0.014;
+        // The blade mesh is deliberately far coarser than the tissue — the
+        // veins are meant to carry the detail, and at arm's length they do.
+        // Under the microscope they cannot: 22x10 quads across a blade that
+        // fills the frame is a visibly faceted slab, and cells scattered over
+        // it read as blobs on cardboard. Refine just the one blade being
+        // looked at, up to the resolution of the tissue actually simulated.
+        const dEyeB = Math.hypot(fr.o[0] - this.cam.eye[0], fr.o[1] - this.cam.eye[1],
+          fr.o[2] - this.cam.eye[2]);
+        const detL = smoothstep(0.42, 0.95, bl / Math.max(0.01, dEyeB));
+        const mu = Math.round(lerp(this.bladeMU, L.o.nu, detL));
+        const mv = Math.round(lerp(this.bladeMV, L.o.nv, detL));
+        blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mu, mv, dev,
+          1 - 0.82 * detL);
+        // Same idiom as the growing tip: there is no mode to find, the tissue
+        // simply starts showing what it is doing once you are close enough for
+        // a cell to be more than a pixel. The ramp is on apparent blade size —
+        // the existing 'organ' beauty shot sits at about 0.44 and must stay
+        // clear of it, so nothing begins until the blade is filling the frame.
+        if (detL > 0.004) {
+          if (detL > this.detail) this.detail = detL;
+          laminaCells(B, L, fr, bl, bl, pal, curl, ripple, this.t, detL, dev);
+        }
       }
       // the fruit, if this shoot got that far
       if (ax.fruit && !ax.fruit.barren && ax.fruit.phase !== 'pattern') {

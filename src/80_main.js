@@ -125,8 +125,8 @@ for (const [label, set, get, min, max, step, tip] of SLIDERS) {
     // take the viewer to where this control's effect is actually visible
     if (label !== 'time') {
       app.takeOver();
-      app.focus = 'apex';
-      app.cam.autoRot = true; app.cam.idle = 9999;
+      setCellFocus('apex');       // sets autoRot for us
+      app.cam.idle = 9999;
       showTip(tip);
       $('regrowBtn').classList.add('urge');
     }
@@ -155,17 +155,41 @@ $('pruneBtn').onclick = () => {
     showTip('Apex removed. The auxin that was suppressing the buds below it is gone, so one of them will take over.');
   }
 };
+// The close-up is a tour of two places, not one: the tip, where needles
+// converge and that convergence IS a leaf, and the blade, where the same
+// needles fall into line and that line IS a vein. One button walks the viewer
+// through both rather than adding a fourth control to a full bar.
+const CELL_LABEL = { null: 'into the cells', apex: 'into a leaf', leaf: 'pull back' };
+function setCellFocus(f) {
+  app.enterFocus(f);
+  // The tip is a dome and orbiting it shows more of the spiral; a blade is
+  // flat, and orbiting one only carries the camera round to its edge, where
+  // the whole cell sheet collapses onto a line.
+  app.cam.autoRot = f !== 'leaf';
+  $('cellsBtn').textContent = CELL_LABEL[f === null ? 'null' : f];
+}
 $('cellsBtn').onclick = () => {
   app.takeOver();
-  app.focus = app.focus === 'apex' ? null : 'apex';
-  app.cam.autoRot = true; app.cam.idle = 9999;
-  $('cellsBtn').textContent = app.focus ? 'pull back' : 'into the cells';
+  app.cam.idle = 9999;
+  if (app.focus === null) {
+    setCellFocus('apex');
+    showTip('The growing tip, one cell at a time. Every needle is a cell aiming its pumps — where they agree, a leaf begins.');
+  } else if (app.focus === 'apex') {
+    // nothing to show until a blade has actually opened
+    if (!app.watchOrgan()) {
+      setCellFocus(null);
+      showTip('No blade has opened yet — let this one grow a little, then look again.');
+    } else {
+      setCellFocus('leaf');
+      showTip('The same cells, the same needles, in a leaf. Where they fall into line the auxin gets a road, and that road is a vein — brightness is the traffic it carries.');
+    }
+  } else setCellFocus(null);
 };
 $('sheetBtn').onclick = () => {
   document.body.classList.toggle('sheet');
   $('sheetBtn').textContent = document.body.classList.contains('sheet') ? 'close' : 'controls';
 };
-$('handover').onclick = () => { app.giveBack(); $('cellsBtn').textContent = 'into the cells'; };
+$('handover').onclick = () => { app.giveBack(); $('cellsBtn').textContent = CELL_LABEL.null; };
 $('cineBtn').onclick = () => {
   document.body.classList.add('cinema');
   document.body.classList.remove('sheet');
@@ -180,5 +204,5 @@ addEventListener('resize', () => app.renderer.resize());
 setTimeout(() => { const h = $('hint'); if (h) h.style.opacity = 0; }, 8000);
 
 // --- first run: the mechanism before anything else -------------------------
-app.focus = 'apex';
+setCellFocus('apex');
 showTip('This is the growing tip, one cell at a time. Every needle is a cell aiming its pumps — where they agree, a leaf begins.');

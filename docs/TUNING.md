@@ -225,3 +225,57 @@ sway 1.0    dof 0.80    grain 0.024  vignette 0.60
 `laminaMul` pulls the leaf body down so the **vasculature carries the light**.
 A leaf should read as light held inside tissue. Vein emissive and lamina
 brightness are a balance — raise one and lower the other.
+
+### The blade at cell resolution (`50_geom.js` `laminaCells()`)
+
+Rerun `test/lamina.mjs` before changing any of these; it prints every number
+below.
+
+**Needle length and brightness come from FLUX, not from polarity.** This is the
+one thing that does not carry over from the meristem close-up, and it is not a
+matter of taste. Measured across seeds 7/4/12 at maturity:
+
+```
+channel   on a vein   in between    ratio
+polP         0.966       0.957       1.01x     <- what the meristem draws
+frac         0.972       0.966       1.01x     <- what bake() thresholds
+flux        11.41        3.95        2.89x     (4.95x, 3.19x on the other seeds)
+```
+
+The meristem can use `|polarity|` because competence keeps its central zone
+blurred, so an uncommitted cell really does have a short needle. The blade runs
+in flux mode with no such gate and **every** cell ends up essentially fully
+polarised, so polarity carries no information here — draw length from it and the
+lamina is one uniform lamp with no veins in it. Traffic is what canalisation
+selects for and what separates a vein from an areole. Direction still comes from
+the PIN allocation, same as the meristem; alignment between a needle and its own
+vein measures 0.85-0.88 |cos|, against 0.5 for random.
+
+**Normalise flux linearly, against the leaf's own busiest wall.** Log
+compression puts the median cell at 0.43-0.56 of full brightness and throws the
+contrast away — the same failure as the vein-width bug in PITFALLS.md, one step
+further down the pipe.
+
+```
+cell disc   cw * 0.62      cw = len/nu, one cell in world units
+needle      ms * (0.30 + fn*1.40)      ms = 1/nu, one cell in material units
+auxin       (a/8) ^ 0.55, dim 1 - 0.42*detail
+```
+
+Size off the **lattice**, never off blade length: a fixed fraction of the blade
+merges the discs into a solid sheet on any species with a finer `nu`. The 0.55
+auxin exponent is load-bearing — the median cell sits at 0.77 against a maximum
+near 9, because the sources at the teeth are an order of magnitude above the
+lamina, and at 0.7 most of the sheet reads as empty space.
+
+**Detail ramp** `smoothstep(0.42, 0.95, bl / eyeDistance)`. The floor has to
+clear the director's existing `organ` beauty shot, which sits at about 0.44 —
+below that a normal leaf close-up would start sprouting needles. The same ramp
+refines the blade mesh from `bladeMU/MV` up to the tissue's own `nu`/`nv` and
+fades the blade surface out by `1 - 0.82*detail`; at full strength the lit
+surface simply outshines the cells sitting on it.
+
+**Replay rate** `dtms * 0.075 * speedMul`, clamped 1-12 steps a frame: about
+twelve seconds for the ~900 steps of canalisation. The margin phase before it is
+fast-forwarded at 400 steps a frame, because the outline is already on screen
+and running it at watchable speed opens the close-up on eight seconds of nothing.

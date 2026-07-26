@@ -11,11 +11,25 @@ import {
 
 export class Buffers {
   constructor() {
-    this.tri = new Float32Array(1 << 20);   // pos3 nrm3 col3 emis1 = 10
+    // Sized for a dense specimen with one blade refined to cell resolution.
+    // These were half this and it was not obviously wrong: a full buffer drops
+    // geometry silently, so the failure is a picture that is merely missing
+    // things. Measured on Sun Coral, 104 organs — the plant alone reaches 86%
+    // of the old triangle buffer, and going into a blade pinned both the
+    // triangle and the line buffers at exactly their caps, which is where the
+    // needles were being thrown away. `renderer.nTri`/`nLine` sitting on a
+    // round number equal to `B.tri.length/10` or `B.line.length/7` means
+    // saturated, not busy. Uploads are subarrays, so headroom costs nothing
+    // per frame — only the allocation.
+    this.tri = new Float32Array(1 << 21);   // pos3 nrm3 col3 emis1 = 10
     this.triN = 0;
-    this.line = new Float32Array(1 << 19);  // pos3 col3 emis1 = 7
+    // Lines get the most headroom: every vein and every needle is a six-vertex
+    // camera-facing ribbon, so a refined blade full of committed cells is by
+    // far the heaviest thing the scene ever builds. One notch up from the
+    // triangle buffer measured 98.5% full on Sun Coral, which is not headroom.
+    this.line = new Float32Array(1 << 21);  // pos3 col3 emis1 = 7
     this.lineN = 0;
-    this.pt = new Float32Array(1 << 18);    // pos3 col3 size1 = 7
+    this.pt = new Float32Array(1 << 19);    // pos3 col3 size1 = 7
     this.ptN = 0;
   }
   reset() { this.triN = 0; this.lineN = 0; this.ptN = 0; }
@@ -132,6 +146,7 @@ const P0 = v3(), P1 = v3(), P2 = v3(), E1 = v3(), E2 = v3(), NN = v3();
 const _pa = v3(), _pb = v3(), _pc = v3(), _e1 = v3(), _e2 = v3(), _nn = v3();
 const _q0 = v3(), _q1 = v3(), _q2 = v3(), _q3 = v3(), _side = v3();
 const _n0 = v3(), _n1 = v3(), _n2 = v3(), _n3 = v3(), _cc = v3(), _fc = v3();
+const _c0 = v3(), _c1 = v3();
 let _gridPos = new Float32Array(0), _gridNrm = new Float32Array(0), _gridCol = new Float32Array(0);
 
 function triNormal(a, b, c) {
@@ -140,14 +155,16 @@ function triNormal(a, b, c) {
   return NN;
 }
 
-// A frond: a coarse parametric surface cut to the blade outline, with the
-// canalised vein network laid on top of it. The mesh is deliberately much
-// coarser than the tissue that was simulated — the veins carry the detail.
-export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV, dev) {
+// Where a point of leaf TISSUE currently sits on the drawn surface.
+//
+// Veins and cells are both simulated in material coordinates — u along the
+// blade, y in real half-widths — and both have to be mapped onto whatever the
+// blade is doing right now: expanding, furled at the tip, cut to an asymmetric
+// outline. Both callers need exactly the same mapping. When `blade()` owned a
+// private copy of it, anything else drawing on the lamina had to reimplement
+// it, and any drift shows up as cells floating off their own leaf.
+function bladeMap(leaf, len, dev) {
   const o = leaf.o;
-  MU = MU || 22; MV = MV || 10;
-  dev = dev === undefined ? 1 : dev;
-
   // A leaf does not scale up. It expands from the base outward as a wave of
   // maturation runs to the tip, and the tissue ahead of that wave is still
   // rolled up in the bud. That is why an unfurling frond looks the way it does.
@@ -161,6 +178,25 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
     const m = 1 - matAt(u);
     return -len * o.furl * m * m * (0.6 + m);
   };
+  return { matAt, wAt, wMat, furlAt };
+}
+
+// A frond: a coarse parametric surface cut to the blade outline, with the
+// canalised vein network laid on top of it. The mesh is deliberately much
+// coarser than the tissue that was simulated — the veins carry the detail.
+// `fade` dims the blade's own surface. Under the microscope the lamina is an
+// opaque sheet lit from the front and the cells sit ON it, so at full strength
+// the skin simply outshines the tissue — the first close-up of a blade showed a
+// bright flat slab with a row of lit cells around the margin, where the auxin
+// sources are, and nothing at all in between. It was drawing correctly; you
+// could not see it. Turning the surface down is what lets the cells through.
+export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV, dev, fade) {
+  const o = leaf.o;
+  MU = MU || 22; MV = MV || 10;
+  dev = dev === undefined ? 1 : dev;
+  fade = fade === undefined ? 1 : fade;
+
+  const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
   const vdf = leaf.vdf, res = leaf.vdfRes || 0;
   const nearVein = (u, v) => {
     if (!vdf) return 9;
@@ -195,10 +231,10 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
       const vv = matAtUV(u, t);
       const dd = vdf ? clamp(1 - nearVein(u, vv) * 11, 0, 1) : 0;
       const tt = clamp(u * 0.9 + 0.1, 0, 1);
-      col[k4] = lerp(pal.blade0[0], pal.blade1[0], tt) + dd * pal.veinTint[0];
-      col[k4 + 1] = lerp(pal.blade0[1], pal.blade1[1], tt) + dd * pal.veinTint[1];
-      col[k4 + 2] = lerp(pal.blade0[2], pal.blade1[2], tt) + dd * pal.veinTint[2];
-      col[k4 + 3] = dd * glow * 0.24;
+      col[k4] = (lerp(pal.blade0[0], pal.blade1[0], tt) + dd * pal.veinTint[0]) * fade;
+      col[k4 + 1] = (lerp(pal.blade0[1], pal.blade1[1], tt) + dd * pal.veinTint[1]) * fade;
+      col[k4 + 2] = (lerp(pal.blade0[2], pal.blade1[2], tt) + dd * pal.veinTint[2]) * fade;
+      col[k4 + 3] = dd * glow * 0.24 * fade;
     }
   }
   const gp = (i, j, out) => { const k = (i * NV + j) * 3; out[0] = pos[k]; out[1] = pos[k + 1]; out[2] = pos[k + 2]; return out; };
@@ -210,7 +246,12 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
   for (let i = 0; i < MU; i++) {
     const u0 = i / MU, u1 = (i + 1) / MU;
     for (let j = 0; j < MV; j++) {
-      if (o.fenestrate > 0) {
+      // Fenestration is cut against the distance-to-vein field, which only
+      // exists once the leaf has baked. Without that guard `nearVein` returns
+      // its "nothing anywhere near" sentinel for every quad, every quad clears
+      // the threshold, and a still-canalising monstera is drawn as a hole with
+      // a rim. Only ever visible on a leaf being watched while it canalises.
+      if (o.fenestrate > 0 && vdf) {
         const mu = (u0 + u1) * 0.5;
         const mt = ((j + 0.5) / MV) * 2 - 1;
         if (nearVein(mu, matAtUV(mu, mt)) > o.fenestrate && mu > 0.16 && mu < 0.93) continue;
@@ -248,6 +289,124 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
       if (!isFinite(_side[0])) continue;
       const w = Math.max(MINW, base * (0.25 + s.w * 1.35));
       B.ribbon(_q0, _q1, _side, w, w, pal.vein, glow * (0.06 + s.w * 0.52));
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// THE BLADE, AT CELL RESOLUTION
+//
+// The other half of the claim. On the meristem the needles CONVERGE, and that
+// convergence is a leaf. Here they fall into LINE, and that line is a vein.
+// Same field, same solver, same drawing language — only the boundary
+// conditions differ.
+//
+// One thing does NOT carry over, and it is worth knowing before touching the
+// constants. On the meristem, needle length is |polarity|: competence keeps the
+// central zone blurred, so an uncommitted cell genuinely has a short needle.
+// The blade runs in flux mode with no such gate, and measured across three
+// seeds EVERY cell ends up essentially fully polarised — mean |polarity| 0.96
+// on a vein and 0.96 between veins, a ratio of 1.01x. Drawing length from
+// polarity here renders the lamina as one uniform lamp with no veins in it.
+//
+// What separates a vein from an areole is TRAFFIC: mean flux 11-25 on a vein
+// against 4-6 between them, 2.9-5.0x, same three seeds. So direction comes from
+// the PIN allocation, exactly as on the meristem, and length and brightness
+// come from flux. That is not a display trick — traffic is what canalisation
+// selects for, and it is the same quantity `bake()` keeps a vein by.
+// `test/lamina.mjs` prints all of these; rerun it before retuning anything here.
+// ---------------------------------------------------------------------------
+export function laminaCells(B, leaf, frame, len, wid, pal, curl, ripple, t, detail, dev) {
+  const F = leaf.F;
+  if (!F || !F.n || !leaf.margin || !leaf.margin.mature) return;
+  dev = dev === undefined ? 1 : dev;
+  const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
+  const lift = len * 0.013 + 0.006;      // clear of the blade, and of the veins
+  // Size everything off the lattice the tissue was actually simulated on, not
+  // off the blade. A species with a finer lattice has smaller cells and should
+  // draw smaller ones; a fixed fraction of blade length merges them into a
+  // sheet of touching discs on anything dense. `ms` is one cell in material
+  // units (u runs 0..1 over `nu` cells), `cw` is one cell in world units.
+  const ms = 1 / Math.max(4, leaf.o.nu);
+  const cw = len * ms;
+
+  // Normalise traffic against this leaf's own busiest wall — the midrib at the
+  // petiole, where everything funnels. Linear, not log: the hierarchy spans
+  // three orders of magnitude and log-compressing it puts the median at 0.43
+  // of full brightness, which is the whole point of the picture washed out.
+  let maxJ = leaf._maxJ || 0;
+  if (!maxJ || !leaf.mature) {
+    maxJ = 1e-6;
+    for (let i = 0; i < F.n; i++) {
+      const d = F.deg[i], off = i * MAXNB;
+      for (let k = 0; k < d; k++) if (F.J[off + k] > maxJ) maxJ = F.J[off + k];
+    }
+    if (leaf.mature) leaf._maxJ = maxJ;   // frozen tissue, so measure it once
+  }
+
+  const toSurface = (u, y, out) => {
+    const w0 = wMat(u, y);
+    if (w0 < 1e-3) return null;
+    const tt = clamp(y / w0, -1, 1);
+    return bladePoint(out, frame, u, tt * wAt(u, y), len, wid, curl, ripple,
+      lift + furlAt(u));
+  };
+
+  for (let i = 0; i < F.n; i++) {
+    const x = F.x[i], y = F.y[i];
+    // no tissue exists ahead of the wave of maturation, so no cells either
+    if (x > dev + 0.04) continue;
+    if (!toSurface(x, y, _c0)) continue;
+
+    // Measured max ~8-10 per blade, but the median cell sits near 0.8 — the
+    // sources at the teeth are an order of magnitude above the lamina. A 0.7
+    // exponent leaves that median at a fifth of the range and most of the
+    // sheet reads as empty space; 0.55 keeps every cell present as a cell
+    // while the sources still obviously blaze.
+    const a = clamp(F.a[i] / 8, 0, 1);
+    const g = Math.pow(a, 0.55);
+    const dim = 1 - detail * 0.42;
+    B.point(_c0, [lerp(pal.cell0[0], pal.cell1[0], g) * dim,
+      lerp(pal.cell0[1], pal.cell1[1], g) * dim,
+      lerp(pal.cell0[2], pal.cell1[2], g) * dim],
+      cw * 0.62 * (1 + g * 0.5));
+
+    if (detail < 0.02) continue;
+
+    // --- which way this cell has aimed its pumps ----------------------------
+    const d = F.deg[i], off = i * MAXNB;
+    let px = 0, py = 0, tot = 0, flux = 0;
+    for (let k = 0; k < d; k++) {
+      const e = off + k, j = F.nbr[e];
+      const ex = F.x[j] - x, ey = F.y[j] - y;
+      const el = Math.hypot(ex, ey) || 1;
+      const w = F.P[e];
+      px += w * ex / el; py += w * ey / el; tot += w;
+      if (F.J[e] > flux) flux = F.J[e];
+    }
+    if (tot <= 1e-6) continue;
+    px /= tot; py /= tot;
+    const pol = Math.hypot(px, py);
+    if (pol < 0.02) continue;
+    const ux = px / pol, uy = py / pol;
+    const fn = clamp(flux / maxJ, 0, 1);         // traffic: the vein channel
+
+    // a needle reaches at most a little under two cells, so a committed file
+    // reads as a continuous line without every cell overwriting its neighbour
+    const nl = ms * (0.30 + fn * 1.40);
+    if (!toSurface(x + ux * nl, y + uy * nl, _c1)) continue;
+    B.seg2(_c0, _c1, pal.pin, detail * (0.10 + fn * 2.1));
+
+    // --- auxin actually on the move ----------------------------------------
+    if (fn > 0.02) {
+      const h = (Math.imul(F.id[i] ^ 0x2545f491, 0x9e3779b1) >>> 8) / 16777216;
+      const ph = (t * 0.00055 * (0.5 + Math.min(2.5, flux * 0.08)) + h) % 1;
+      if (toSurface(x + ux * nl * (0.15 + ph * 1.25), y + uy * nl * (0.15 + ph * 1.25), _c1)) {
+        const fade = Math.sin(ph * Math.PI);
+        const b2 = detail * fade * clamp(fn * 2.4, 0, 1.6);
+        B.point(_c1, [pal.spark[0] * b2, pal.spark[1] * b2, pal.spark[2] * b2],
+          cw * 0.30 * (0.6 + fade));
+      }
     }
   }
 }
