@@ -614,6 +614,103 @@ in space, so an occlusion term is computable — and unlike a second inhibitor f
 it would be a genuinely new axis of information rather than another scalar on the
 same disc.
 
+## Senescence, the half you can see (2026-07-26)
+
+The simulation half landed and nothing drew it. `org.sen` ran 0→1, `org.shed`
+flipped, and `tools/senesce_shot.mjs` came back with **63594 triangles and
+141528 lines at onset, at half, and at dead** — three identical frames, which is
+as exact a measurement of "unbuilt" as this repo has ever had.
+
+Afterwards, same tool, same specimen: 63594/141528 at onset (a colour change
+costs no geometry, so this one *should* not move), 63096/139980 at half once a
+dozen blades have let go, and **15786–21762 tri at `dead` across three runs**.
+That last spread is not noise in the simulation — the tool polls for `dead()` and
+catches it a few frames either side, and a few frames is the difference between
+six blades still falling through shot and none.
+
+### Deriving the drained colour instead of painting eight of them
+
+The obvious version is a brown per species in the palette table. It was worth
+resisting, and not only on principle: nothing about a senescing leaf is a new
+colour, it is the *removal* of one. The pigment-protein complexes are taken apart
+and their nitrogen withdrawn into the plant — that recovery is the entire reason
+a plant senesces a leaf rather than simply dropping it — and what is left is cell
+wall.
+
+So `senesceTint()` collapses the blade's own colour to luminance and tints the
+result warm, in two stages, because the tissue goes **pale before it goes dark**
+and one stage reads as a dimmer switch. A teal fern drains to grey-tan and a red
+rosette to dusty brown out of the same four lines, and the ninth species will not
+need an entry either. This is not a claim about chemistry — colour was authored
+here already — but it is one less thing hand-placed.
+
+### Veins die last, and the vdf was already sitting there
+
+Tissue against a vein is the last to be dismantled, because the vein is the route
+the recovered nitrogen leaves by and has to keep working until the withdrawal is
+finished. That is the green islands you see along the veins of a yellowing leaf,
+and `leaf.vdf` — the distance-to-vein field, already computed for fenestration —
+is exactly the channel. One constant (`VEIN_LAG`) sets how far behind the
+vasculature drains; the *shape* of what is spared is a network that canalised
+itself. Nothing here knows what a vein looks like.
+
+**The one thing that had to be measured rather than guessed:** used raw, `dd`
+calls **58% of the lamina "near a vein"** — the network is dense and the field is
+a linear ramp — so most of the blade was spared and the drain read as blotches
+rather than a tracery. Squaring it narrows what is held without touching `dd`
+itself, which fenestration and the vein tint are both calibrated against. That is
+the whole of the tuning; `test/senesce.mjs` prints an ASCII map of what is still
+holding colour, and the vein tree is legible in it at sen=0.5 and gone by 0.8.
+
+`test/senesce.mjs`, Cathedral Fern seed 7, drawn through the shipped `blade()`:
+
+| sen | drain open | drain vein | warmth open | warmth vein | lamina glow | vein glow |
+|---|---|---|---|---|---|---|
+| 0.00 | 0.000 | 0.000 | 0.31 | 0.21 | 0.1332 | 0.1703 |
+| 0.25 | 1.253 | 0.000 | 2.81 | 0.21 | 0.1264 | 0.1703 |
+| 0.50 | 1.259 | 0.793 | 3.69 | 1.11 | 0.0858 | 0.1560 |
+| 0.75 | 1.314 | 1.457 | 3.79 | 3.52 | 0.0292 | 0.0848 |
+| 1.00 | 1.314 | 1.508 | 3.79 | 3.76 | 0.0000 | 0.0136 |
+
+At a quarter gone the open lamina has fully turned and the tissue on the veins has
+not started. **`drain` saturates and `warmth` does not**, and both are in the table
+for that reason: the drained colour passes through pale on its way to dark, so a
+distance from the living colour stops growing about halfway along while the thing
+is still visibly changing. A single metric here would have been read as "it
+finishes at sen=0.25", which is wrong.
+
+### The fall is stated motion, and says so
+
+A shed organ separates at the base of its stalk, so what leaves is the whole leaf
+and what is left is bare stem. Everything after that — a constant descent, a
+lateral flutter, an end-over-end pitch — is asserted, in the same category as the
+sway in `60_render.js`, and it is deliberately *not* an integration of gravity: a
+blade is almost all area and almost no mass, so it is at terminal velocity within
+a length of letting go and what you actually watch is drag. There is no ground in
+this scene, so it fades out on the way down rather than landing.
+
+### Two things the visible half exposed in code that was already there
+
+**`Plant.bounds()` said "everything currently alive" and counted shed organs at
+full reach.** Invisible while nothing was ever removed. The moment blades started
+leaving, a specimen that had dropped its whole canopy was still framed for it and
+sat tiny in the middle of an empty shot. One `if (o.shed) continue`, and the
+camera now closes in as the plant dismantles itself.
+
+**`build.js` reported success on a bundle that was a SyntaxError.** The duplicate
+check only ever read the first name of a declarator list, so `const _c0 = v3(),
+_sc = v3()` hid a genuine collision with an `_sc` twenty lines up. The build
+printed its usual `built canalisation.html 223.1kb js`; the page was dead; the
+CI gate passed, because `smoke.mjs` imports the simulation and not the geometry.
+What caught it was the new harness importing `50_geom.js`. `build.js` now hands
+the bundle to `new Function` before writing anything — the engine settles what a
+regex was guessing at — and the declarator scan reads the whole comma list.
+
+**Still not built:** a new specimen germinating as the old one fades (ROADMAP 1),
+and the standing stem does not drain at all. Leaving the stem lit is a choice
+rather than an omission — it is what makes the end read as a seed head instead of
+a corpse — but it has now been looked at on screen, which it had not been before.
+
 ## Design forks and why
 
 - **Cell-based CPU sim, not GPU.** The tissue divides and rewires its topology every

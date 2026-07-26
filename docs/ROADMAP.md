@@ -6,16 +6,17 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
-1. **[#1, the visible half of senescence](#1-life-cycle-and-senescence--half-done-2026-07-26)** — the simulation
-   is done and nothing draws it. Best ratio of payoff to work in the file.
+1. **[#6, one specimen giving way to the next](#6-handover)** — the last piece of the life cycle,
+   and the only part of senescence still unbuilt. `dead()` is the trigger and the
+   camera director already exists.
 2. **[#5, petiole radius at flower scale](#5-smaller-things)** — an afternoon, with a clear repro shot.
 3. **[#3, the third phyllotaxis hypothesis](#3-third-phyllotaxis-hypothesis)** — the honest headline limitation.
    Pure science; a negative result is as publishable as a positive one here.
 4. **[#4, lamina tensioning its own margin](#4-lamina-pulls-on-its-own-margin)** — meaningful quality jump, meaningful work.
 
-#2 and #4b are **done**; their entries are kept for what they record.
+#1, #2 and #4b are **done**; their entries are kept for what they record.
 
-## 1. Life cycle and senescence — HALF DONE (2026-07-26)
+## 1. Life cycle and senescence — DONE (2026-07-26)
 The simulation half is in: a specimen now **finishes**. `Plant.spent()` is true when
 every growing point has arrested or consumed itself, `senesceStep` dismantles the
 blades in a wave from there, and `dead()`/`stage()` report the end. Cathedral Fern
@@ -29,20 +30,29 @@ summary is that the *timing* of senescence is emergent and the *order* is impose
 (SCIENCE.md item 6), and the route to deriving the order away is light, not
 another molecule.
 
-**Still to do, and this is the visible half.** `node tools/senesce_shot.mjs` is the
-tool for it — it already captures `-onset`, `-mid` and `-spent`, and today all
-three come back identical at 63594 triangles and 141528 lines, which is the
-measurement of exactly how much of this is unbuilt:
-- Nothing renders it yet. `org.sen` (0→1) and `org.shed` exist and no geometry or
-  shader reads them. Wanted: colour draining, and **veins dying last** — the
-  per-blade `veinDistanceField` is already computed and is exactly the channel for
-  it, so this should not need new simulation.
-- Shed blades should release and drift down rather than blinking out. `org.shed`
-  is currently a boolean the renderer ignores.
-- A new specimen germinating as the old one fades. `dead()` is the trigger; the
-  camera director already exists and would shoot it.
-- The stem and fruit persist after every blade has gone, which is right for a
-  seed head but has never been looked at on screen.
+**The visible half went in the same day.** `org.sen` and `org.shed` are read by
+the geometry now: the lamina drains, the tissue held against a vein drains last
+so the blade empties into its own canalised network, the glow dies, the blade
+curls as it dries, and a shed organ separates at the base of its stalk and
+flutters down. The drained colour is *derived* from each species' own — there are
+no per-species browns and adding a ninth species will not need one.
+
+Where the three marks used to come back identical at 63594 triangles and 141528
+lines, `spent` is now 16-22k depending on how many blades the poll catches still
+falling: the canopy has actually left. Numbers for
+the colour claim are in `test/senesce.mjs`, which drives the shipped `blade()` and
+prints an ASCII map of what is still holding colour. JOURNAL.md has the reasoning,
+TUNING.md the seven constants, and SCIENCE.md item 6 now covers the within-blade
+order as well as the between-blade one.
+
+Two things this exposed rather than added, both fixed here: `Plant.bounds()` was
+counting shed organs, so a stripped specimen was still framed for its old canopy;
+and `build.js` would report success on a bundle that did not parse. See PITFALLS.
+
+**What is left is the handover — [#6](#6-handover).** The stem and fruit persisting
+after every blade has gone has now been looked at on screen and is being kept: it
+reads as a seed head, which is right. The stem does not drain and that is also a
+choice, not an omission.
 
 ## 2. Cell-level view on a leaf — DONE (2026-07-25)
 The **look closer** treatment now exists on the blade as well as the meristem, so
@@ -85,6 +95,15 @@ before/after in JOURNAL.md. The guessed fix ("an apex that has stopped emitting 
 spent") was right but insufficient on its own: idleness alone cannot be distinguished
 from slow patterning near the wavelength limit, so it takes a geometric condition
 too. Details in JOURNAL.md and TUNING.md.
+
+## 6. Handover
+A new specimen germinating as the old one fades — the last piece of the life
+cycle, and now that the old one visibly dismantles itself there is something to
+hand over *from*. `Plant.dead()` is the trigger and the camera director already
+exists and would shoot it. The open questions are whether the new seed shares the
+frame with the standing seed head or replaces it, and whether the species changes;
+neither is answerable from a headless harness, so this one wants a real browser
+and a decision, not a sweep.
 
 ## 5. Smaller things
 - **Organ petioles dominate a flower close-up.** At flower scale the stalks are fat

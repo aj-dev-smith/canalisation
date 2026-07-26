@@ -31,8 +31,11 @@ open canalisation.html   # no server needed, no dependencies
 
 `canalisation.html` is a **build artifact** — never edit it. Source is `src/`,
 numbered so the concatenation order is the dependency order. `build.js` strips
-`import`/`export` and warns about duplicate top-level declarations (the bundle is
-one shared scope — name collisions are silent otherwise and cost a debugging cycle).
+`import`/`export`, warns about duplicate top-level declarations (the bundle is one
+shared scope — name collisions are silent otherwise and cost a debugging cycle),
+and **compiles the bundle before writing it**, exiting non-zero if it does not
+parse. It used to only warn, and the warning had a hole; PITFALLS.md has the day
+that cost.
 
 Tests are headless Node, no browser:
 
@@ -51,6 +54,7 @@ node test/flower.mjs                               # one isolated axis: florigen
 node test/focus.mjs '[{"tag":"a"}]'                # meristem probe: divergence, lock, primordium peak ratio
 node test/ring.mjs                                 # T/D/geometry map on STATIC tissue, checked for stationarity
 node test/shoot.mjs                                # senescence: does the specimen finish, and in what order
+node test/senesce.mjs                              # senescence, drawn: does a dying blade change, and do the veins go last
 ```
 
 Two more are **archived experiments**, not live checks. They are the code that
@@ -146,8 +150,9 @@ conditions. **When adding an organ, reach for that function before writing anyth
 
 ## The honest state of it
 
-It grows, flowers, fruits, and now **finishes** — a specimen runs out of growing
-points, dismantles its blades and reports `dead`. All eight species complete.
+It grows, flowers, fruits, and **finishes** — a specimen runs out of growing
+points, drains its blades into their own veins, drops them, and reports `dead`,
+leaving a standing seed head. All eight species complete.
 
 Two live limitations, both with diagnoses rather than excuses:
 
@@ -155,10 +160,11 @@ Two live limitations, both with diagnoses rather than excuses:
 90–160°. Do not add a fudge factor to force 137.5°. Displaying the real measured
 number, spread and all, is the point.
 
-**Senescence is only half built, and the built half is split.** *When* a specimen
+**Senescence is built and drawn, but the built half is split.** *When* a specimen
 senesces is emergent; *the order its blades go in* is imposed, and is SCIENCE.md
-item 6. Three separate attempts to derive that order from auxin transport were
-falsified — read the 2026-07-26 JOURNAL entry before reopening it, because the
-machinery is still in the tree and it is easy to mistake for live code. Nothing
-renders senescence at all yet: `org.sen` and `org.shed` are set and no geometry or
-shader reads them. That is the top of [docs/ROADMAP.md](docs/ROADMAP.md).
+item 6 — as is the order within a blade, where tissue against a vein drains last.
+Three separate attempts to derive the between-blade order from auxin transport
+were falsified: read the 2026-07-26 JOURNAL entry before reopening it, because the
+machinery is still in the tree and it is easy to mistake for live code. What is
+still missing is the handover — a new specimen germinating as the old one fades —
+which is now the top of [docs/ROADMAP.md](docs/ROADMAP.md).

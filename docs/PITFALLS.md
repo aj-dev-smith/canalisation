@@ -245,6 +245,15 @@ packed into the scene alpha (used by the depth-of-field pass).
 expand basipetally with a furled tip; internodes below the apex keep stretching and
 carry organs apart. Uniform scale-up reads as mechanical instantly.
 
+**A comment that says "alive" is not a filter.** `Plant.bounds()` opens with
+"world-space extent of everything currently alive" and counted every organ ever
+made, at full reach. That was harmless for as long as nothing was ever removed
+from the plant — and the day blades started being shed, a specimen that had
+dropped its entire canopy was still framed for it and sat as a speck in the middle
+of an empty shot. The framing was wrong long before anything could show it.
+**When you add the first mechanism that removes something, re-read
+every loop that walks the collection it came out of.**
+
 ## Process
 
 **Script edits fail silently.** A Python `str.replace` that matches nothing returns
@@ -271,6 +280,23 @@ extreme is enough.
 
 **The bundle is one shared scope.** Duplicate top-level `const` names across modules
 throw at load. `build.js` warns; heed it.
+
+**...and until 2026-07-26 that warning had a hole big enough to ship a dead page
+through.** The scan read only the FIRST name of a declarator list, so
+
+    const _c0 = v3(), _c1 = v3(), _sc = v3();     // _sc collides, 20 lines up
+
+produced no warning at all. `build.js` printed `built canalisation.html 223.1kb
+js`, wrote a bundle that was a `SyntaxError`, and `node test/smoke.mjs` passed 47
+checks — because the gate imports the *simulation* and the collision was in the
+*geometry*. Every headless check was green and the page was blank. It was caught
+by a new harness that happened to import `50_geom.js`.
+
+`build.js` now compiles the bundle with `new Function` before writing anything and
+exits non-zero if it does not parse, and the declarator scan reads the whole comma
+list. Two things to take from it that outlive that one bug: **a green CI gate is
+only evidence about what the gate imports**, and **the artifact is not verified
+until something has parsed it.**
 
 ## Performance
 

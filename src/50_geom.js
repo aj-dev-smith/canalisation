@@ -146,7 +146,7 @@ const P0 = v3(), P1 = v3(), P2 = v3(), E1 = v3(), E2 = v3(), NN = v3();
 const _pa = v3(), _pb = v3(), _pc = v3(), _e1 = v3(), _e2 = v3(), _nn = v3();
 const _q0 = v3(), _q1 = v3(), _q2 = v3(), _q3 = v3(), _side = v3();
 const _n0 = v3(), _n1 = v3(), _n2 = v3(), _n3 = v3(), _cc = v3(), _fc = v3();
-const _c0 = v3(), _c1 = v3();
+const _c0 = v3(), _c1 = v3(), _senC = v3(), _senV = v3();
 let _gridPos = new Float32Array(0), _gridNrm = new Float32Array(0), _gridCol = new Float32Array(0);
 
 function triNormal(a, b, c) {
@@ -181,6 +181,55 @@ function bladeMap(leaf, len, dev) {
   return { matAt, wAt, wMat, furlAt };
 }
 
+// ---------------------------------------------------------------------------
+// THE COLOUR OF SENESCENCE, DERIVED RATHER THAN PAINTED
+//
+// A senescing leaf is not repainted, it is EMPTIED. The pigment-protein
+// complexes are dismantled and their nitrogen withdrawn into the plant before
+// the blade is let go — that recovery is the whole reason for senescing rather
+// than simply dropping. What stays behind is cell wall: unpigmented, and warm,
+// because that is the colour of what oxidises in it.
+//
+// So this is a SUBTRACTION from the blade's own colour rather than eight
+// hand-picked autumn browns. Discard the pigment (collapse to luminance), keep
+// the wall, tint it warm. A teal fern drains to grey-tan and a red rosette to
+// dusty brown, and neither needed a palette entry — which also means adding a
+// species costs nothing here.
+//
+// Two stages, because that is the order it happens in: the pigment goes first
+// and the tissue is briefly PALER than it was alive, and only then does the
+// wall dry and darken. One stage looks like a dimmer switch.
+//
+// Note what is and is not asserted. Colour in this piece was authored anyway
+// (see the species table in 70_app.js), so a colour transform adds no new
+// spatial prior. The PATTERN it drains in is not authored: that comes from the
+// canalised vein network, below.
+export function senesceTint(out, r, g, b, s) {
+  if (s <= 0) { out[0] = r; out[1] = g; out[2] = b; return out; }
+  const l = 0.30 * r + 0.59 * g + 0.11 * b;
+  const k0 = clamp(s * 2, 0, 1), k1 = clamp(s * 2 - 1, 0, 1);
+  // pigment gone, wall exposed          // then dried out
+  const p0 = l * 1.45 + 0.020, d0 = l * 0.72 + 0.010;
+  const p1 = l * 1.16 + 0.012, d1 = l * 0.48 + 0.005;
+  const p2 = l * 0.44, d2 = l * 0.20;
+  out[0] = lerp(lerp(r, p0, k0), d0, k1);
+  out[1] = lerp(lerp(g, p1, k0), d1, k1);
+  out[2] = lerp(lerp(b, p2, k0), d2, k1);
+  return out;
+}
+
+// How far behind the lamina the vasculature drains. Tissue next to a vein is
+// the last to be dismantled, because the vein is the route the recovered
+// nitrogen leaves by and it has to stay working until the withdrawal is over —
+// green islands along the veins of a yellow leaf are this, seen from a lawn.
+//
+// It is worth being clear about why this constant is cheap. It sets the LAG,
+// one number; the SHAPE of what is spared is `leaf.vdf`, the distance-to-vein
+// field of a network that canalised itself. Nothing here knows what a vein
+// looks like. At 0.45 the open lamina is fully drained by sen=0.55 and the
+// vein tracery holds until sen=1, which is the whole width of the shed.
+const VEIN_LAG = 0.45;
+
 // A frond: a coarse parametric surface cut to the blade outline, with the
 // canalised vein network laid on top of it. The mesh is deliberately much
 // coarser than the tissue that was simulated — the veins carry the detail.
@@ -190,11 +239,15 @@ function bladeMap(leaf, len, dev) {
 // bright flat slab with a row of lit cells around the margin, where the auxin
 // sources are, and nothing at all in between. It was drawing correctly; you
 // could not see it. Turning the surface down is what lets the cells through.
-export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV, dev, fade) {
+// `sen` (0..1) is the organ's senescence. It is deliberately NOT stored on the
+// leaf: blades come from a shared library, so several organs draw the same
+// `leaf` object and one of them dying must not drain the others.
+export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV, dev, fade, sen) {
   const o = leaf.o;
   MU = MU || 22; MV = MV || 10;
   dev = dev === undefined ? 1 : dev;
   fade = fade === undefined ? 1 : fade;
+  sen = sen || 0;
 
   const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
   const vdf = leaf.vdf, res = leaf.vdfRes || 0;
@@ -231,10 +284,28 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
       const vv = matAtUV(u, t);
       const dd = vdf ? clamp(1 - nearVein(u, vv) * 11, 0, 1) : 0;
       const tt = clamp(u * 0.9 + 0.1, 0, 1);
-      col[k4] = (lerp(pal.blade0[0], pal.blade1[0], tt) + dd * pal.veinTint[0]) * fade;
-      col[k4 + 1] = (lerp(pal.blade0[1], pal.blade1[1], tt) + dd * pal.veinTint[1]) * fade;
-      col[k4 + 2] = (lerp(pal.blade0[2], pal.blade1[2], tt) + dd * pal.veinTint[2]) * fade;
-      col[k4 + 3] = dd * glow * 0.24 * fade;
+      const r = lerp(pal.blade0[0], pal.blade1[0], tt) + dd * pal.veinTint[0];
+      const g = lerp(pal.blade0[1], pal.blade1[1], tt) + dd * pal.veinTint[1];
+      const b = lerp(pal.blade0[2], pal.blade1[2], tt) + dd * pal.veinTint[2];
+      // This vertex's own senescence: the open lamina goes first and the tissue
+      // held against a vein goes last, so the blade empties into its own
+      // vasculature rather than dimming as one flat card.
+      //
+      // `hold` is squared, and that matters more than it looks. `dd` reads
+      // better than half the lamina as "near a vein" — the network is dense and
+      // the field is a linear ramp — so used raw it spares most of the blade and
+      // the drain comes out as blotches. Green islands are TIGHT to the vein.
+      // Squaring narrows what is held without touching `dd` itself, which
+      // fenestration and the vein tint are both calibrated against.
+      const hold = dd * dd;
+      const sl = sen > 0 ? clamp((sen - hold * VEIN_LAG) / (1 - VEIN_LAG), 0, 1) : 0;
+      senesceTint(_senC, r, g, b, sl);
+      col[k4] = _senC[0] * fade;
+      col[k4 + 1] = _senC[1] * fade;
+      col[k4 + 2] = _senC[2] * fade;
+      // dead tissue does not glow. It is the first thing to go and it is what
+      // makes the drain read at a distance, where the hue shift alone does not.
+      col[k4 + 3] = dd * glow * 0.24 * fade * (1 - sl);
     }
   }
   const gp = (i, j, out) => { const k = (i * NV + j) * 3; out[0] = pos[k]; out[1] = pos[k + 1]; out[2] = pos[k + 2]; return out; };
@@ -271,6 +342,13 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
   const segs = leaf.veins;
   if (segs) {
     const base = len * 0.0034;
+    // The vasculature is at dd=1 by definition, so it drains on the far end of
+    // the lag and is still lit when the lamina around it has gone: a shed blade
+    // leaves as a skeleton. This is the one place the hierarchy earns its keep
+    // visually — the midrib is the last lit thing on the plant.
+    const sv = sen > 0 ? clamp((sen - VEIN_LAG) / (1 - VEIN_LAG), 0, 1) : 0;
+    senesceTint(_senV, pal.vein[0], pal.vein[1], pal.vein[2], sv);
+    const vglow = glow * (1 - sv * 0.92);
     for (const s of segs) {
       // veins mature basipetally too — none exist ahead of the wave
       if (s.x0 > dev + 0.04 || s.x1 > dev + 0.04) continue;
@@ -288,7 +366,7 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
       v3norm(_side, v3cross(_side, _e1, _e2));
       if (!isFinite(_side[0])) continue;
       const w = Math.max(MINW, base * (0.25 + s.w * 1.35));
-      B.ribbon(_q0, _q1, _side, w, w, pal.vein, glow * (0.06 + s.w * 0.52));
+      B.ribbon(_q0, _q1, _side, w, w, _senV, vglow * (0.06 + s.w * 0.52));
     }
   }
 }

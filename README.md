@@ -85,6 +85,7 @@ node test/phyllo.mjs                               # divergence angle statistics
 node test/margin.mjs                               # grow a leaf outline, ASCII silhouette
 node test/fruit.mjs                                # grow fruits, ASCII radius map
 node test/flower2.mjs                              # full life cycle incl. axillary flowers
+node test/senesce.mjs                              # a dying blade, drawn: ASCII map of what still holds colour
 ```
 
 Only `smoke.mjs` asserts. The rest are diagnostic instruments — you read their

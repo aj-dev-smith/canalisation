@@ -37,9 +37,12 @@ inside **single** quotes, so it never interpolated.
 - `sway.mjs` — pixel-diffs two frames to prove the sway field animates
 - `senesce_shot.mjs prefix [species] [seed]` — runs until the specimen dismantles
   itself and captures `-onset`, `-mid`, `-spent`. Picks its GL backend the way
-  `flower_shot.mjs` does. **The three frames are currently identical** — senescence
-  is simulated and nothing renders it, so what this verifies today is that the
-  state machine reaches `spent` in a real browser and that the stage bar follows.
-  It reads the lit stage chip out of the DOM rather than off the model, so a
-  display that silently stops matching the simulation shows up here. The frames
-  become worth diffing the moment `50_geom.js` or `60_render.js` reads `org.sen`
+  `flower_shot.mjs` does. The three frames now differ: on Cathedral Fern seed 21
+  the count holds at 63594 tri while the plant is only draining — colour costs no
+  geometry — and falls to 16-22k at `dead`, which is the canopy having left. The
+  spread is the poll catching `dead()` a few frames either side, with blades still
+  mid-fall. **A count that does not fall by `spent` means shed blades are going
+  nowhere**, whatever the frames look like. What it cannot judge is whether
+  the drain reads, because the counts are blind to colour; `test/senesce.mjs` has
+  those numbers. It reads the lit stage chip out of the DOM rather than off the
+  model, so a display that silently stops matching the simulation shows up here

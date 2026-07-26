@@ -342,3 +342,43 @@ export sat at 0.66-0.69 across `turnover` 0.05 → 0 and `rootDrain` 3 → 12, b
 the quantity is conserved. Shoot `T` 40 → 8 is the one change that does something
 — it starves apical organs and inverts the basipetal gradient — and that is a
 different claim, not a tuning of this one. JOURNAL.md has the tables.
+
+### Drawing it (2026-07-26)
+
+Seven numbers, and only one of them was arrived at by measurement rather than by
+eye. They live in `50_geom.js` and in the organ loop in `70_app.js`.
+
+```
+VEIN_LAG     0.45    how far behind the lamina the vasculature drains
+dd -> dd*dd          what counts as "held against a vein"   <- the measured one
+SHED_LIFE    620     plant-time a shed blade is still drawn for (~5s at 1x)
+SHED_FALL    0.030   terminal velocity, world units per plant-time
+SHED_SWING   0.55    lateral flutter, in blade lengths
+SHED_TUMBLE  0.017   end-over-end pitch, radians per plant-time
+curl  x(1 + sen*2.2)   a drying blade curls
+len   x(1 - sen*0.12)  ...and shrivels, slightly
+```
+
+**Squaring `dd` is the one that matters.** `dd` is a linear ramp off a dense vein
+network, so raw it reads **58% of the lamina** as vein-adjacent and the drain
+comes out as blotches instead of a tracery. Do not fix that by lowering
+`VEIN_LAG` — that shortens the window in which there is any contrast at all
+rather than tightening it — and do not fix it by steepening `dd` itself, which
+fenestration (`o.fenestrate`) and the vein tint are both calibrated against.
+
+`VEIN_LAG` sets the window, not the strength. At 0.45 the open lamina is fully
+drained by sen=0.55 and the vein tracery holds until sen=1, which puts the whole
+of the contrast between roughly sen 0.2 and 0.65 — verify with `test/senesce.mjs`,
+which prints the ASCII map. Push it above ~0.6 and the lamina drains before the
+wave has travelled; below ~0.3 the blade goes as one card.
+
+`SHED_LIFE` against `SHED_FALL` is the pair to keep in step: 620 x 0.030 is 18
+world units of descent, which clears the frame from anywhere on a specimen of
+normal height (Cathedral Fern reaches ~16). Shorten the life without slowing the
+fall and blades vanish in mid-air; slow the fall without shortening the life and
+they pile up in shot, because there is no ground for them to land on.
+
+The senescence colour itself has **no per-species constants and should not grow
+any** — `senesceTint()` derives the drained colour from the blade's own, which is
+the only reason adding a species does not mean picking a brown for it. See
+JOURNAL.md.

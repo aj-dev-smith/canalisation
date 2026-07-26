@@ -6,7 +6,9 @@ import { DEFAULT_PRM } from './10_auxin.js';
 import { MERISTEM_DEFAULTS } from './20_meristem.js';
 import { Leaf, LEAF_DEFAULTS } from './30_leaf.js';
 import { Plant, SPECIES_DEFAULTS } from './40_plant.js';
-import { Buffers, tube, blade, laminaCells, meristemDome, fruitShell, setView } from './50_geom.js';
+import {
+  Buffers, tube, blade, laminaCells, meristemDome, fruitShell, setView, senesceTint,
+} from './50_geom.js';
 import { Renderer } from './60_render.js';
 import {
   v3, v3set, v3copy, v3add, v3sub, v3scale, v3addScaled, v3norm, v3len, v3lerp,
@@ -260,6 +262,65 @@ const BASE_PAL = {
   fruit0: [0.10, 0.22, 0.14], fruit1: [0.85, 0.30, 0.22],
   petal0: [0.30, 0.24, 0.42], petal1: [0.72, 0.55, 0.95], petalVein: [1.0, 0.85, 1.0],
 };
+
+// ---------------------------------------------------------------------------
+// A SHED BLADE LETTING GO
+//
+// Abscission separates the organ at the base of its stalk, so what leaves is the
+// whole leaf — stalk and all — and what is left behind is bare stem. Everything
+// after that is stated motion, in the same category as the sway in 60_render.js
+// and NOT a claim about chemistry: nothing in this simulation knows what gravity
+// is, and there is no ground for a leaf to land on, so a fall here is drift and
+// fade rather than a landing.
+//
+// Why it flutters rather than drops. A blade is almost all area and almost no
+// mass, so it reaches terminal velocity within a length of letting go and never
+// accelerates again; what you actually watch is the drag alternating from side
+// to side. Constant descent plus a lateral swing plus an end-over-end pitch, and
+// no gravity term at all, is closer to the real thing than integrating one.
+//
+// Time here is plant time, ~125 units per real second at 1x — see App.step.
+const SHED_LIFE = 620;      // how long a shed blade is still drawn for
+const SHED_FALL = 0.030;    // terminal velocity, world units per plant-time
+const SHED_SWING = 0.55;    // lateral flutter, in blade lengths
+const SHED_TUMBLE = 0.017;  // end-over-end pitch, radians per plant-time
+
+// deterministic per-organ phase, so one specimen's leaves do not fall in step
+// and a replayed seed drops them the same way twice
+function shedPhase(org) {
+  if (org._fall === undefined) {
+    const o = org.frame.o;
+    const h = Math.sin(o[0] * 12.9898 + o[1] * 4.1414 + o[2] * 78.233) * 43758.5453;
+    org._fall = h - Math.floor(h);
+  }
+  return org._fall;
+}
+
+// The organ's frame, displaced by however far it has fallen. Returns null once
+// it has been gone long enough to stop drawing.
+const _shedFr = { o: v3(), x: v3(), y: v3(), z: null, t: 0 };
+const _petC = v3();
+function fallenFrame(org, time, out) {
+  const t = time - (org.shedAt || 0);
+  if (t > SHED_LIFE) return null;
+  const f = org.frame, ph = shedPhase(org);
+  const sw = Math.sin(t * 0.026 + ph * TAU) * SHED_SWING * org.len;
+  // swing across the blade's own width, which is the axis a leaf rocks about,
+  // and drift a little the way it was already pointing
+  out.o[0] = f.o[0] + f.z[0] * sw + f.x[0] * sw * 0.35;
+  out.o[1] = f.o[1] - SHED_FALL * t;
+  out.o[2] = f.o[2] + f.z[2] * sw + f.x[2] * sw * 0.35;
+  const a = t * SHED_TUMBLE * (0.6 + ph * 0.8);
+  const c = Math.cos(a), s = Math.sin(a);
+  // pitch about z: the blade goes over its own tip
+  for (let k = 0; k < 3; k++) {
+    out.x[k] = f.x[k] * c + f.y[k] * s;
+    out.y[k] = f.y[k] * c - f.x[k] * s;
+  }
+  out.z = f.z;
+  out.t = clamp(t / SHED_LIFE, 0, 1);
+  return out;
+}
 
 export class App {
   constructor(canvas, hud) {
@@ -575,17 +636,24 @@ export class App {
   // falling into line — and the biggest opened blade is the fallback, where
   // they are already in line and only the traffic still moves.
   watchOrgan() {
-    let live = null, big = null, bigA = 0;
+    let live = null, big = null, bigA = 0, freshest = null, minSen = 2;
     for (const ax of this.plant.axes) {
       for (const o of ax.organs) {
         const L = o.leaf;
         if (o.floral || !L || !L.margin || !L.margin.mature) continue;
         if ((o.dev || 0) < 0.35 || o.len < 0.05) continue;
+        if (o.shed) continue;                        // it is not on the plant
+        if ((o.sen || 0) < minSen) { minSen = o.sen || 0; freshest = { ax, org: o }; }
+        // Prefer a blade that is not being dismantled: the replay canalises a
+        // network from scratch, and doing that on tissue visibly draining under
+        // it is a contradiction. On a specimen where every blade has started,
+        // `freshest` takes over rather than the close-up going empty.
+        if ((o.sen || 0) > 0.25) continue;
         if (!L.mature) { if (!live || o.len > live.org.len) live = { ax, org: o }; }
         else if (o.len * (o.dev || 0) > bigA) { bigA = o.len * (o.dev || 0); big = { ax, org: o }; }
       }
     }
-    return live || big;
+    return live || big || freshest;
   }
 
   // ---------------------------------------------------------------------
@@ -610,8 +678,10 @@ export class App {
     // Latch the blade being inspected rather than re-picking it every frame:
     // the pick would change under the viewer as leaves open and the camera
     // would cut to a different one mid-shot.
+    // ...but a blade that starts dismantling itself under the microscope has
+    // stopped being the thing the shot is about, so that one does let go.
     const w = this._watch;
-    if (!w || !w.org.leaf || w.ax.organs.indexOf(w.org) < 0) {
+    if (!w || !w.org.leaf || w.ax.organs.indexOf(w.org) < 0 || w.org.shed) {
       this._watch = this.watchOrgan();
       this._replay = null;
     }
@@ -924,6 +994,16 @@ export class App {
       }
       for (const org of ax.organs) {
         if (org.len < 0.02) continue;
+        // A shed organ is still drawn — falling — until it has been gone long
+        // enough. This is the only place in the scene where an organ is drawn
+        // somewhere other than where the simulation put it, so everything below
+        // reads `oFr` rather than `org.frame`.
+        let oFr = org.frame, gone = 0;
+        if (org.shed) {
+          const ff = fallenFrame(org, P.time, _shedFr);
+          if (!ff) continue;
+          oFr = ff; gone = ff.t;
+        }
         // Occlusion clearing, with hysteresis.
         //
         // The subject this is measured from is a growing, circumnutating tip,
@@ -937,9 +1017,9 @@ export class App {
         // at the boundary decides once instead of once per frame.
         let occluded = false;
         if (cullFrom && org !== cullKeepOrg && !(ax === cullKeep && org.floral)) {
-          const ox = org.frame.o[0] - this.cam.eye[0];
-          const oy = org.frame.o[1] - this.cam.eye[1];
-          const oz = org.frame.o[2] - this.cam.eye[2];
+          const ox = oFr.o[0] - this.cam.eye[0];
+          const oy = oFr.o[1] - this.cam.eye[1];
+          const oz = oFr.o[2] - this.cam.eye[2];
           const t = ox * sdx + oy * sdy + oz * sdz;          // along the sight line
           if (t > 0 && t < cullR) {
             const px2 = ox - sdx * t, py2 = oy - sdy * t, pz2 = oz - sdz * t;
@@ -951,28 +1031,47 @@ export class App {
         org._occ = occluded;
         if (occluded) continue;
         const L = org.leaf;
+        // How far through dismantling itself this organ is. A blade only lets go
+        // once this has reached 1, so a falling one is already fully drained —
+        // `gone` carries the rest of the departure and nothing else has to.
+        const sen = org.sen || 0;
+        const vis = 1 - gone * gone;        // it lingers, then it is not there
         // petiole
-        const a = org.frame.o;
+        const a = oFr.o;
         // a longer stalk carries the blade clear of the shoot and its neighbours
         const pet = org.len * 0.34 + org.radius * 1.8;
-        const b = v3(a[0] + org.frame.x[0] * pet,
-          a[1] + org.frame.x[1] * pet,
-          a[2] + org.frame.x[2] * pet);
-        tube(B, [a, b], [org.radius * 0.5, org.radius * 0.30], 5, () => ({ c: pal.stem1, e: 0 }));
+        const b = v3(a[0] + oFr.x[0] * pet,
+          a[1] + oFr.x[1] * pet,
+          a[2] + oFr.x[2] * pet);
+        // the stalk empties too — the whole organ is being withdrawn from, not
+        // just its blade, and a green stalk under a drained blade reads as a bug
+        let petC = pal.stem1;
+        if (sen > 0) {
+          senesceTint(_petC, pal.stem1[0], pal.stem1[1], pal.stem1[2], sen * 0.85);
+          _petC[0] *= vis; _petC[1] *= vis; _petC[2] *= vis;
+          petC = _petC;
+        }
+        tube(B, [a, b], [org.radius * 0.5, org.radius * 0.30], 5, () => ({ c: petC, e: 0 }));
         if (!L || !L.margin || !L.margin.mature) continue;
-        const fr = { o: b, x: org.frame.x, y: org.frame.y, z: org.frame.z };
+        const fr = { o: b, x: oFr.x, y: oFr.y, z: oFr.z };
         // blades unfurl rather than appearing at full size
         // one development parameter: the blade lengthens, the wave of
         // maturation runs out along it, and the furled tip uncoils behind it
         const dev = clamp((org.dev || 0) * 1.06 - 0.03, 0, 1);
-        const bl = org.len * 0.80;
+        // A drying blade shrivels — it loses the turgor that was holding it
+        // open, which is also why it curls (below). Small: this is the tissue
+        // contracting, not the leaf being scaled away, and scaling it away is
+        // the cheat that would make the fall read as a dissolve.
+        const bl = org.len * 0.80 * (1 - sen * 0.12);
         if (bl < 0.02) continue;
         const bp = org.petal ? this.petalPal
           : org.floral ? this.innerPals[clamp(
             Math.round(((org.q - this.sp.petalQ) / Math.max(1e-3, 1 - this.sp.petalQ)) * (INNER_STEPS - 1)),
             0, INNER_STEPS - 1)]
             : pal;
-        const curl = -bl * (org.petal ? 0.05 : 0.16), ripple = bl * 0.014;
+        // and it curls as it dries, hard: a dead leaf on the ground is a tube
+        const curl = -bl * (org.petal ? 0.05 : 0.16) * (1 + sen * 2.2);
+        const ripple = bl * 0.014;
         // ONE blade goes under the microscope: the one being inspected.
         //
         // This started out purely distance-driven, like the growing tip, where
@@ -1005,7 +1104,7 @@ export class App {
         const mu = detL > 0 ? Math.round(lerp(this.bladeMU, L.o.nu, detL)) : this.bladeMU;
         const mv = detL > 0 ? Math.round(lerp(this.bladeMV, L.o.nv, detL)) : this.bladeMV;
         blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mu, mv, dev,
-          1 - 0.82 * detL);
+          (1 - 0.82 * detL) * vis, sen);
         if (detL > 0.004) {
           if (detL > this.detail) this.detail = detL;
           // Cells and needles come from the replay while one is running, but

@@ -114,6 +114,15 @@ Keep this list short. Every entry is a debt.
    could not, four experiments in JOURNAL.md. Note what is NOT imposed here: no
    leaf has a lifespan, and nothing counts down.
 
+   The same rule now runs *within* a blade: tissue against a vein drains last
+   (`VEIN_LAG` in `50_geom.js`), which is real — the vein is how the recovered
+   nitrogen leaves, so it works until the withdrawal is over — but it is asserted,
+   not derived. One number, and it is only a lag: **what** is spared is the
+   distance field of a vein network that canalised itself, so the pattern on a
+   dying leaf is not drawn any more than the network was. The falling itself, and
+   the colour the dead tissue goes, are presentation in the same category as the
+   sway — see JOURNAL.md.
+
 Not simulated at all: pollination (parthenocarpy is real — auxin alone sets fruit),
 turgor and wall mechanics, light, nutrients.
 

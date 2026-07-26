@@ -774,6 +774,12 @@ export class Plant {
         if (p[2] < z0) z0 = p[2]; if (p[2] > z1) z1 = p[2];
       }
       for (const o of a.organs) {
+        // "currently alive" was aspirational until something drew senescence:
+        // a shed blade kept its full reach in here long after it stopped being
+        // on the plant, so a specimen that had dropped everything was still
+        // framed for the canopy it used to have and sat tiny in the middle of
+        // an empty shot. Skipping them closes the camera in as it dismantles.
+        if (o.shed) continue;
         const f = o.frame.o, r = o.len;
         if (f[0] - r < x0) x0 = f[0] - r; if (f[0] + r > x1) x1 = f[0] + r;
         if (f[1] - r < y0) y0 = f[1] - r; if (f[1] + r > y1) y1 = f[1] + r;
