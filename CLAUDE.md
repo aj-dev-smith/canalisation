@@ -115,6 +115,13 @@ flower, fruit, ripe, `senescing`, `spent`. Roughly 75 seconds at 1x on a Cathedr
 Fern, less on the time slider. [docs/ROADMAP.md](docs/ROADMAP.md) ends with the
 same loop written out.
 
+Note at the end of that arc: shed blades now **stop falling and lie still for a few
+seconds** before fading, so the last shot holds litter under a standing seed head for
+longer than it used to. That is deliberate, not a stall. There is still **no ground
+geometry** in the scene — a blade simply stops at the height of the plant's base, so
+the "floor" is implied by where the stem starts and nothing else. ROADMAP 6 (a new
+specimen germinating) will want a real one.
+
 ## Branching
 
 `main` is protected and is never committed to directly. **Every change goes on a
@@ -155,7 +162,8 @@ src/38_shoot.js     FALSIFIED EXPERIMENT, ships disabled. Whole-plant auxin tran
 src/39_fall.js      a shed blade falling: quasi-steady plate aerodynamics
 src/40_plant.js     the organism: axes, elongation, branching, florigen, fruit set, senescence
 src/50_geom.js      simulation state -> triangles, ribbons, points; senescence colour
-src/60_render.js    WebGL2: forward pass, sway, bloom, depth of field, grade
+src/60_render.js    WebGL2: forward pass, bloom, depth of field, grade, and `SWAY` —
+                    a decorative vertex wobble the simulation cannot see. ROADMAP 7 deletes it
 src/70_app.js       species presets, camera director, scene assembly
 src/80_main.js      UI wiring
 ```
@@ -174,14 +182,26 @@ different category, and one that has so far only *removed* stated constants. ROA
 7 extends it and asks the framing question explicitly, because "one engine" is
 something README and CONTRIBUTING both promise.
 
+**Its constants are not tunable in the way the rest of the project's are.** TUNING.md
+is otherwise a record of hard-won sweeps; the fall's section is the opposite and says
+so at the top. Every number in `39_fall.js` is physics, air, biology, or a published
+coefficient. If the fall looks wrong, the bug is in the model — that is how all four
+of its bugs were found, and none would have been visible on screen.
+
 ## Working style that paid off here
 
 - **Science first, pixels second.** Prove a mechanism in a headless harness before rendering it.
 - **Assert on every string edit.** Silent no-op replacements bit three times in one session; one was the difference between a lobed fruit and a perfect sphere. If editing by script, assert the anchor exists, and write the file only after all edits succeed.
 - **Report negative results honestly.** Two hypotheses about phyllotaxis and four about senescence have been tested and falsified. All six are written up in [docs/JOURNAL.md](docs/JOURNAL.md) with their numbers, and they are more useful than the successes would have been.
+- **Look up the real number before choosing one.** The falling blade was going to keep one hand-picked constant; checking it against real leaf mass per area removed the need for any. The hand-picked version was also measurably *worse* — it put every blade on the same side of a transition the measured values straddle by themselves. Reach for a table before reaching for a dial.
+- **A borrowed model has assumptions, and one of them is its dimensionality.** The plate aerodynamics was solving a cross-section — an infinitely long plate — while a leaf is a stub, which over-predicted lift roughly twofold and read as "flappy". Ask what a borrowed model assumes about the dimension you are *not* solving, and whether two of its coefficients are secretly one.
 - **Never fake it to make it look better.** The piece's entire claim is that nothing is drawn. A single hardcoded curve would make the whole thing a lie.
 
 ## The honest state of it
+
+*Current as of 2026-07-26. The two most recent landings are the falling blade (#13)
+and the mechanics pre-flight (#14); if the git log has moved a long way past those,
+treat the specifics below as needing a re-read rather than as fact.*
 
 **The life cycle is complete.** A specimen germinates, leafs, flowers, fruits,
 ripens, and then **finishes**: it runs out of growing points, drains each blade
@@ -242,10 +262,13 @@ short version, in order:
 number, spread and all, is the point. Two hypotheses have been tested and
 falsified; the third is ROADMAP 3.
 
-That limitation now has a sibling worth stating in the same breath: **the piece
-simulates air for a leaf that has let go and not for anything else.** Unlike the
-phyllotaxis one this is not a mystery — the fix is known, it is ranked first, and it
-pays for itself by removing an imposed constant.
+**The scene simulates air for one leaf at a time.** A blade that has let go is a
+properly loaded aerodynamic body; everything still attached is a rigid card in dead
+calm, moved only by a shader displacement the simulation cannot see. Two models of
+the same air, with abscission as the seam — described above. This limitation is
+unlike the other two here: it is not an open question but a known fix, it is ranked
+first, and it *removes* stated constants rather than needing new ones. **If you are
+picking up work with no other instruction, pick this up.**
 
 **Senescence is built and drawn, but it is split down the middle.** *When* a
 specimen senesces is emergent — `Plant.spent()`, a physical condition with nothing
