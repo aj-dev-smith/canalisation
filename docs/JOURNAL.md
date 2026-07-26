@@ -403,6 +403,48 @@ All three are in PITFALLS.md. The general lesson is narrower than "test visually
 each of these produced a picture that looked like a *different* bug than it was,
 and the headless harness was green throughout.
 
+### And then everything snapped
+
+First review of the working view: "things seem to be snapping in and out of the
+scene." Tracing every frame across entering, holding and leaving the view found
+three separate causes, none of which had anything to do with the tissue.
+
+**The reveal was distance-driven, and blades are not meristems.** Copying the
+growing tip's "no mode to find, just come closer" idiom meant *every* blade near
+the lens refined its mesh and grew needles. Around the apex that is several at
+once, all sitting a hair from both the refinement threshold and the occlusion
+cull, flickering in and out together: **13k triangles to 40k and back, frame to
+frame, camera dead still.** The close-up now applies to the blade being
+inspected and nothing else. Distance still does the fading, so arriving still
+feels like arriving; it just no longer picks the subject.
+
+**Depth of field switched in one frame** — 5.09 to 0.45 going in, 1.12 to 7.45
+coming out. Eased.
+
+**The cull was binary against a moving subject.** The tip it measures from grows
+and circumnutates, so the sight line never settles and organs near the boundary
+crossed it repeatedly. Fading them was the obvious fix and is wrong — the forward
+pass writes depth, so a blade dimmed to black still hides what is behind it,
+which is the whole point of clearing it. Hysteresis instead.
+
+Also dropped: swapping the whole leaf over to the replay, which made the
+vasculature blink out when the replay took over and back when it finished. The
+veins now always come from the real leaf and only the cells and needles come from
+the replay. That removed a pop *and* reads better — the network being present
+throughout is what makes the needles legible as falling into it rather than
+merely milling about.
+
+```
+                            before   after
+p95 frame-to-frame dGeom     1482      336
+frames moving >3000 verts      36        7
+largest depth-of-field step  6.34     0.37
+```
+
+The two large frames that remain are entering and leaving the mode, which are
+cuts. Worth writing down that none of this was visible in a still capture — the
+three-frame `leaf_shot.mjs` triptych looked correct throughout.
+
 ## Design forks and why
 
 - **Cell-based CPU sim, not GPU.** The tissue divides and rewires its topology every

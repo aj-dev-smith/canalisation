@@ -268,12 +268,32 @@ auxin exponent is load-bearing — the median cell sits at 0.77 against a maximu
 near 9, because the sources at the teeth are an order of magnitude above the
 lamina, and at 0.7 most of the sheet reads as empty space.
 
-**Detail ramp** `smoothstep(0.42, 0.95, bl / eyeDistance)`. The floor has to
-clear the director's existing `organ` beauty shot, which sits at about 0.44 —
-below that a normal leaf close-up would start sprouting needles. The same ramp
-refines the blade mesh from `bladeMU/MV` up to the tissue's own `nu`/`nv` and
-fades the blade surface out by `1 - 0.82*detail`; at full strength the lit
-surface simply outshines the cells sitting on it.
+**Detail ramp** `smoothstep(0.42, 0.95, bl / eyeDistance)`, **applied only to the
+blade being inspected**. The floor has to clear the director's existing `organ`
+beauty shot, which sits at about 0.44 — below that a normal leaf close-up would
+start sprouting needles. The same ramp refines that blade's mesh from
+`bladeMU/MV` up to the tissue's own `nu`/`nv` and fades its surface out by
+`1 - 0.82*detail`; at full strength the lit surface simply outshines the cells
+sitting on it.
+
+Restricting it to one blade is not an optimisation, it is the fix for a popping
+bug — see PITFALLS.md. Purely distance-driven, every blade near the lens refined
+and grew needles at once, and they all then sat a hair from both this threshold
+and the occlusion cull. Traced at a dead-still camera: 13k triangles to 40k and
+back, frame to frame.
+
+**Smoothing constants that exist only to stop things snapping:**
+
+```
+dofRange      lerp toward target, damp(0.05)   was assigned outright
+leaf cull     radius * smoothstep(0.30, 0.80, bl/eyeDistance)
+cull hysteresis   drop below cullRad*0.86, restore above cullRad*1.20
+```
+
+Measured over ~1080 frames entering, holding and leaving the view: p95
+frame-to-frame geometry change 1482 → 336, frames moving >3000 vertices 36 → 7,
+largest depth-of-field step 6.34 → 0.37. `tools/_pop.mjs` is not kept — it was a
+throwaway tracer; the numbers are here so a regression is recognisable.
 
 **Replay rate** `dtms * 0.075 * speedMul`, clamped 1-12 steps a frame: about
 twelve seconds for the ~900 steps of canalisation. The margin phase before it is

@@ -136,6 +136,28 @@ gains a point. This was most of the "jitter".
 
 **Lift veins off the blade along the normal** or they z-fight into speckle.
 
+**A reveal driven purely by distance does not survive many instances of the
+thing.** The growing-tip close-up has no mode to find: come close enough and the
+mechanism fades up. That works because there is one meristem and the camera is
+pointed at it. Blades are twenty to a hundred, several sit near the lens at once
+around the apex, and every one of them then refined its mesh and grew needles —
+which put them all a hair from both the refinement threshold and the occlusion
+cull, so they flickered in and out together. **13k triangles to 40k and back,
+frame to frame, with the camera dead still.** Distance can still do the fading;
+what it cannot do on its own is choose the subject. A microscope looks at one
+thing, and which thing has to be decided, not inferred from proximity.
+
+**An occlusion cull cannot be softened into a fade while the pass writes depth.**
+The obvious cure for organs blinking in and out is to dim them instead of
+dropping them — the blade already takes a `fade`. It does not work: the forward
+pass runs with `depthMask(true)`, so a blade faded to black still hides
+everything behind it, and hiding what is behind it is the entire job of the cull.
+What a binary test *can* be is **sticky**. The subject these are measured from is
+a growing, circumnutating tip, so the sight line moves even when the camera does
+not; organs near the boundary crossed it back and forth every few frames. With
+hysteresis — clearly inside to be dropped, clearly outside to return — a wobble
+at the boundary decides once instead of once per frame.
+
 **A full geometry buffer drops triangles silently.** `Buffers` returns early when
 a write would overrun, so saturation looks like a picture that is merely missing
 things, not like an error. Going into a blade at cell resolution on Sun Coral

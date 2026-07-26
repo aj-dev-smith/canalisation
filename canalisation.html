@@ -4517,13 +4517,19 @@ class App {
     v3set(c.target, c.cx, c.tgtY, c.cz);
     // fog begins where the subject does
     c.fogNear = Math.max(0, c.dist - Math.max(hh, hw) * 1.1);
-    // only things well off the plane the camera is looking at go soft
-    c.dofRange = Math.max(2.0, Math.max(hh, hw) * 0.62);
+    // only things well off the plane the camera is looking at go soft.
     // Under the microscope that range is the whole specimen, so nothing ever
     // defocuses and the blade behind the one being looked at is drawn just as
     // sharply — it reads as part of the same surface and swamps the tissue.
     // Shallow depth of field is what a microscope actually has.
-    if (this.focus === 'leaf') c.dofRange = Math.max(0.4, c.dist * 0.22);
+    const dofT = this.focus === 'leaf'
+      ? Math.max(0.4, c.dist * 0.22)
+      : Math.max(2.0, Math.max(hh, hw) * 0.62);
+    // Ease it. Switching focus mode moved this by an order of magnitude in a
+    // single frame (5.09 -> 0.45 going in, 1.12 -> 7.45 coming out) and the
+    // whole frame snapped between sharp and soft. Racking the focus over half
+    // a second reads as a lens; jumping it reads as a glitch.
+    c.dofRange = c.dofRange === undefined ? dofT : lerp(c.dofRange, dofT, damp(0.05));
     const ce = Math.cos(c.el), se = Math.sin(c.el);
     v3set(c.eye,
       c.target[0] + Math.sin(c.az) * ce * c.dist,
@@ -4576,11 +4582,22 @@ class App {
       const org = this._watch.org;
       const pet = org.len * 0.34 + org.radius * 1.8, bl = org.len * 0.80;
       const d = pet + bl * 0.45;
-      cullFrom = [org.frame.o[0] + org.frame.x[0] * d,
+      const at = [org.frame.o[0] + org.frame.x[0] * d,
         org.frame.o[1] + org.frame.x[1] * d,
         org.frame.o[2] + org.frame.x[2] * d];
-      cullRad = bl * 0.85;
-      cullKeepOrg = org;      // never clear away the leaf we came to look at
+      // Open the clearance as the camera arrives, not the instant the mode is
+      // set. This used to engage at full width while the camera was still out
+      // at the wide shot, where the sight line is long and the cleared cylinder
+      // swallows most of the specimen — so pressing the button made half the
+      // plant vanish in one frame, before anything had moved.
+      const de = Math.hypot(at[0] - this.cam.eye[0], at[1] - this.cam.eye[1],
+        at[2] - this.cam.eye[2]);
+      const near = smoothstep(0.30, 0.80, bl / Math.max(0.01, de));
+      if (near > 0.01) {
+        cullFrom = at;
+        cullRad = bl * 0.85 * near;
+        cullKeepOrg = org;    // never clear away the leaf we came to look at
+      }
     }
     // Clear a cylinder along the line of sight rather than a sphere around the
     // eye. The old test compared each organ's BASE distance to the subject
@@ -4611,6 +4628,18 @@ class App {
       }
       for (const org of ax.organs) {
         if (org.len < 0.02) continue;
+        // Occlusion clearing, with hysteresis.
+        //
+        // The subject this is measured from is a growing, circumnutating tip,
+        // so the sight line is never still even when the camera is: organs
+        // sitting near the boundary crossed it back and forth and blinked in
+        // and out of the scene every few frames. The forward pass writes depth,
+        // so this cannot be a fade — a blade dimmed to black still hides what
+        // is behind it, and hiding what is behind it is the entire job. What it
+        // can be is sticky. An organ now has to be clearly INSIDE the cleared
+        // cylinder to be dropped and clearly OUTSIDE to come back, so a wobble
+        // at the boundary decides once instead of once per frame.
+        let occluded = false;
         if (cullFrom && org !== cullKeepOrg && !(ax === cullKeep && org.floral)) {
           const ox = org.frame.o[0] - this.cam.eye[0];
           const oy = org.frame.o[1] - this.cam.eye[1];
@@ -4619,16 +4648,13 @@ class App {
           if (t > 0 && t < cullR) {
             const px2 = ox - sdx * t, py2 = oy - sdy * t, pz2 = oz - sdz * t;
             // how far off the sight line it sits, allowing for its own reach
-            if (Math.hypot(px2, py2, pz2) - (org.len || 0) < cullRad) continue;
+            const lat = Math.hypot(px2, py2, pz2) - (org.len || 0);
+            occluded = lat < cullRad * (org._occ ? 1.20 : 0.86);
           }
         }
-        // The blade under the microscope is drawn from its own replay, so the
-        // vasculature arrives when the canalisation being watched actually
-        // produces it rather than being there from the start as a spoiler.
-        // Same outline either way — the replay reproduces this leaf exactly.
-        const rp = this._replay;
-        const L = (rp && this._watch && org === this._watch.org && rp.of === org.leaf
-          && rp.leaf.built) ? rp.leaf : org.leaf;
+        org._occ = occluded;
+        if (occluded) continue;
+        const L = org.leaf;
         // petiole
         const a = org.frame.o;
         // a longer stalk carries the blade clear of the shoot and its neighbours
@@ -4651,27 +4677,50 @@ class App {
             0, INNER_STEPS - 1)]
             : pal;
         const curl = -bl * (org.petal ? 0.05 : 0.16), ripple = bl * 0.014;
+        // ONE blade goes under the microscope: the one being inspected.
+        //
+        // This started out purely distance-driven, like the growing tip, where
+        // proximity alone fades the mechanism up and there is no mode to find.
+        // That does not transfer either. There is one meristem and the camera
+        // is pointed at it; there are twenty to a hundred blades, and near the
+        // apex several sit close to the lens at once. Every one of them then
+        // refined its mesh and grew needles, which cost a fortune and — worse —
+        // put each of them a hair from the refinement threshold and a hair from
+        // the occlusion cull, so they flickered in and out together. Traced at a
+        // dead-still camera: 13k triangles to 40k and back, frame to frame.
+        //
+        // A microscope looks at one thing. Distance still does the fading, so
+        // arriving still feels like arriving rather than like a switch being
+        // thrown, but only the watched blade participates.
+        let detL = 0;
+        if (this._watch && org === this._watch.org) {
+          const dEyeB = Math.hypot(fr.o[0] - this.cam.eye[0], fr.o[1] - this.cam.eye[1],
+            fr.o[2] - this.cam.eye[2]);
+          // the director's existing `organ` beauty shot sits at about 0.44 and
+          // must stay clear of this, so nothing starts until the blade is
+          // filling the frame
+          detL = smoothstep(0.42, 0.95, bl / Math.max(0.01, dEyeB));
+        }
         // The blade mesh is deliberately far coarser than the tissue — the
         // veins are meant to carry the detail, and at arm's length they do.
         // Under the microscope they cannot: 22x10 quads across a blade that
         // fills the frame is a visibly faceted slab, and cells scattered over
-        // it read as blobs on cardboard. Refine just the one blade being
-        // looked at, up to the resolution of the tissue actually simulated.
-        const dEyeB = Math.hypot(fr.o[0] - this.cam.eye[0], fr.o[1] - this.cam.eye[1],
-          fr.o[2] - this.cam.eye[2]);
-        const detL = smoothstep(0.42, 0.95, bl / Math.max(0.01, dEyeB));
-        const mu = Math.round(lerp(this.bladeMU, L.o.nu, detL));
-        const mv = Math.round(lerp(this.bladeMV, L.o.nv, detL));
+        // it read as blobs on cardboard.
+        const mu = detL > 0 ? Math.round(lerp(this.bladeMU, L.o.nu, detL)) : this.bladeMU;
+        const mv = detL > 0 ? Math.round(lerp(this.bladeMV, L.o.nv, detL)) : this.bladeMV;
         blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mu, mv, dev,
           1 - 0.82 * detL);
-        // Same idiom as the growing tip: there is no mode to find, the tissue
-        // simply starts showing what it is doing once you are close enough for
-        // a cell to be more than a pixel. The ramp is on apparent blade size —
-        // the existing 'organ' beauty shot sits at about 0.44 and must stay
-        // clear of it, so nothing begins until the blade is filling the frame.
         if (detL > 0.004) {
           if (detL > this.detail) this.detail = detL;
-          laminaCells(B, L, fr, bl, bl, pal, curl, ripple, this.t, detL, dev);
+          // Cells and needles come from the replay while one is running, but
+          // the VEINS above are always the real leaf's. Swapping the whole leaf
+          // over meant the vasculature blinked out the moment the replay took
+          // over and blinked back when it finished — and the network being
+          // there throughout is what makes the needles legible as falling into
+          // it, rather than merely milling about.
+          const rp = this._replay;
+          const src = (rp && rp.of === L && rp.leaf.built) ? rp.leaf : L;
+          laminaCells(B, src, fr, bl, bl, pal, curl, ripple, this.t, detL, dev);
         }
       }
       // the fruit, if this shoot got that far
