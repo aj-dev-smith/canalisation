@@ -449,7 +449,7 @@ three-frame `leaf_shot.mjs` triptych looked correct throughout.
 
 The piece stopped instead of ending (ROADMAP 1). Specimens needed to finish and
 give way. The tempting version of that is a leaf lifespan constant, which would be
-a clock, so the first attempt tried to derive it — and the derivation failed. Three
+a clock, so the first attempt tried to derive it — and the derivation failed. Four
 hypotheses tested, all falsified, and the diagnosis is worth more than the feature.
 
 ### The mechanism that was tried

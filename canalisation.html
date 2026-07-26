@@ -2956,6 +2956,10 @@ class Plant {
   // What that experiment did establish is that this is one of the places where
   // the chemistry has nothing to say, so the honest thing is a stated rule rather
   // than a stated rule wearing a transport model.
+  // `sen` (0..1) and `shed` are read by the scene: `blade()` drains the lamina
+  // against them and `70_app.js` flies a shed organ down and stops drawing it.
+  // They are the whole interface between finishing and the picture of finishing,
+  // so changing what they mean changes what the last minute of a run looks like.
   senesceStep(dt) {
     // exactly one mechanism may own `sen`, or the falsified path cannot be
     // measured against this one — they simply add, and both look like they work

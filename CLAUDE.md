@@ -85,12 +85,27 @@ knob still moves the number before trusting the table.
 and a simulation bug look identical on screen, and the headless harnesses give you
 numbers in seconds instead of minutes.
 
+**The gate covers geometry as well as simulation now.** `smoke.mjs` imports
+`50_geom.js` and asserts that a senescing blade is drawn differently from a live
+one. That is there because a name collision inside `50_geom.js` once shipped a
+bundle that did not parse while the gate passed 47 checks — **a green gate is only
+evidence about what the gate imports.** It still cannot see the *scene*: whether
+`70_app.js` passes the right thing to `blade()` is a question only a browser can
+answer, and `tools/senesce_shot.mjs` is where it would show.
+
 When you *do* need pixels, `tools/` drives a real browser with Playwright and
 [tools/README.md](tools/README.md) lists each capture script. Read that file first —
 it documents which tools ask for the wrong GL backend and hand you a **black PNG
 while still reporting a full triangle count**, which is a failure that does not
 announce itself. None of them can judge performance or motion; use a real browser
 for both.
+
+**The known-good visual loop** is `node build.js`, then open `canalisation.html`
+in a real browser — not headless, where software rendering runs at ~16fps and
+cannot judge motion — and let one specimen run the whole arc: seed, leaves,
+flower, fruit, ripe, `senescing`, `spent`. Roughly 75 seconds at 1x on a Cathedral
+Fern, less on the time slider. [docs/ROADMAP.md](docs/ROADMAP.md) ends with the
+same loop written out.
 
 ## Branching
 
@@ -130,7 +145,7 @@ src/30_leaf.js      blade: interior lattice, vein canalisation, bake
 src/35_fruit.js     ovary wall as icosphere shell; ovule placement, swelling, ripening wave
 src/38_shoot.js     FALSIFIED EXPERIMENT, ships disabled. Whole-plant auxin transport
 src/40_plant.js     the organism: axes, elongation, branching, florigen, fruit set, senescence
-src/50_geom.js      simulation state -> triangles, ribbons, points
+src/50_geom.js      simulation state -> triangles, ribbons, points; senescence colour
 src/60_render.js    WebGL2: forward pass, sway, bloom, depth of field, grade
 src/70_app.js       species presets, camera director, scene assembly
 src/80_main.js      UI wiring
@@ -145,26 +160,51 @@ conditions. **When adding an organ, reach for that function before writing anyth
 
 - **Science first, pixels second.** Prove a mechanism in a headless harness before rendering it.
 - **Assert on every string edit.** Silent no-op replacements bit three times in one session; one was the difference between a lobed fruit and a perfect sphere. If editing by script, assert the anchor exists, and write the file only after all edits succeed.
-- **Report negative results honestly.** Two hypotheses about phyllotaxis were tested and falsified. That is in [docs/JOURNAL.md](docs/JOURNAL.md) and it is more useful than a success would have been.
+- **Report negative results honestly.** Two hypotheses about phyllotaxis and four about senescence have been tested and falsified. All six are written up in [docs/JOURNAL.md](docs/JOURNAL.md) with their numbers, and they are more useful than the successes would have been.
 - **Never fake it to make it look better.** The piece's entire claim is that nothing is drawn. A single hardcoded curve would make the whole thing a lie.
 
 ## The honest state of it
 
-It grows, flowers, fruits, and **finishes** — a specimen runs out of growing
-points, drains its blades into their own veins, drops them, and reports `dead`,
-leaving a standing seed head. All eight species complete.
+**The life cycle is complete.** A specimen germinates, leafs, flowers, fruits,
+ripens, and then **finishes**: it runs out of growing points, drains each blade
+into its own veins, drops them one at a time in a wave up the plant, and reports
+`dead`, leaving a standing seed head. All eight species get all the way through.
+The stage bar along the bottom of the page tells you where a run has got to, and
+`tools/senesce_shot.mjs` walks the last act headlessly.
 
-Two live limitations, both with diagnoses rather than excuses:
+At default speed a Cathedral Fern reaches `senescing` around 19s and `spent`
+around 73s. The time slider goes to 4x.
+
+### Where the work goes next
+
+[docs/ROADMAP.md](docs/ROADMAP.md) is the ranked list and has the reasoning; the
+short version, in order:
+
+1. **The handover** — a new specimen germinating as the old one fades. The last
+   piece of the cycle. `Plant.dead()` is the trigger and the camera director
+   already exists. It also owns an open question this branch left: the final
+   frame is a dim, small silhouette and the end of the film is not composed yet.
+2. **Petiole radius at flower scale** — an afternoon, with a clean repro shot.
+3. **The third phyllotaxis hypothesis** — the honest headline limitation, below.
+   Pure science, and a negative result is as publishable as a positive one here.
+4. **Lamina tensioning its own margin** — real quality jump, real work.
+
+### Two live limitations, both with diagnoses rather than excuses
 
 **Phyllotaxis is ordered but does not lock to the golden angle** — it wanders
 90–160°. Do not add a fudge factor to force 137.5°. Displaying the real measured
-number, spread and all, is the point.
+number, spread and all, is the point. Two hypotheses have been tested and
+falsified; the third is ROADMAP 3.
 
-**Senescence is built and drawn, but the built half is split.** *When* a specimen
-senesces is emergent; *the order its blades go in* is imposed, and is SCIENCE.md
-item 6 — as is the order within a blade, where tissue against a vein drains last.
-Three separate attempts to derive the between-blade order from auxin transport
-were falsified: read the 2026-07-26 JOURNAL entry before reopening it, because the
-machinery is still in the tree and it is easy to mistake for live code. What is
-still missing is the handover — a new specimen germinating as the old one fades —
-which is now the top of [docs/ROADMAP.md](docs/ROADMAP.md).
+**Senescence is built and drawn, but it is split down the middle.** *When* a
+specimen senesces is emergent — `Plant.spent()`, a physical condition with nothing
+scheduling it. *The order* is imposed: a wave up the plant, oldest first, plus the
+within-blade rule that tissue against a vein drains last. Both are SCIENCE.md item
+6. Four attempts to derive the between-blade order from auxin transport were
+falsified, and **the machinery for them is still in the tree and is easy to
+mistake for live code** — read the 2026-07-26 JOURNAL entries before reopening it.
+The route out is light, not another molecule.
+
+What is *not* imposed there, and is worth protecting: no leaf has a lifespan,
+nothing counts down, and the pattern a dying blade drains in is the distance field
+of a vein network that canalised itself.

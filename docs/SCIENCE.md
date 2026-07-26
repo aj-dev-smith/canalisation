@@ -85,6 +85,10 @@ Nobody wrote any of these numbers:
   either arrested on its budget or consumed itself founding a flower, so nothing
   anywhere is still patterning. Downstream of how much leaf it built, which set
   when it flowered, which set when its apices were spent
+- The pattern a dying blade drains in. Tissue next to a vein is held longest, and
+  *what counts as next to a vein* is the distance field of a network that
+  canalised itself — so the green-island tracery on a senescing leaf is that
+  leaf's own vasculature, seen a second time. Only the lag is stated (item 6)
 
 ## What is imposed
 

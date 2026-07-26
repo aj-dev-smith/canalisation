@@ -2,8 +2,8 @@
 
 A plant grown from its own chemistry — a real-time browser simulation of **auxin**,
 the hormone that tells plant cells where to become things. Leaf arrangement, vein
-networks, leaf silhouettes, petal number, fruit lobing and ripening all fall out of
-the transport equations.
+networks, leaf silhouettes, petal number, fruit lobing, ripening — and when a
+specimen is finished — all fall out of the transport equations.
 
 **Nothing about the plant's shape is drawn.** No shape code, no outlines, no curves,
 no counts. That is the whole claim, and it is the one thing this project will not
@@ -28,6 +28,9 @@ Every one of these is a consequence of the chemistry, not a parameter:
 - **Leaf outlines** — including teeth and lobes, grown from margin convergence points
 - **Petal number** — nobody tells it five
 - **Fruit lobing** and the ripening wave across the surface
+- **The end of a life** — a specimen runs out of growing points, drains each blade
+  into its own veins and drops them, leaving a standing seed head. Nothing
+  schedules that; it falls out of how much leaf the plant managed to build
 
 The complete list of spatial priors that *are* imposed lives in
 [docs/SCIENCE.md](docs/SCIENCE.md) under "What is imposed". It is short on purpose.
@@ -62,7 +65,7 @@ src/20_meristem.js  growing tip: dividing cell sheet, organ initiation, divergen
 src/25_margin.js    leaf outline grown from margin convergence points
 src/30_leaf.js      blade: interior lattice, vein canalisation, bake
 src/35_fruit.js     ovary wall as icosphere shell; ovules, swelling, ripening
-src/40_plant.js     the organism: axes, internodes, branching, florigen, fruit set
+src/40_plant.js     the organism: axes, branching, florigen, fruit set, senescence
 src/50_geom.js      simulation state -> triangles, ribbons, points
 src/60_render.js    WebGL2: forward pass, sway, bloom, depth of field, grade
 src/70_app.js       species presets, camera director, scene assembly
