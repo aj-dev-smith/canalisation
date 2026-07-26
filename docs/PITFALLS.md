@@ -142,6 +142,21 @@ difference between a lobed fruit and a perfect sphere, and it was only caught
 because a number failed to move. **Assert every anchor, and write the file only
 after all edits succeed** so a failure rolls the whole batch back.
 
+**A harness can outlive the parameters it sweeps.** `test/sweep.mjs` swept
+`sinkStrength` and `sinkSigma` across a 72-row grid. Both options had been removed
+from the meristem — the sink model was replaced by `organDrain`/`rimDrain` and
+primordia-as-maxima — so the meristem ignored them and six rows differing only in
+those two fields came back byte-identical:
+
+    {"T":10,"D":3,"S":1.5,"sig":2.2,"mean":107,"sd":92.2,"lock":0.18,...}
+    {"T":10,"D":3,"S":4.0,"sig":3.0,"mean":107,"sd":92.2,"lock":0.18,...}
+
+Nothing crashed. It printed a plausible table, and the honest reading of that table
+is a **false negative** — "sink strength does not affect the angle." Same shape as
+the display-mapping bug above: the machinery was fine, the measurement was not.
+**Before trusting a sweep, check the knob still moves the number.** One row at each
+extreme is enough.
+
 **The bundle is one shared scope.** Duplicate top-level `const` names across modules
 throw at load. `build.js` warns; heed it.
 
