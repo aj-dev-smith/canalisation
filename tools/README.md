@@ -50,9 +50,12 @@ inside **single** quotes, so it never interpolated.
   itself and captures `-onset`, `-mid`, `-spent`. Picks its GL backend the way
   `flower_shot.mjs` does. The three frames now differ: on Cathedral Fern seed 21
   the count holds at 63594 tri while the plant is only draining — colour costs no
-  geometry — and falls to 16-22k at `dead`, which is the canopy having left. The
+  geometry — and falls to **16-28k** at `dead`, which is the canopy having left. The
   spread is the poll catching `dead()` a few frames either side, with blades still
-  mid-fall. **A count that does not fall by `spent` means shed blades are going
+  mid-fall. The top of that range moved up on 2026-07-26 when blades started letting go
+  at the attitude they were actually held at: steady glides nearly disappeared in favour
+  of flutter and tumble, which descend more slowly, so more blades are still in the air
+  when the poll fires. Measured 27738 on this seed. **A count that does not fall by `spent` means shed blades are going
   nowhere**, whatever the frames look like. What it cannot judge is whether
   the drain reads, because the counts are blind to colour; `test/senesce.mjs` has
   those numbers. It reads the lit stage chip out of the DOM rather than off the
