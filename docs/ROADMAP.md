@@ -13,11 +13,16 @@ priority.** The list below is the priority.
    guessing them. It is the route to deleting `droop`
    ([#7b](#7b-droop-as-a-force-balance)) and shares machinery with #3 below.
    **The next thing to do is #5, not step 3** — see below.
-2. **[#5, the petiole's radius](#5-smaller-things)** — was an afternoon's cosmetic fix
-   and is now the blocking item for #7. Step 2 measured an attached blade rocking by a
-   quarter of a degree because the petiole is drawn at half the *stem's* radius and
-   torsional stiffness goes as r⁴. Two independent routes arrived at the same defect,
-   which usually means it is the real one.
+2. **[#5, the petiole's radius](#5-smaller-things), together with
+   [#7b](#7b-droop-as-a-force-balance)** — was an afternoon's cosmetic fix and is now the
+   blocking item for #7. Step 2 measured an attached blade rocking by a quarter of a
+   degree because the petiole is drawn at half the *stem's* radius and torsional
+   stiffness goes as r⁴; two independent routes arrived at the same defect, which
+   usually means it is the real one. **Pre-flighted (#5 below):** the pipe model puts
+   every species' flap at 6.3-9.5 Hz off one constant, but the twist then saturates
+   against its stop, and the degree of freedom that behaves is *bending* — which is 7b.
+   Do them together, or the radius change trades one stated constant for a leaf pinned
+   at a stop.
 3. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
    of the life cycle, and the only part of senescence still unbuilt. `dead()` is
    the trigger and the camera director already exists. It carries the ending as a
@@ -266,7 +271,14 @@ air, that becomes a force balance and the constant can go — **deleting an entr
 SCIENCE.md's imposed list**, which almost nothing else on this roadmap does.
 
 Needs 7 first, and needs its own before/after across all eight species, because it
-changes every silhouette at every stage. Expect petiole stiffness to have to carry
+changes every silhouette at every stage.
+
+**It also has its number now, from #5's pre-flight.** With a pipe-model petiole at a
+real petiole's modulus, the blade's own weight bends the stalk by **4.8-13.2° across the
+eight species** — bounded, stable, and no per-species value. That is the column in that
+table which behaves, and it is the physical quantity `sp.droop` (0.10-0.95, eight stated
+numbers) is standing in for. It is also why #5 and this entry should land together: the
+twist saturates without it. Expect petiole stiffness to have to carry
 what `droop` used to, and check that it does not simply become `droop` wearing a
 physical-sounding name: the test is whether a bigger blade on the same stalk hangs
 lower without anyone saying it should.
@@ -331,6 +343,66 @@ too. Details in JOURNAL.md and TUNING.md.
   proportionality it gives a 0.4-0.5 mm petiole and about 2.5 Hz, which is plant-like.
   It thins every stalk in the piece, so it wants its own branch and its own
   before/after across all eight species.
+### Pre-flight for the petiole: measured, and it decides more than it looks like (2026-07-26)
+
+Same treatment as ROADMAP 7's stiffness pre-flight, and the same conclusion shape: one
+constant, no per-species anything. Every specimen grown to 6000 steps; medians over all
+its blades. `r_pipe` is the pipe model — petiole conducting area proportional to the
+blade area it supplies, `A_pet = kappa·A_blade`, with `kappa = 4e-4` (measured broadleaf
+petioles run 2e-4 to 1e-3) — evaluated at a real petiole's modulus, 1 GPa, rather than
+the stem's 60 MPa. `tw` is quasi-static twist in a force 3; `bend_g` is the angle the
+petiole bends under the blade's own weight.
+
+| species | blades | area cm² | r now mm | r pipe mm | f now Hz | f pipe Hz | tw now | tw pipe | bend g |
+|---|---|---|---|---|---|---|---|---|---|
+| Cathedral Fern | 90 | 72 | 6.46 | 0.96 | 90 | **7.7** | 0.5° | 53° | 7.7° |
+| Spiral Ossuary | 90 | 45 | 7.30 | 0.76 | 197 | **9.0** | 0.2° | 55° | 12.0° |
+| Abyssal Frond | 119 | 115 | 6.61 | 1.21 | 52 | **6.7** | 1.5° | 59° | 6.2° |
+| Sun Coral | 96 | 45 | 6.40 | 0.76 | 157 | **8.6** | 0.2° | 56° | 7.6° |
+| Hoarfrost Thicket | 96 | 25 | 6.21 | 0.57 | 302 | **9.5** | 0.1° | 53° | 13.2° |
+| Ember Creeper | 25 | 28 | 6.32 | 0.60 | 252 | **8.8** | 0.1° | 58° | 5.9° |
+| Sulphur Rosette | 29 | 50 | 7.06 | 0.80 | 163 | **8.1** | 0.1° | 42° | 10.2° |
+| Nightglass Parasol | 6 | 108 | 9.49 | 1.17 | 111 | **6.3** | 0.2° | 54° | 4.8° |
+
+Four things to take from it, and the fourth is why this is a pre-flight rather than a
+patch:
+
+1. **The blade areas are right.** 25-115 cm² is an ordinary range of real leaf, so the
+   scale the piece claims holds up. It is only the stalk that is wrong.
+2. **The pipe model puts every species at 6.3-9.5 Hz off one constant.** Blade areas
+   span 4.5x and the frequency barely moves, because `k ~ r⁴ ~ (kappa·A)²` and the
+   inertia scales with area too, so they very nearly cancel. That is the same shape of
+   result as the stem pre-flight — plant-like numbers, no per-species values — and it is
+   the strongest argument that the pipe model is the right law here.
+3. **But the twist then saturates: 42-59° rms against a 69° stop.** A blade hinged on
+   its own midrib is statically *unstable* in twist — the aerodynamic centre sits ahead
+   of a mid-chord pivot, which is why weather vanes are built the other way round — so
+   once the spring is physical the wind wins and the blade sits face-on. That is real
+   (leaves genuinely do flip about their midribs in a force 3), but as a lone degree of
+   freedom against a hard stop it will read as *pinned*, not as flutter.
+4. **And the answer spans the entire range of behaviours over `kappa`'s own
+   uncertainty.** Twist goes as `1/kappa²`: at 4e-4 it saturates, at 1e-3 — still well
+   inside the measured range — it is about 8°, which is exactly right. A quantity that
+   swings from "invisible" through "perfect" to "pinned" across the error bar of a
+   borrowed constant **cannot be the primary motion**, and should not be tuned into
+   looking correct.
+
+**So the recommendation is: do this WITH 7b, not with the twist.** The bending column is
+the one that behaves — 4.8-13.2° under gravity alone, bounded, stable, and physically
+what `sp.droop` is standing in for. Bending is the DOF that responds sanely to wind,
+twist is a detail on top of it, and doing the radius change without the force balance
+would trade one stated constant for a leaf pinned at a stop.
+
+And the way to get `kappa` out of the codebase entirely, which is this project's kind of
+answer: **the petiole's conducting area is something the leaf already canalises.** The
+vein hierarchy's trunk — the midrib at the petiole, where `50_geom.js` says everything
+funnels — is the measured conducting cross-section for that blade. Sizing the stalk off
+the traffic the midrib actually carries would replace a borrowed literature constant
+with the engine's own output, and would give a heavier-veined leaf a stouter stalk,
+which is variation nothing in the piece has now. What it would not do is remove the
+absolute scale, since drawn vein width is a display mapping (TUNING.md) — so it is a
+better law with the same one free number.
+
 - Flowers do not announce themselves against heavy foliage; make them larger and open wider
 - Fruit is a little small against the plant (`fruitScale`)
 - Fenestrated species get blocky holes at low blade LOD

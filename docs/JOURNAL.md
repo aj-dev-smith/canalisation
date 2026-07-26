@@ -1169,3 +1169,42 @@ the perpendicular plane. Two coupled 2D solvers is a defensible reduction of a 3
 problem and costs no new constants, and it would let a released blade level *over a
 timescale* instead of instantly, which is what a real one does. That is its own branch:
 it changes the drawn fall, which shipped, so it wants its own before/after.
+
+## The petiole, pre-flighted: one law, and a constant that decides everything (2026-07-26)
+
+Step 2 ended pointing at the petiole's radius, so it was measured across all eight
+species before anyone changed it. **The table is in ROADMAP 5** and the summary is:
+
+- **Blade areas are 25-115 cm², which is real leaf.** The scale the piece claims is
+  fine. Only the stalk is wrong: 6.2-9.5 mm of radius where the pipe model wants
+  0.57-1.21.
+- **The pipe model puts every species' flap frequency at 6.3-9.5 Hz off one constant.**
+  Areas span 4.5x and the frequency barely moves, because stiffness goes as `(kappa·A)²`
+  and the inertia scales with area too, so they nearly cancel. Same shape of result as
+  ROADMAP 7's stem pre-flight, and the strongest argument that this is the right law.
+- **But the twist then saturates** — 42-59° rms against a 69° stop — because a blade
+  hinged on its own midrib is statically *unstable* in twist. The aerodynamic centre
+  sits ahead of a mid-chord pivot, which is why weather vanes are built the other way
+  round. Real leaves do flip about their midribs in a force 3; as a lone degree of
+  freedom against a hard stop it will read as pinned rather than as flutter.
+- **And the whole range of behaviours fits inside `kappa`'s error bar.** Twist goes as
+  `1/kappa²`, and the measured range of petiole-area-per-blade-area across broadleaf
+  species is 2e-4 to 1e-3. At 4e-4 the blade pins; at 1e-3 it twists about 8°, which is
+  exactly right. **A quantity that swings from invisible through perfect to pinned over
+  the error bar of a borrowed constant cannot be the primary motion**, and tuning it
+  until it looks right would be tuning, not measuring.
+
+So the recommendation is recorded as: do #5 **with** 7b. Bending is the column that
+behaves — 4.8-13.2° under the blade's own weight, bounded, no per-species number — and
+it is what `sp.droop`'s eight stated values stand in for. Twist is a detail on top of a
+stable DOF, not a substitute for one.
+
+The way to get `kappa` out of the codebase is also written down there, because it is
+this project's kind of answer: **the conducting cross-section of a petiole is something
+the leaf already canalises.** The trunk of the vein hierarchy — the midrib at the
+petiole, where `50_geom.js` says everything funnels — *is* the measured conducting area
+for that blade. Sizing the stalk off the traffic the midrib carries replaces a borrowed
+literature constant with the engine's own output, and gives a heavier-veined leaf a
+stouter stalk, which is variation nothing in the piece has. It does not remove the
+absolute scale, since drawn vein width is a display mapping — a better law with the same
+one free number.
