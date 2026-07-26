@@ -17,7 +17,6 @@ window.__app = app;
 
 // --- the specimen label ----------------------------------------------------
 let lastHud = 0;
-const STAGES = ['seedling', 'leafing', 'flowering', 'fruiting', 'ripe'];
 function hud(now) {
   if (now - lastHud < 220) return;
   lastHud = now;

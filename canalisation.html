@@ -32,12 +32,6 @@
   #divBar::after{content:"";position:absolute;left:var(--p);width:2px;top:0;bottom:0;background:var(--accent)}
   #golden{position:absolute;left:38.19%;top:-3px;bottom:-3px;width:1px;background:rgba(255,255,255,.45)}
   #goldenLbl{font-size:9.5px;color:rgba(255,255,255,.4);letter-spacing:.08em;margin-top:4px}
-  #panel{left:16px;right:16px;bottom:max(14px,env(safe-area-inset-bottom));
-    background:var(--panel);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-    border:1px solid var(--line);border-radius:14px;padding:12px 14px 13px;max-width:560px}
-  body.collapsed #panelBody{display:none}
-  body.collapsed #panel{padding-bottom:10px}
-  #panelHead{display:flex;align-items:center;justify-content:space-between;gap:10px}
   #stats{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--dim);
     font-variant-numeric:tabular-nums}
   #stats b{color:var(--ink);font-weight:520}
@@ -102,10 +96,9 @@
     #divVal{font-size:23px}
     #readout{top:calc(max(14px,env(safe-area-inset-top)) + 22px)}
     #divBar{width:104px}
-    #panel{left:8px;right:8px;padding:10px 12px 11px}
     #stats{gap:10px;font-size:10.5px}
   }
-  body.cinema .ui, body.cinema #panel{opacity:0;pointer-events:none;transition:opacity .6s}
+  body.cinema .ui{opacity:0;pointer-events:none;transition:opacity .6s}
   #exitCine{position:fixed;right:14px;bottom:14px;z-index:9;width:34px;height:34px;border-radius:50%;
     border:1px solid var(--line);background:rgba(6,14,17,.5);display:none;cursor:pointer;
     align-items:center;justify-content:center;color:var(--dim);font-size:15px;line-height:1}
@@ -4426,7 +4419,6 @@ window.__app = app;
 
 // --- the specimen label ----------------------------------------------------
 let lastHud = 0;
-const STAGES = ['seedling', 'leafing', 'flowering', 'fruiting', 'ripe'];
 function hud(now) {
   if (now - lastHud < 220) return;
   lastHud = now;
