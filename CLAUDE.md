@@ -165,6 +165,15 @@ a growing 2D sheet, a 1D chain, an icosphere. Meristem, leaf margin, leaf venati
 and fruit are all the same solver on different geometry with different boundary
 conditions. **When adding an organ, reach for that function before writing anything new.**
 
+`39_fall.js` is the one part of the tree that is *not* that solver, and it is worth
+knowing why it is allowed to exist. It is physics the plant is subject to rather than
+chemistry the plant does — gravity and air, with every input either physical or
+measured off something the margin grew. The rule this project runs on is that nothing
+about the plant's **shape** is drawn; an environment the plant responds to is a
+different category, and one that has so far only *removed* stated constants. ROADMAP
+7 extends it and asks the framing question explicitly, because "one engine" is
+something README and CONTRIBUTING both promise.
+
 ## Working style that paid off here
 
 - **Science first, pixels second.** Prove a mechanism in a headless harness before rendering it.
@@ -210,9 +219,13 @@ short version, in order:
 
 1. **One air** — a real wind field the whole plant responds to, replacing the
    shader's decorative sway, with attached blades loaded through the same plate
-   model the fall already uses. Fixes the discontinuity above, deletes `droop`,
-   and is shared infrastructure with 4. Days, not an afternoon — and it has a
-   stop condition written into ROADMAP 7 that is worth honouring.
+   model the fall already uses, and **the stem genuinely bending**. Fixes the
+   discontinuity above and is shared infrastructure with 4. Days, not an afternoon.
+   **Scoped and pre-flighted:** ROADMAP 7 has the staged order, and the stiffness
+   stop-condition has already been tested — `EI ∝ r⁴` on the radii the plant
+   already grows gives plant-like sway (0.5–4.6 Hz on seven of eight species) off
+   **one** material constant, `E ≈ 60 MPa`. Start at step 1, not step 0.
+   `droop` is deliberately held back to 7b.
 2. **The handover** — a new specimen germinating as the old one fades. The last
    piece of the cycle. `Plant.dead()` is the trigger and the camera director
    already exists. It also owns an open question: the final frame is a dim, small

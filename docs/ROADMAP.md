@@ -10,7 +10,10 @@ priority.** The list below is the priority.
    went to the top on 2026-07-26. A shed blade is now properly loaded aerodynamics
    while everything still attached is a rigid card in dead calm, so abscission is a
    discontinuity between two unrelated models of the same air. It is also the route
-   to deleting `droop`, and it shares its machinery with #3 below.
+   to deleting `droop` ([#7b](#7b-droop-as-a-force-balance)), and it shares its
+   machinery with #3 below. **Scoped and pre-flighted** — the stem bends for real,
+   and the stiffness stop-condition has already been tested and passes on one
+   material constant. Start at step 1 of the order given there.
 2. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
    of the life cycle, and the only part of senescence still unbuilt. `dead()` is
    the trigger and the camera director already exists. It carries the ending as a
@@ -100,43 +103,122 @@ even gets that decorative displacement added on top of its own physics. So nothi
 in the scene establishes that there *is* air in it until a leaf needs some, and
 abscission is the seam between the two.
 
-**The shape of the fix** is one field, defined once, read by everything:
+### Decided: the stem bends for real
 
-- an actual wind velocity field, expressed once and available to both the
-  simulation and the shader (not two functions that resemble each other);
-- attached blades loaded through the **same plate model the fall already uses**,
-  rocking on a petiole with elastic restoring torque and damping;
-- the stem genuinely bending, rather than being displaced after the fact — this is
-  the part that makes it days rather than an afternoon, and it replaces `SWAY`
-  rather than feeding it;
-- abscission continuous in attitude *and* angular velocity, so a blade that lets go
-  is already moving in the air that will carry it down.
+Asked whether to stop at wind-responsive blades or go all the way, the call was **all
+the way** — the axes become a dynamic elastic system that genuinely bends under wind
+and its own weight, and `SWAY` in `60_render.js` is *replaced* rather than fed. Blades
+alone would have left the stem moving to a rhythm unrelated to the air, which is a
+smaller version of the same complaint.
 
-**Two things make it worth more than it costs.** It is the only route to `droop`
-becoming a force balance instead of eight stated numbers in the species table —
-which *deletes* a SCIENCE.md prior rather than adding one. And ROADMAP 3 below, the
-project's headline limitation, already names a mechanical-stress term as one of its
-two candidate routes; a real mechanics engine is shared infrastructure for both.
+**`droop` is explicitly NOT in this branch.** Deriving it from a gravity/aero force
+balance deletes a SCIENCE.md prior and is the bigger prize, but it changes how all
+eight species look at every stage. Tangled up with a motion change, a regression in
+either becomes hard to attribute. Its own branch, its own before/after — see 7b.
 
-**The condition to hold it to.** Bending stiffness must come from `EI ∝ r⁴` on the
-radii the plant already grows (`ax.radii`, emergent from Murray's law), so the whole
-engine costs one or two *material* constants rather than eight species-specific
-ones. A naive elastic stem needs stiffness and damping per species, which would be
-more new constants than the one it deletes — a net loss by this project's own
-accounting. **If it cannot be done off the existing radii, stop and reconsider
-rather than pushing through.**
+### The shape of it
 
-**The thing to decide deliberately, not discover later.** The piece currently claims
-one rule and one engine — `stepAuxin()` on any topology — and README and
-CONTRIBUTING both lead with it. A second solver makes that two engines. That is
-defensible (wind and gravity are *environment*, not shape, so responding to them is
-not an imposition in the sense that list means) but it wants a decision about how the
-project describes itself, taken up front.
+One field, defined once, read by everything:
 
-Do not start this by writing a mechanics solver. Start by deriving what stiffness
-`EI ∝ r⁴` actually gives on real radii, headlessly, and check the natural
-frequencies land somewhere a viewer would read as plant-like. If they do not, the
-rest does not matter.
+- an actual wind velocity field, expressed once and available to **both** the
+  simulation and the shader — not two functions that resemble each other, which is
+  precisely the failure being fixed;
+- attached blades loaded through the **same plate model the fall already uses**
+  (`39_fall.js`), rocking on a petiole with elastic restoring torque and damping;
+- the stem genuinely bending — the part that makes this days rather than an
+  afternoon;
+- abscission continuous in attitude **and angular velocity**, so a blade that lets
+  go is already moving in the air that will carry it down. This is the actual seam,
+  and it is the acceptance criterion: if you can tell from the motion which frame a
+  blade detached on, it is not done.
+
+### Pre-flight: the stop condition, already tested (2026-07-26)
+
+The condition was that bending stiffness must come off `EI ∝ r⁴` on radii the plant
+already grows (`ax.radii`, emergent from Murray's law), so the engine costs one or two
+*material* constants rather than eight species-specific ones. A naive elastic stem
+needing per-species stiffness would add more constants than `droop` deletes — a net
+loss by this project's own accounting.
+
+**It passes.** First cantilever mode `f₁ = 0.5596·(r/L²)·√(E/4ρ)`, with `I = πr⁴/4`,
+`ρ = 800 kg/m³`, radii and lengths measured off real specimens at 6000 steps:
+
+| species | L (m) | base r (mm) | slenderness | f₁ @ 1 GPa | f₁ @ 60 MPa |
+|---|---|---|---|---|---|
+| Cathedral Fern | 1.08 | 17.9 | 60 | 4.81 Hz | **1.18 Hz** |
+| Spiral Ossuary | 1.59 | 16.2 | 99 | 1.99 | **0.49** |
+| Abyssal Frond | 1.27 | 17.9 | 71 | 3.46 | **0.85** |
+| Sun Coral | 0.95 | 17.7 | 54 | 6.16 | **1.51** |
+| Hoarfrost Thicket | 0.61 | 15.2 | 40 | 12.65 | **3.10** |
+| Ember Creeper | 1.60 | 18.0 | 89 | 2.21 | **0.54** |
+| Sulphur Rosette | 0.31 | 18.6 | 16 | 61.88 | **15.16** |
+| Nightglass Parasol | 0.65 | 25.2 | 26 | 18.87 | **4.62** |
+
+**One material constant, `E ≈ 60 MPa`, puts seven of eight species in 0.49–4.6 Hz**,
+which is plant-like sway, and the spread across them is emergent from geometry alone.
+Nothing per-species is needed.
+
+Three things to carry forward from that table:
+
+1. **The tissue is soft, and it has to be.** 60 MPa is turgid, parenchyma-rich,
+   succulent-like — not wood, which is 1–10 GPa and gives 2–60 Hz. That is not a
+   fudge to get a nice number: these stems are genuinely fleshy. Slenderness runs
+   16–99 where a real herbaceous stem is nearer 200, so the radii the simulation
+   grows describe thick succulent axes, and soft tissue is the consistent reading.
+   Do not reach for a woody `E` and then wonder why everything buzzes.
+2. **Sulphur Rosette is a real outlier and is not a bug.** A 31 cm plant with an
+   18.6 mm base radius is a stubby cushion; slenderness 16 *should* be stiff, and
+   15 Hz is what that geometry means. Its motion has to come from its leaves, not
+   its stem. If a fix makes Sulphur Rosette's stem sway, that fix is wrong.
+3. **`ρ = 800` and `E` are the whole material budget.** If a third material constant
+   starts to feel necessary, that is the signal to re-read this section.
+
+### The order to do it in
+
+Do not start by writing a solver. In order, each step measurable before the next:
+
+0. **Done** — the table above. `EI` off emergent radii gives plant-like frequencies.
+1. **The field.** One wind velocity function, JS and GLSL from a single definition.
+   Nothing reads it yet. Verify the two evaluate identically at sample points, which
+   is the one thing that cannot be checked by looking.
+2. **Attached blades.** Petiole as a damped torsional spring driven by the existing
+   plate model. A new harness — `test/wind.mjs` — should show blade response scaling
+   with gust strength and with the blade's own area, and going quiet in still air.
+3. **The stem.** Axes as damped cantilevers off `E` and `ax.radii`. Check measured
+   frequencies against the table above; if they disagree, the solver is wrong, and
+   that is a genuinely valuable check to have precomputed.
+4. **The seam.** Continuity of attitude and angular velocity at abscission. Assert
+   it: the angular velocity a blade starts its fall with must equal the one it had
+   while attached, to within a step.
+5. **Delete `SWAY`.** Only once 1–4 hold. Two air models is the bug; adding a third
+   temporarily is fine, shipping two is not.
+
+### Decide this up front rather than discovering it in the docs
+
+The piece currently claims **one rule and one engine** — `stepAuxin()` on any
+topology — and README, CONTRIBUTING and CLAUDE.md all lead with it. A second solver
+makes that two engines, and that framing needs a deliberate decision.
+
+The defensible position, and the recommended one: wind and gravity are
+**environment, not shape.** Responding to them is not an imposition in the sense the
+SCIENCE.md list means, any more than gravity was for the falling blade — and the
+mechanics *removes* imposed constants (`SWAY`, and then `droop`) rather than adding
+any. So the one rule survives intact; what changes is that the piece now also has
+weather. Say that plainly in README rather than quietly growing a second engine.
+
+## 7b. Droop as a force balance
+
+Deferred out of 7 on purpose. `sp.droop` is one stated constant in
+`40_plant.js:615` and eight values in the species table, and it is currently the
+answer to "how far does a leaf hang". Once a blade is loaded by its own weight and by
+air, that becomes a force balance and the constant can go — **deleting an entry from
+SCIENCE.md's imposed list**, which almost nothing else on this roadmap does.
+
+Needs 7 first, and needs its own before/after across all eight species, because it
+changes every silhouette at every stage. Expect petiole stiffness to have to carry
+what `droop` used to, and check that it does not simply become `droop` wearing a
+physical-sounding name: the test is whether a bigger blade on the same stalk hangs
+lower without anyone saying it should.
 
 ## 8. The falling leaf — DONE (2026-07-26)
 
