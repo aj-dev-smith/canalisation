@@ -11,9 +11,10 @@ priority.** The list below is the priority.
    while everything still attached is a rigid card in dead calm, so abscission is a
    discontinuity between two unrelated models of the same air. It is also the route
    to deleting `droop` ([#7b](#7b-droop-as-a-force-balance)), and it shares its
-   machinery with #3 below. **Scoped and pre-flighted** — the stem bends for real,
-   and the stiffness stop-condition has already been tested and passes on one
-   material constant. Start at step 1 of the order given there.
+   machinery with #3 below. **Scoped, pre-flighted, and started** — the stem bends
+   for real, the stiffness stop-condition passes on one material constant, and step
+   1 (the field itself, `37_wind.js`) landed on 2026-07-26. **Start at step 2,
+   attached blades.**
 2. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
    of the life cycle, and the only part of senescence still unbuilt. `dead()` is
    the trigger and the camera director already exists. It carries the ending as a
@@ -178,9 +179,28 @@ Three things to carry forward from that table:
 Do not start by writing a solver. In order, each step measurable before the next:
 
 0. **Done** — the table above. `EI` off emergent radii gives plant-like frequencies.
-1. **The field.** One wind velocity function, JS and GLSL from a single definition.
-   Nothing reads it yet. Verify the two evaluate identically at sample points, which
-   is the one thing that cannot be checked by looking.
+1. **Done (2026-07-26)** — the field. `37_wind.js`: a log-law boundary layer with a
+   Kolmogorov gust ladder advected by Taylor's hypothesis, exactly divergence-free,
+   with one dial (how hard it is blowing) and everything else measured or derived.
+   The JS and the GLSL come off one baked mode table — `windGLSL()` unrolls the same
+   numbers `windAt()` sums — and they agree on a real GPU to 2.5e-5 of the mean wind
+   speed (`tools/wind_check.mjs`; `test/wind.mjs` for the physics). Nothing reads it
+   yet, and `SWAY` is untouched.
+
+   Three things to carry into step 2:
+
+   - **The air contains energy where the stems will resonate, but only at low wind.**
+     At `uRef: 1.2` all four gust modes fall in 0.3-6 Hz, which brackets the pre-flight
+     table's 0.5-4.6 Hz. At `uRef: 6` only 44% of the gust variance is still in band,
+     because Taylor scaling sweeps the small eddies past faster. A gale will move the
+     plant less per unit of wind than it looks like it should; that is physics, not a
+     bug to fix.
+   - **Hand the shader PLANT time, not `App.t`.** `SWAY` reads real milliseconds.
+     A field driven by wall-clock in the shader and plant time in the simulation is
+     two airs again, in a form that only shows on the time slider.
+   - **The smallest mode is 2 world units and up to 6 Hz.** Nothing filters that yet.
+     The plant's own dynamics is the filter — that is the point of replacing `SWAY` —
+     so do not smooth the field to make step 2 look calmer.
 2. **Attached blades.** Petiole as a damped torsional spring driven by the existing
    plate model. A new harness — `test/wind.mjs` — should show blade response scaling
    with gust strength and with the blade's own area, and going quiet in still air.

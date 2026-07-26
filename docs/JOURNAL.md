@@ -943,3 +943,111 @@ The condition to hold it to: stiffness must come from `EI ∝ r⁴` on radii the
 already grows, so the whole thing costs one or two material constants rather than
 eight species-specific ones. If it cannot be done that way it is a net loss by this
 project's own accounting, and that is the signal to stop rather than push on.
+
+## One air, step 1: the field, and nothing reading it (2026-07-26)
+
+ROADMAP 7 is the fix for the piece having **two unrelated models of the same air** —
+integrated aerodynamics for a blade that has let go, a decorative vertex displacement
+for everything still attached. The order written down for it starts with the field
+itself, before any solver, and this is that step. `37_wind.js` exists,
+`tools/wind_check.mjs` proves the shader would agree with it, and **nothing reads it.**
+`SWAY` is untouched and still moves the scene.
+
+### What the field is, and why each part of it is not a choice
+
+- **Height profile: the log law of the wall.** `U(y) ∝ ln(1 + y/z0)`, off von
+  Karman's 0.40 and a roughness length from a standard table (mown grass, 0.008-0.03 m;
+  0.02 taken). The `1 +` is the ordinary regularisation so it is finite and zero *at*
+  the ground rather than singular below the roughness height; above a few `z0` it is
+  the same curve. This replaces `SWAY`'s `h*h`, which is a drawn shape.
+- **Gust strength: derived, not dialled.** `sigma_u ≈ 2.5 u*` in the neutral surface
+  layer, and `u*` follows from the profile and the reference speed. So saying how hard
+  it is blowing says how gusty it is; there is no second knob, which is the failure mode
+  this project keeps finding (see `cRot` in the fall).
+- **Gust spectrum: Kolmogorov.** Four octaves, `E(k) ∝ k^(-5/3)`, so the amplitude
+  exponent is `-1/3` and the relative size of large and small eddies is not picked.
+  The harness measures the ratio off the baked table (0.7937 = 2^(-1/3), three times
+  over) rather than trusting the constant.
+- **Frequencies: Taylor's frozen-turbulence hypothesis.** An eddy's frequency at a
+  fixed point is `k·U`, the mean flow carrying it past, plus the eddy's own turnover
+  rate `a k`. **There is no "sway frequency" anywhere in the file.** `SWAY` had three,
+  set by ear: `t*1.00`, `t*0.71`, `t*1.63`.
+
+The one dial is the weather — `uRef`, and `bearing` for which way. A still day is
+`uRef: 0`, and it is exactly zero, which the gate asserts.
+
+### The invariant that earned its keep before anything used it
+
+The field is **exactly divergence-free**: each gust mode is polarised perpendicular
+to its own wavevector, so its divergence vanishes identically, and the mean flow is
+horizontal and depends only on height. Measured with a central difference the residual
+is truncation error and halves as `h²` (ratio 3.8 against the ideal 4).
+
+That is worth having because it is *assertable*, and because a field with sources in
+it pumps energy into whatever reads it — which, four steps from now, would be very
+hard to attribute. It also decided a modelling question that would otherwise have been
+decided by eye: **the gusts do not taper to zero at the ground.** Tapering them by the
+shear profile looks more physical and breaks the divergence; keeping `sigma_u` constant
+with height is both the measured surface-layer behaviour and exactly solenoidal. What
+quietens the bottom of a specimen is that the bottom of a specimen is stiff.
+
+The first version of the test fixed the difference step at 0.01 world units, which
+passed at four modes and failed at seven with 5e-4 of pure truncation — an assertion
+about a field whose divergence is analytically zero, failing because the test got
+stricter as the ladder got longer. The step now comes off the shortest wave in the
+field, and the *ratio* between two steps is asserted as well as the magnitude, which
+is the stronger statement: an approximately solenoidal field would flatten out at its
+own error instead of converging.
+
+### "Defined once" is a claim about two languages, so it needed a GPU
+
+The whole point of the branch is that two functions resembling each other is the bug.
+So the JS and the GLSL are not two implementations: `windField()` bakes a table of
+modes, `windAt()` sums it, and `windGLSL()` emits an unrolled sum of *the same table's
+numbers* as literals. Two checks, because they catch different things:
+
+- `windGLSLNumbers()` reads the constants back out of the emitted source and the gate
+  asserts they are the baked ones. This is the half that needs no browser, and it
+  caught the one real bug in the step: the emitter wrote `- om*t`, so **a sign that
+  lives in the operator cannot be read back out of the source** — the round trip
+  recovered `-om` for a positive frequency and `-om` for a negative one, and half the
+  table was silently wrong-signed. The frequency is now baked already negated and
+  every term is a `+`. Any constant a test has to verify should carry its own sign.
+- `tools/wind_check.mjs` compiles the emitted GLSL in a real browser, evaluates it at
+  96 points into an RGBA32F target, reads the floats back and compares them to
+  `windAt()`. Worst disagreement **2.5e-5 of the mean wind speed**, mean 4.3e-7, worst
+  case at the largest `t` — which is where `om*t` eats the float32 significand, exactly
+  as expected. It is the first tool in `tools/` that returns a number and an exit code
+  rather than a picture, because it is the browser half of a test whose Node half is
+  `test/wind.mjs`.
+
+### Two things this exposed rather than added
+
+**The density of air was about to be defined twice.** `gEarth`, `rhoAir`, `unitM` and
+`ptPerSec` lived in `FALL_DEFAULTS`, and the wind needs all four. They are now `WORLD`
+in `37_wind.js` and the fall spreads them, so every key name and every harness
+override still works, and the gate asserts the two agree. A second `rhoAir` is
+precisely the class of bug this branch exists to remove, and it would have been
+introduced *by the fix for it*.
+
+**The clocks are already two.** `70_app.js` keeps `age` in plant-time steps and `t` in
+real milliseconds, and `SWAY` reads `t`. So a wind field wired to the shader the
+obvious way would be driven by wall-clock while the simulation read plant time — two
+airs again, in a form that only shows up on the time slider, where the plant speeds up
+and the wind does not. Everything in `37_wind.js` is per plant-time unit and it says so
+at the top of the file.
+
+### What the numbers say about step 2, before it is written
+
+At the shipped weather (1.2 m/s at a metre, Beaufort 1-2): `u* = 0.122` m/s,
+`sigma_u = 0.305` m/s, turbulence intensity 25%, gust peaks at 2.3 sigma, mode
+frequencies 1.4 / 1.2 / 4.0 / 5.8 Hz. The pre-flight table put the stems' first
+cantilever mode at 0.5-4.6 Hz on seven of eight species, so **all four gust modes land
+in the band where the stems will resonate.** That was not arranged; it follows from the
+integral length scale being of order the height above the ground, which is of order the
+plant.
+
+It does not survive turning the wind up. At `uRef: 6` the small eddies advect past at
+12-36 Hz and only 44% of the gust variance is still in band. A gale moves the plant
+*less* per unit of wind than it looks like it should — correct physics, and worth
+knowing before somebody reads a stiff-looking plant as a solver bug.

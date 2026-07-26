@@ -156,6 +156,16 @@ discontinuity between them: nothing establishes that the scene has air in it unt
 a leaf needs some. The first person to watch it said so unprompted, and they were
 describing this. It is the top of the ROADMAP now.
 
+**There is now a wind field, and nothing reads it yet** (`37_wind.js`, ROADMAP 7
+step 1). It is a log-law boundary layer with a Kolmogorov gust spectrum advected by
+Taylor's hypothesis, it is exactly divergence-free, and the simulation and the
+shader evaluate it from one baked table of modes rather than from two functions that
+resemble each other. One number in it is a choice — how hard it is blowing — and the
+rest follows from that: the gust strength is `2.5 u*`, which is the measured
+surface-layer value, so "how gusty is it" is not a second dial. Nothing about the
+plant's shape is involved, and nothing about the plant reads it until step 2. The
+old `SWAY` is still what moves the scene, and it is still the bug.
+
 Note which direction that debt runs. Wind and gravity are *environment*, not shape,
 so responding to them is not an imposition in the sense this list means — and the
 force balance that would make an attached blade hang correctly under its own weight

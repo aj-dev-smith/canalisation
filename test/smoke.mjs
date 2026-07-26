@@ -21,6 +21,7 @@ import { MERISTEM_DEFAULTS } from '../src/20_meristem.js';
 import {
   FALL_DEFAULTS, plateOf, fallState, fallStep, fallRegime, drawnBladeLen,
 } from '../src/39_fall.js';
+import { WORLD, windField, windAt, windGLSL, windGLSLNumbers } from '../src/37_wind.js';
 
 let failures = 0;
 let checks = 0;
@@ -317,6 +318,79 @@ section('a shed blade falls like a plate');
     'with finite state throughout');
   ok(shed.every(o => o.fallFrom && o.fallAxis),
     'and each kept the frame it let go from');
+}
+
+section('one air');
+{
+  // ROADMAP 7 step 1: a single wind field read by both the simulation and the
+  // shader. Nothing reads it yet, so what gates is the part that would be silently
+  // wrong — that the field is a flow at all, and that the GLSL carries the same
+  // numbers the JS sums. `test/wind.mjs` prints the physics; `tools/wind_check.mjs`
+  // measures the two arithmetics against each other on a real GPU, which this gate
+  // cannot do because it has no browser.
+  const f = windField();
+  const u = [0, 0, 0];
+  let bad = 0;
+  for (let i = 0; i < 200; i++) {
+    windAt(u, f, (i * 7.3) % 40 - 20, (i * 3.1) % 26 - 1, (i * 11.7) % 40 - 20, i * 47);
+    if (!u.every(Number.isFinite)) bad++;
+  }
+  ok(bad === 0, 'the field is finite everywhere, including below the ground', `${bad} bad`);
+
+  // Divergence-free, which is exact by construction: every gust mode is polarised
+  // perpendicular to its own wavevector and the mean flow is horizontal and depends
+  // only on height. A field with sources in it pumps energy into whatever reads it.
+  const kMax = f.modes.reduce((s, m) => Math.max(s, m.kmag), 1);
+  const h = 0.02 / kMax, u0 = [0, 0, 0], u1 = [0, 0, 0];
+  let worst = 0;
+  for (let i = 0; i < 120; i++) {
+    const p0 = [(i * 5.1) % 30 - 15, (i * 2.7) % 24, (i * 9.3) % 30 - 15], t = i * 61;
+    let div = 0;
+    for (let ax = 0; ax < 3; ax++) {
+      const p = p0.slice();
+      p[ax] -= h; windAt(u0, f, p[0], p[1], p[2], t);
+      p[ax] += 2 * h; windAt(u1, f, p[0], p[1], p[2], t);
+      div += (u1[ax] - u0[ax]) / (2 * h);
+    }
+    worst = Math.max(worst, Math.abs(div) / (f.sigmaW * kMax));
+  }
+  ok(worst < 1e-4, 'and divergence-free', worst.toExponential(2));
+
+  // A dead calm has to be exactly nothing, not nearly nothing: `uRef: 0` is how a
+  // still scene is expressed, and a field that trembled at zero wind would be the
+  // old decorative sway wearing a physical name.
+  const calm = windField({ uRef: 0 });
+  let stir = 0;
+  for (let i = 0; i < 60; i++) {
+    windAt(u, calm, i * 3.7 - 40, (i * 1.9) % 24, i * 2.3 - 30, i * 41);
+    stir = Math.max(stir, Math.abs(u[0]), Math.abs(u[1]), Math.abs(u[2]));
+  }
+  ok(stir === 0, 'still air is identically zero', stir);
+
+  // "Defined once" is the entire point of the file, so the round trip through the
+  // emitter is a structural invariant, not a nicety. The sign trap that this caught
+  // when it was first written is written up in the emitter.
+  const src = windGLSL(f);
+  const g = windGLSLNumbers(src);
+  const near = (a, b) => Math.abs(a - b) <= Math.abs(b) * 1e-8 + 1e-12;
+  let off = 0;
+  if (g.modes.length !== f.modes.length) off += 100;
+  if (!near(g.invZ0, f.invZ0) || !near(g.invLnRef, f.invLnRef)) off++;
+  if (![0, 1, 2].every(i => near(g.uMean[i], f.uMean[i]))) off++;
+  g.modes.forEach((m, i) => {
+    const b = f.modes[i];
+    for (let j = 0; j < 3; j++) if (!near(m.a[j], b.a[j]) || !near(m.k[j], b.k[j])) off++;
+    if (!near(m.om, b.om) || !near(m.ph, b.ph)) off++;
+  });
+  ok(off === 0, 'the emitted GLSL is the same field the simulation sums', `${off} off`);
+  ok(!/--/.test(src) && !/vec3\(\s*-?\d+\s*[,)]/.test(src),
+    'and it is GLSL a compiler will accept');
+
+  // The fall reads the world's scales and the density of air out of `WORLD` now.
+  // If that spread is ever dropped, `plateOf` gets `undefined` for gravity and
+  // every fall becomes NaN — which the section above would catch, but not say why.
+  ok(['unitM', 'ptPerSec', 'gEarth', 'rhoAir'].every(k => FALL_DEFAULTS[k] === WORLD[k]),
+    'the fall and the wind share one set of world constants');
 }
 
 // ---------------------------------------------------------------------------

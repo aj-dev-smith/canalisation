@@ -384,9 +384,13 @@ sweep. If you find yourself reaching for a dial in this file to change how the f
 
 ### The inputs, and where each one comes from
 
+The first four moved to `WORLD` in `37_wind.js` when the wind field arrived — the
+air has one density, not one per file — and `FALL_DEFAULTS` spreads them, so every
+key name below still works and a harness can still override any of them.
+
 ```
 unitM      0.0625   metres per world unit      already fixed: 16u plant reads as 1m
-ptPerSec   125      plant-time units / second  already fixed: 70_app.js:743
+ptPerSec   125      plant-time units / second  already fixed: 70_app.js:703
 gEarth     9.81     m/s^2                      gravity
 rhoAir     1.2      kg/m^3                     air
 lmaFresh   0.120    kg/m^2   leaf mass per area, turgid  (real trait, 50-150 g/m2)
@@ -452,3 +456,92 @@ screen.** `70_app.js` draws a blade at 0.80 of its organ's length; using the org
 length made every plate 1.4x too big and pushed the whole population toward
 fluttering. One definition, read by both. If you change how long a blade is drawn,
 you are changing the aerodynamics, and that is the correct coupling.
+
+## The air (`37_wind.js`, 2026-07-26)
+
+**Read this section the way you read the fall's, not the way you read the rest of
+the file.** There is one dial here and it is the weather. Everything else is a
+measured constant or is derived from one, and if the wind looks wrong the thing to
+change is the model.
+
+### The one choice
+
+```
+uRef       1.2      m/s at yRefM     how hard it is blowing. Beaufort 1-2, "light air"
+bearing    0.0      rad              which way. Ground plane. A scene picks one
+seed       1        -                which realisation of the spectrum is drawn
+```
+
+`uRef: 0` is a dead calm and the field is then **identically zero everywhere** —
+asserted in the gate, because a field that trembled at zero wind would be the old
+decorative sway wearing a physical name. A still scene has to cost nothing and do
+nothing.
+
+### Everything else, and where it comes from
+
+```
+yRefM      1.0      m       the height uRef is quoted at. A plant's height
+z0M        0.02     m       roughness length. Standard table: mown grass 0.008-0.03
+kappa      0.40     -       von Karman
+sigmaOverUstar  2.5  -      neutral surface layer. Sets the gust strength from u*
+lambdaM    1.0      m       integral length scale ~ height above ground
+nMode      4        -       octaves of it: 1.0, 0.5, 0.25, 0.125 m
+spectralSlope  -5/3  -      Kolmogorov. Amplitude exponent is (slope+1)/2 = -1/3
+turnover   1.0      -       each eddy decorrelates at its own rate, a_i k_i
+```
+
+The chain is: `u* = kappa·uRef/ln(1+yRef/z0)`, then `sigma_u = 2.5 u*`, then the
+octave amplitudes are Kolmogorov's and normalised so their variances sum to
+`sigma_u²`, then each mode's frequency is Taylor's `k·U` plus its own turnover.
+**So "how gusty is it" is not a second dial.** At the shipped weather:
+
+| | value |
+|---|---|
+| `u*` | 0.122 m/s |
+| `sigma_u` | 0.305 m/s (turbulence intensity 25%) |
+| mean speed at 1 m / at 0.25 m | 1.20 / 0.79 m/s |
+| gust peak seen over 40k samples | 0.69 m/s = 2.26 sigma |
+| mode frequencies | 1.4, 1.2, 4.0, 5.8 Hz |
+| gust variance in 0.3-6 Hz | 100% |
+
+That last row is the one to check first if a later step produces a plant that does
+not move. The ROADMAP 7 pre-flight put the stems' first cantilever mode at 0.5-4.6
+Hz on seven of eight species, and at `uRef: 1.2` **all four** gust modes land in
+that band, so the air contains energy where the stems will resonate. It does not
+stay that way if you turn the wind up: at `uRef: 6` the small eddies advect past at
+12-36 Hz and only 44% of the gust variance is still in band. That is correct physics
+— Taylor scaling, small eddies swept past faster — and it means a gale will move the
+plant *less* per unit of wind than it looks like it should.
+
+### The two invariants worth knowing about
+
+**Divergence-free, exactly.** Each gust mode is polarised perpendicular to its own
+wavevector, and the mean flow is horizontal and varies only with height. The gate
+measures the residual with a central difference and it is truncation error: halving
+the step quarters it (measured ratio 3.8 against the ideal 4). A field with sources
+in it pumps energy into whatever reads it, and once four things read this that would
+be very hard to find.
+
+**The gusts do not taper to nothing at the ground, and that is deliberate.** `sigma_u`
+is very nearly constant with height through the surface layer even though the mean
+speed goes to zero at the roughness height — that is the measured behaviour, and it
+is also the only version that keeps the divergence exactly zero. What quietens the
+bottom of a specimen is that the bottom of a specimen is stiff, which is step 3.
+
+### The time argument is plant time
+
+Not milliseconds. `70_app.js` keeps both clocks — `age` in plant-time steps, `t` in
+real ms — and the old `SWAY` read `t`. A shader driven by wall-clock and a simulation
+driven by plant time would be two airs again, in a form that only shows on the time
+slider: the plant would speed up and the wind would not. Every rate in `37_wind.js`
+is per plant-time unit.
+
+### float32 is the only reason this needs a tolerance
+
+`windGLSL()` emits nine significant figures and the GPU keeps about seven, so the
+shader and the simulation cannot agree exactly. Measured on ANGLE/Metal at 96 sample
+points spanning `t` 0-10000: worst disagreement **2.5e-5 of the mean wind speed**,
+mean 4.3e-7, worst case at the largest `t` as expected, since `om*t` is where the
+significand goes. `tools/wind_check.mjs` gates at 1e-4 of mean speed. There is no
+useful gap between "the same field" and "not": a dropped mode or a lost sign is
+wrong by tens of percent, not by rounding.

@@ -62,18 +62,17 @@
 // miniature. See TUNING.md.
 
 import { TAU, clamp, v3, v3set, v3norm, v3cross } from './00_math.js';
+import { WORLD } from './37_wind.js';
 
 export const FALL_DEFAULTS = {
-  // --- the world's two scales, both already implied by the piece --------------
+  // --- the world's scales and the air, both shared ---------------------------
   //
-  // Neither of these is new and neither is aesthetic. They are the exchange rates
-  // between this simulation and the world, and they were already fixed by things
-  // that shipped long before this file: a Cathedral Fern stands about 16 world
-  // units tall and reads as a metre of plant, and `App.step` advances plant time
-  // at 125 units per real second (70_app.js:743). Writing them down here is what
-  // lets everything below be a measured quantity instead of a chosen one.
-  unitM: 0.0625,    // metres per world unit — a 16-unit plant is 1m
-  ptPerSec: 125,    // plant-time units per real second at 1x
+  // `unitM`, `ptPerSec`, `gEarth` and `rhoAir` used to be written out here. They
+  // live in `WORLD` in `37_wind.js` now, because the wind field needs the same
+  // density of air and the same two exchange rates, and a second definition of the
+  // density of air is exactly the class of bug that branch exists to remove. Every
+  // key name is unchanged, so a harness can still override any of them.
+  ...WORLD,
 
   // --- measured physical quantities -------------------------------------------
   //
@@ -90,8 +89,6 @@ export const FALL_DEFAULTS = {
   // sitting to one side of it. That straddle is a RESULT, not a calibration. An
   // earlier draft of this file picked `sigma` by hand to try to achieve it and put
   // every blade on the same side; the real numbers did better than the chosen ones.
-  gEarth: 9.81,     // m/s^2
-  rhoAir: 1.2,      // kg/m^3
   lmaFresh: 0.120,  // kg/m^2, turgid lamina
   lmaDry: 0.072,    // kg/m^2, once it has drained into its own veins. A dry blade
                     // is lighter, which moves it in the regime plane, so drying

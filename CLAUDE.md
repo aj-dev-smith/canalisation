@@ -56,6 +56,7 @@ node test/ring.mjs                                 # T/D/geometry map on STATIC 
 node test/shoot.mjs                                # senescence: does the specimen finish, and in what order
 node test/senesce.mjs                              # senescence, drawn: does a dying blade change, and do the veins go last
 node test/fall.mjs                                 # a shed blade: is the fall a falling plate, and do real blades differ
+node test/wind.mjs '{"uRef":3}'                    # the wind field: profile, gusts, spectrum, divergence, GLSL round trip
 ```
 
 Two more are **archived experiments**, not live checks. They are the code that
@@ -100,6 +101,12 @@ bundle that did not parse while the gate passed 47 checks — **a green gate is 
 evidence about what the gate imports.** It still cannot see the *scene*: whether
 `70_app.js` passes the right thing to `blade()` is a question only a browser can
 answer, and `tools/senesce_shot.mjs` is where it would show.
+
+One check cannot be done in Node at all: whether the GLSL the shader compiles is the
+same wind field the simulation sums. `tools/wind_check.mjs` evaluates the emitted
+shader on a real GPU and compares it to `windAt()` — the only thing in `tools/` that
+returns a number and an exit code instead of a picture. A wrong wind still looks like
+wind, so this is not a class of bug the eye can catch.
 
 When you *do* need pixels, `tools/` drives a real browser with Playwright and
 [tools/README.md](tools/README.md) lists each capture script. Read that file first —
@@ -158,6 +165,8 @@ src/20_meristem.js  growing tip: dividing cell sheet, organ initiation, divergen
 src/25_margin.js    leaf outline grown from margin convergence points
 src/30_leaf.js      blade: interior lattice, vein canalisation, bake
 src/35_fruit.js     ovary wall as icosphere shell; ovule placement, swelling, ripening wave
+src/37_wind.js      THE AIR. One wind field, plus the world's scales. JS and GLSL
+                    from one baked mode table. Nothing reads it yet (ROADMAP 7.1)
 src/38_shoot.js     FALSIFIED EXPERIMENT, ships disabled. Whole-plant auxin transport
 src/39_fall.js      a shed blade falling: quasi-steady plate aerodynamics
 src/40_plant.js     the organism: axes, elongation, branching, florigen, fruit set, senescence
@@ -241,11 +250,12 @@ short version, in order:
    shader's decorative sway, with attached blades loaded through the same plate
    model the fall already uses, and **the stem genuinely bending**. Fixes the
    discontinuity above and is shared infrastructure with 4. Days, not an afternoon.
-   **Scoped and pre-flighted:** ROADMAP 7 has the staged order, and the stiffness
-   stop-condition has already been tested — `EI ∝ r⁴` on the radii the plant
+   **Scoped, pre-flighted, and started:** ROADMAP 7 has the staged order, the
+   stiffness stop-condition has been tested — `EI ∝ r⁴` on the radii the plant
    already grows gives plant-like sway (0.5–4.6 Hz on seven of eight species) off
-   **one** material constant, `E ≈ 60 MPa`. Start at step 1, not step 0.
-   `droop` is deliberately held back to 7b.
+   **one** material constant, `E ≈ 60 MPa` — and **step 1, the field itself, has
+   landed** (`src/37_wind.js`). Start at step 2, attached blades. `droop` is
+   deliberately held back to 7b.
 2. **The handover** — a new specimen germinating as the old one fades. The last
    piece of the cycle. `Plant.dead()` is the trigger and the camera director
    already exists. It also owns an open question: the final frame is a dim, small
@@ -269,6 +279,13 @@ the same air, with abscission as the seam — described above. This limitation i
 unlike the other two here: it is not an open question but a known fix, it is ranked
 first, and it *removes* stated constants rather than needing new ones. **If you are
 picking up work with no other instruction, pick this up.**
+
+There is now a **third** thing that could be called a model of the air, deliberately:
+`37_wind.js` is a real wind field, one definition evaluated by both the simulation
+and the shader, and **nothing reads it.** That is ROADMAP 7 step 1 and the order there
+says so explicitly — two air models is the bug, adding a third temporarily is fine,
+shipping two is not. The seam is still open until step 4 and `SWAY` still moves the
+scene.
 
 **Senescence is built and drawn, but it is split down the middle.** *When* a
 specimen senesces is emergent — `Plant.spent()`, a physical condition with nothing
