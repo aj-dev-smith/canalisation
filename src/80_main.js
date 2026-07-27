@@ -106,9 +106,22 @@ const SLIDERS = [
     app.ringWidth = v;
   }, () => app.ringWidth ?? 0, 0, 5, 0.2,
     'How wide a band may found a leaf. Narrow it and the divergence angle tightens — and the shoot nearly stops making leaves. That trade-off is a real result.'],
+  // The weather, in metres per second at a metre off the ground — the one number in
+  // the mechanics that is a composition choice rather than a measurement, so it is the
+  // one that belongs on a slider. The band edges are Beaufort's: 0 is a dead calm and
+  // costs exactly nothing, 1.6 is where leaves start to rustle, 3.4 is "leaves and
+  // small twigs in constant motion", 5.5 raises dust. Everything downstream of it —
+  // gust strength, gust frequencies, the height profile — is rebaked from it, so this
+  // cannot put the air into a state the physics disagrees with.
+  ['wind', v => { app.setWind(v); }, () => app.plant.wind.o.uRef, 0, 8, 0.1,
+    'How hard it is blowing, in metres per second. Beaufort 2 (1.6-3.3) is leaves rustling; 3.4 and up is constant motion. The gusts get faster as well as stronger, because an eddy\'s frequency is how quickly the wind carries it past.'],
   ['time', v => { app.speedMul = v; }, () => app.speedMul, 0, 4, 0.25,
     'How fast the simulation runs.'],
 ];
+// Two controls act on the whole standing plant rather than on the growing point, so
+// they must not yank the camera to the apex the way the chemistry sliders do — you
+// cannot judge sway through a macro lens on a meristem.
+const WHOLE_PLANT = new Set(['time', 'wind']);
 const slidersEl = $('sliders');
 const sliderRefs = [];
 for (const [label, set, get, min, max, step, tip] of SLIDERS) {
@@ -123,12 +136,17 @@ for (const [label, set, get, min, max, step, tip] of SLIDERS) {
     set(parseFloat(inp.value));
     out.textContent = inp.value;
     // take the viewer to where this control's effect is actually visible
-    if (label !== 'time') {
+    if (!WHOLE_PLANT.has(label)) {
       app.takeOver();
       setCellFocus('apex');       // sets autoRot for us
       app.cam.idle = 9999;
       showTip(tip);
       $('regrowBtn').classList.add('urge');
+    } else if (label === 'wind') {
+      // Nothing to regrow — the weather changes what the plant is doing, not what it
+      // grew into — but the tip is still worth showing, because "the gusts get faster
+      // as well as stronger" is the non-obvious half of moving this control.
+      showTip(tip);
     }
   };
   sliderRefs.push({ inp, out, get });

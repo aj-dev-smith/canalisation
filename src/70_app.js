@@ -6,6 +6,7 @@ import { DEFAULT_PRM } from './10_auxin.js';
 import { MERISTEM_DEFAULTS } from './20_meristem.js';
 import { Leaf, LEAF_DEFAULTS } from './30_leaf.js';
 import { Plant, SPECIES_DEFAULTS } from './40_plant.js';
+import { windField, WIND_DEFAULTS } from './37_wind.js';
 import { fallFrame, drawnBladeLen, BLADE_DRAWN } from './39_fall.js';
 import {
   Buffers, tube, blade, laminaCells, meristemDome, fruitShell, setView, senesceTint,
@@ -350,6 +351,11 @@ export class App {
         glow: this.petalPal.glow * (1 + 0.5 * t) });
     }
     if (this.ringWidth) this.mo.rOut = this.mo.rCZ + this.ringWidth;
+    // The weather outlives the specimen. `windU` is only set once the viewer has
+    // touched the slider; until then the species' own `windOpts` (usually nothing,
+    // so `WIND_DEFAULTS`) decides, and a regrow must not silently return the scene
+    // to a calm the viewer had turned up out of.
+    if (this.windU !== undefined) this.sp.windOpts = { ...this.sp.windOpts, uRef: this.windU };
     const fr = mulberry32(seed ^ 0x51ed270b);
     this.sp.fruitOpts = {
       T: lerp(14, 34, fr()), D: lerp(1.8, 4.2, fr()),
@@ -371,6 +377,19 @@ export class App {
       });
     }
     this.age = 0;
+  }
+
+  // CHANGE THE WEATHER WITHOUT REGROWING THE PLANT. The field bakes its mode table
+  // once in `windField`, so a new speed means a new field rather than a mutated
+  // option — and rebaking is the whole point, because sigma_u, every gust frequency
+  // and the profile are all derived from `uRef` and would otherwise disagree with it.
+  // Keeping the seed means the same eddies at a different strength, so dragging the
+  // slider reads as the wind getting up rather than as a different day each frame.
+  setWind(uRef) {
+    this.windU = uRef;
+    const o = { ...WIND_DEFAULTS, ...this.sp.windOpts, uRef };
+    this.sp.windOpts = o;
+    if (this.plant) this.plant.wind = windField(o);
   }
 
   _bindInput() {

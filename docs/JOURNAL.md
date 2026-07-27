@@ -1426,3 +1426,80 @@ Second thing, smaller and more embarrassing: the harness *did* print the mode fr
 in a table, every time it ran. 4.822, 3.946, 13.494, 19.263. I read that table repeatedly
 while chasing the stiffness of a petiole and never once asked whether 19 Hz was a
 plausible thing for weather to do.
+
+## Force 3 was the wrong weather, and the second complaint was not about frequency (2026-07-26)
+
+The length-scale fix landed and the same person watched again: *still too windy, needs to
+be more subtle.*
+
+Two things worth separating there, because I nearly conflated them.
+
+### The wind speed was too high, and that is allowed to be a judgement
+
+`uRef` is the one number in the whole mechanical stack that is a choice. Everything
+downstream of it — the friction velocity, `sigma_u = 2.5 u*`, the Kolmogorov ladder, every
+gust frequency, the log profile — is derived from it, so a wrong value here cannot make
+the physics wrong. It can only put the scene in the wrong weather.
+
+It has now been wrong in both directions, which is the useful part. It shipped at 1.2 m/s,
+force 1, *"leaves do not move"* — and the mechanics was correctly invisible. It went to
+4.0, force 3, *"leaves and small twigs in constant motion"* — cited, defensible, and too
+much. Force 3's own wording is the tell: **constant** motion describes a busy scene, and
+this piece is a quiet close study of one specimen. It is now 2.5, upper-middle of force 2,
+*"wind felt on the face; leaves rustle"*.
+
+All three are Beaufort citations rather than tastes. What I got wrong was not the sourcing
+but the assumption that sourcing a number settles it. Choosing which band a scene stands
+in is composition, and there is no experiment that resolves composition. So it is a slider
+in the UI now (`app.setWind`, which rebakes the field keeping the seed, so dragging it
+reads as the wind getting up rather than as a different day each frame), and `clip.mjs`
+and `jitter.mjs` both take a `uRef` argument so a before/after on the weather is two runs
+of one binary instead of two checkouts.
+
+### "Too fast" meant two different things and only one of them was frequency
+
+This is the part I would have got wrong by pattern-matching on the previous entry. The
+first complaint was genuinely about frequency and the fix moved frequencies by a factor of
+thirty. This one was phrased the same way and was not:
+
+| Spiral Ossuary, seed 21 | at 4.0 m/s | at 2.5 m/s |
+|---|---|---|
+| stem tip, dominant rate | 0.53 Hz | 0.60 Hz |
+| stem tip, deflection rms | 0.368 | 0.053 world units |
+| stem tip, peak slew | 4.15 | 0.67 world units/s |
+| worst blade, dominant rate | 0.58 Hz | 0.65 Hz |
+
+The dominant frequency **did not move**, and could not have: it is the stem's own first
+bending mode, 0.58 Hz for this species, and the wind only decides how hard it is struck.
+What dropped by a factor of six is the peak slew — how fast the tip travels through space
+— which is amplitude times frequency, and that is what a viewer is reading when they say
+something moves too fast. If someone says it is too fast, measure both, and do not assume
+the previous fix's failure mode is this one's.
+
+The amplitude fell faster than the quadratic load law alone predicts (a factor of 7 in
+rms against 2.56 in pressure) because the response is resonant: cutting the speed also
+slides the whole Taylor-advected gust ladder down in frequency, and less of it lands near
+the stem's own mode.
+
+### A third thing, found by fixing the measurement
+
+`tools/jitter.mjs` was recording the **absolute position** of the stem tip, which climbs
+as the axis elongates. Growth is a far larger displacement than sway, so the tool reported
+an rms near 1.0 world units that barely responded to cutting the wind by a third — it was
+measuring the plant getting taller. It now records the tip's offset from the rest shape,
+where growth cancels. The frequency estimate happened to survive this because differencing
+a slow ramp adds little to the step variance; the amplitude numbers did not, and the
+before/after above is unusable without the fix. **A tool built to check one bug can carry
+its own.**
+
+### And the number that is not a coincidence
+
+The old hand-tuned `SWAY` peaked at about 0.34 world units on a Cathedral Fern. The
+physics says 0.43 at force 3 and 0.17 at force 2, so the sine sits neatly between the two
+speeds a person picked by eye — twice, months apart, on the same plant.
+
+But matching peaks is the wrong target and it is worth saying why, because it would be an
+easy "restoration" for a future session to make. A sine of amplitude A spends most of its
+time near ±A; a gusty wind that occasionally reaches A spends most of its time near zero.
+Equal peaks therefore read as very unequal business, and the physical version is the
+busier one. Match how it reads, not how far it goes.

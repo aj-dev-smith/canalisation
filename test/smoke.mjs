@@ -21,7 +21,7 @@ import { MERISTEM_DEFAULTS } from '../src/20_meristem.js';
 import {
   FALL_DEFAULTS, plateOf, fallState, fallStep, fallRegime, drawnBladeLen,
 } from '../src/39_fall.js';
-import { WORLD, windField, windAt, windGLSL, windGLSLNumbers } from '../src/37_wind.js';
+import { WORLD, WIND_DEFAULTS, windField, windAt, windGLSL, windGLSLNumbers } from '../src/37_wind.js';
 
 let failures = 0;
 let checks = 0;
@@ -355,6 +355,34 @@ section('one air');
     worst = Math.max(worst, Math.abs(div) / (f.sigmaW * kMax));
   }
   ok(worst < 1e-4, 'and divergence-free', worst.toExponential(2));
+
+  // IS IT WEATHER, OR IS IT A VIBRATION? This is the check that did not exist when the
+  // field shipped with the vertical component's integral length scale applied to the
+  // streamwise one, which put every gust mode between 3.9 and 19.3 Hz. Everything else
+  // in this section passed at the time: the field was finite, divergence-free to 1e-6,
+  // gust rms within 0.1% of `2.5 u*`, and byte-identical to its own shader. It was
+  // internally consistent and it was not wind, and a person watching said so.
+  //
+  // Near the ground, the energy-containing eddies are metres across and are carried
+  // past at a few metres per second, so weather happens at fractions of a hertz to a
+  // few hertz. 3 Hz is a generous ceiling: the shipped field's fastest mode is 1.8 and
+  // the force-3 version's was 2.9. Anything above this is not a scene that is too
+  // gusty, it is a spectrum whose length scales are wrong.
+  const fast = f.modes
+    .map(m => Math.abs(m.om) * WORLD.ptPerSec / (2 * Math.PI))
+    .filter(hz => hz > 3);
+  ok(fast.length === 0, 'and slow enough to be weather rather than vibration',
+    fast.length ? `${fast.length} modes above 3 Hz, worst ${Math.max(...fast).toFixed(1)}` : '');
+
+  // The weather is the one number in the mechanics that is a composition choice, so it
+  // is the one that can be changed without a measurement to justify it — which makes it
+  // the one worth pinning to its citation. Beaufort force 2 is "wind felt on the face;
+  // leaves rustle". Force 1 is "leaves do not move" and shipped once, correctly
+  // invisible; force 3 is "leaves and small twigs in CONSTANT motion" and shipped once,
+  // too busy for a close study of one specimen. If this fails, SCIENCE.md, TUNING.md and
+  // CLAUDE.md all describe a scene the piece is no longer standing in.
+  ok(WIND_DEFAULTS.uRef >= 1.6 && WIND_DEFAULTS.uRef <= 3.3,
+    'the shipped weather is the Beaufort force 2 the docs cite', WIND_DEFAULTS.uRef);
 
   // A dead calm has to be exactly nothing, not nearly nothing: `uRef: 0` is how a
   // still scene is expressed, and a field that trembled at zero wind would be the

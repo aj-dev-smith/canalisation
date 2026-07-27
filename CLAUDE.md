@@ -272,10 +272,20 @@ like it was vibrating, and a person watching said so; twenty-four passing assert
 not. `tools/jitter.mjs` is the check that closes that gap and it is the one to run after
 touching the air.
 
+**The weather is the one number here that the eye decides**, and it took two goes. The
+field shipped at force 1 (invisible), then force 3 (too much for a close study of one
+specimen), and settled at **force 2, `uRef: 2.5` m/s**. Everything downstream of it is
+derived, so a wrong value cannot make the physics wrong — only the scene. It is a slider
+in the UI (`app.setWind`), and `tools/clip.mjs` and `tools/jitter.mjs` both take a `uRef`
+argument. **Do not raise it back without watching it.** And when someone says the motion
+is too fast, measure amplitude as well as frequency: the second complaint moved the peak
+slew by a factor of six and the dominant frequency not at all, because that frequency is
+the stem's own bending mode and the wind only decides how hard it is struck.
+
 **What is still wrong is the petiole**, and it is now the blocking item: it is drawn at
 half the *stem's* radius, torsional stiffness goes as r⁴, so an attached blade rocks by
-a quarter of a degree. Read the 2026-07-26 JOURNAL entries before touching it; they rank
-three ways out and say why softening `eModulus` is not one of them.
+about a tenth of a degree at the shipped wind. Read the 2026-07-26 JOURNAL entries before
+touching it; they rank three ways out and say why softening `eModulus` is not one of them.
 
 ### Where the work goes next
 

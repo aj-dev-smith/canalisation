@@ -158,18 +158,22 @@ and the bending stem all read.
 spectrum advected by Taylor's hypothesis, exactly divergence-free, and the simulation
 and the shader evaluate it from one baked table of modes rather than from two functions
 that resemble each other. One number in it is a choice — how hard it is blowing — and
-even that is cited rather than picked: the Beaufort scale defines force 3 as "leaves and
-small twigs in constant motion", which is the condition this piece is about. Everything
-else follows, including the gust strength, which is the measured surface-layer `2.5 u*`
-rather than a second dial.
+even that is cited rather than picked: it stands in a Beaufort force 2, "wind felt on
+the face, leaves rustle", at 2.5 m/s. It stood in a force 3 first and that was too much
+weather for a close study of one specimen; which band a scene stands in is composition,
+so it is a slider in the UI rather than a constant. Everything else follows from it,
+including the gust strength, which is the measured surface-layer `2.5 u*` rather than a
+second dial, and every gust frequency, which scales with the speed by Taylor's
+hypothesis.
 
 **The axes are damped cantilevers.** Bending stiffness is `EI` on radii Murray's law
 grew, the load is the canopy's own blades at their own attitudes, and the first mode
 comes out within 0.90-1.21 of a frequency worked out on paper before the solver existed
 — on seven of eight species, off one material constant. How far each species sways is
-emergent and spans fifty-fold, from Spiral Ossuary's 1.53 world units down to Sulphur
+emergent and spans eighty-fold, from Spiral Ossuary's 0.82 world units down to Sulphur
 Rosette's nothing, because a 31 cm plant on an 18 mm base is a cushion and cushions do
-not sway.
+not sway. The spread does not depend on the weather — it comes from `r⁴` and canopy
+area — so turning the wind down quietens every species without flattening the catalogue.
 
 **`SWAY` is gone**, and with it the last authored motion in the piece. Blades still on
 the plant also rock on their petioles through the same plate model the fall uses — that

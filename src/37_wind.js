@@ -106,17 +106,31 @@ export const WIND_DEFAULTS = {
   //   force 3, 3.4-5.4       LEAVES AND SMALL TWIGS IN CONSTANT MOTION
   //   force 4, 5.5-7.9       dust and loose paper raised; small branches move
   //
-  // This piece is about leaves and small twigs in constant motion, so it is standing
-  // in a force 3, and 4.0 m/s is the low-middle of that band. The measurements say the
-  // same thing quantitatively: the aerodynamic load is quadratic in speed, so an
-  // attached blade twists by fractions of a degree at 1.2 m/s and by several degrees
-  // at 4, and the pressure on a stem is eleven times higher. A first draft of this
-  // file shipped 1.2 — force 1, where by definition leaves do not move — and then
-  // reported that the mechanics was invisible. It was: correctly.
+  // The load is quadratic in speed, so this band choice is the loudest number in the
+  // whole mechanical stack: the pressure on a stem at force 3 is eleven times what it
+  // is at force 1. A first draft shipped 1.2 — force 1, where by definition leaves do
+  // not move — and then reported that the mechanics was invisible. It was: correctly.
+  //
+  // IT THEN SHIPPED 4.0, force 3, AND THAT WAS TOO MUCH — not by any measurement, but
+  // because a person watched it and said so, twice. Force 3's own wording is the tell:
+  // "leaves and small twigs in *constant* motion" is a description of a busy scene, and
+  // this piece is a quiet close study of one specimen. Force 2 is where a viewer reads
+  // air rather than weather. 2.5 m/s is the upper-middle of that band, which keeps the
+  // mechanics legible — the floppiest species still leans 1.9° off its grown shape and
+  // the stiffest still is not quite still — at roughly 40% of the force-3 load.
+  //
+  // THIS IS THE ONE NUMBER IN THE PROJECT WHERE THE EYE IS THE RIGHT INSTRUMENT, and it
+  // is worth being clear about why, because everywhere else in the mechanics the eye is
+  // explicitly not trusted (see `39_fall.js`, whose constants are not tunable at all).
+  // Everything downstream of `uRef` is measured, so a wrong value here cannot make the
+  // physics wrong — it can only put the scene in the wrong weather. Choosing the weather
+  // is composition, and there is no experiment that settles it. So it is a slider in the
+  // UI (`80_main.js`) rather than a constant to be argued about: turn it up to a gale and
+  // the same air is still one air.
   //
   // Set it to 0 for a dead calm and the whole field is identically zero, which is what
   // `test/wind.mjs` checks: still air has to cost nothing and do nothing.
-  uRef: 4.0,
+  uRef: 2.5,
   yRefM: 1.0,       // the height that speed is quoted at, metres. A plant's height.
 
   // --- the profile: the law of the wall -------------------------------------

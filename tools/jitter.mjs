@@ -1,6 +1,6 @@
 // HOW FAST IS THE SCENE MOVING?
 //
-//   node tools/jitter.mjs [species] [seed] [waitSeconds]
+//   node tools/jitter.mjs [species] [seed] [waitSeconds] [uRef]
 //
 // "It wobbles too fast" and "some leaves jitter" are the two things a still cannot show
 // and a person watching cannot quantify. This samples the actual drawn state at frame
@@ -19,7 +19,10 @@ import { chromium } from 'playwright';
 import { pathToFileURL } from 'url';
 import { platform } from 'os';
 
-const [, , species, seed, wait = '6'] = process.argv;
+// `uRef` is optional and overrides the shipped wind speed, so a before/after on the
+// weather is two runs of one binary rather than two checkouts. It is the only argument
+// here that changes the physics rather than the sampling.
+const [, , species, seed, wait = '6', uRef] = process.argv;
 const gpu = platform() === 'darwin';
 const b = await chromium.launch({
   headless: !gpu,
@@ -32,6 +35,7 @@ if (species) {
   await pg.evaluate(([s, sd]) => window.__app.newSpecimen(s, sd ? +sd : undefined),
     [species, seed]);
 }
+if (uRef !== undefined) await pg.evaluate(u => window.__app.setWind(+u), uRef);
 await pg.evaluate(() => { window.__app.speedMul = 4; });
 await pg.waitForTimeout(+wait * 1000);
 // Freeze growth and the camera. Anything still moving is the air.
@@ -48,8 +52,15 @@ const rec = await pg.evaluate(() => new Promise((res) => {
   const tick = () => {
     const now = performance.now();
     out.t.push((now - t0) / 1000);
+    // THE TIP'S DEFLECTION, NOT THE TIP'S POSITION. The absolute tip climbs as the
+    // axis elongates, and growth is a much larger displacement than sway is — the
+    // first version of this recorded position and reported an rms of 1.0 world units
+    // that barely moved when the wind was cut by a third, because it was measuring
+    // the plant getting taller. Against the rest shape, growth cancels and what is
+    // left is the bending.
+    const r = a.rest && a.rest[a.rest.length - 1];
     const p = a.pts[a.pts.length - 1];
-    out.tip.push([p[0], p[1], p[2]]);
+    out.tip.push(r ? [p[0] - r[0], p[1] - r[1], p[2] - r[2]] : [p[0], p[1], p[2]]);
     pick.forEach((o, i) => out.blades[i].push([o.frame.y[0], o.frame.y[1], o.frame.y[2]]));
     if (now - t0 < 5000) requestAnimationFrame(tick); else res(out);
   };

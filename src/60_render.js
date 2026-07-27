@@ -39,10 +39,18 @@ precision highp float;`;
 // simulation shares with everything else in the scene.
 //
 // One number worth keeping: the hand-tuned displacement peaked at about 0.34 world
-// units at the top of a Cathedral Fern. The physics, asked independently, says 0.43.
-// Whoever tuned that sine had a good eye — the amplitude was never the problem. What
-// was wrong with it is that it ran on wall-clock time at a frequency nobody's plant
-// has, and the simulation could not see it.
+// units at the top of a Cathedral Fern. The physics, asked independently, said 0.43 at
+// the force 3 the field first shipped in, and says 0.17 at the force 2 it settled on.
+// Whoever tuned that sine had a good eye, and it landed between the two. What was wrong
+// with it is that it ran on wall-clock time at a frequency nobody's plant has, and the
+// simulation could not see it.
+//
+// The gap between 0.34 and 0.17 is not a regression, and it is worth understanding
+// before anyone "restores" the old amplitude. A sine of amplitude A and a gusty wind
+// that peaks at A do not read alike: the sine spends all its time near its extremes and
+// the gusts spend most of theirs near the middle, so matching peaks makes the physical
+// version look far busier than the decorative one it replaced. Match how it reads, not
+// how far it goes — and the control for that is `uRef`, in the UI.
 
 const MESH_VS = `${HEAD}
 layout(location=0) in vec3 aPos;

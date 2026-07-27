@@ -467,7 +467,7 @@ change is the model.
 ### The one choice
 
 ```
-uRef       4.0      m/s at yRefM     how hard it is blowing. Beaufort 3
+uRef       2.5      m/s at yRefM     how hard it is blowing. Beaufort 2
 bearing    0.0      rad              which way. Ground plane. A scene picks one
 seed       1        -                which realisation of the spectrum is drawn
 ```
@@ -475,14 +475,27 @@ seed       1        -                which realisation of the spectrum is drawn
 **`uRef` comes off the Beaufort scale, and that is a better answer than taste,**
 because Beaufort's force descriptions are *defined by what the wind does to plants*:
 force 1 is "leaves do not move", force 2 is "leaves rustle", force 3 is **"leaves and
-small twigs in constant motion"**, force 4 raises dust and moves small branches. This
-piece is about leaves and small twigs in constant motion, so it stands in a force 3
-and 4.0 m/s is the low-middle of that band.
+small twigs in constant motion"**, force 4 raises dust and moves small branches.
 
+It has now been wrong in both directions, which is the useful thing about this entry.
 It shipped at 1.2 — force 1 — for exactly as long as it took to measure an attached
 blade, which twisted by 0.03 degrees and was reported as "the mechanics is invisible".
-It was, correctly: at force 1, by definition, leaves do not move. The load is quadratic
-in speed, so force 3 is eleven times the pressure of force 1.
+It was, correctly: at force 1, by definition, leaves do not move. Then it shipped at
+4.0 — force 3 — and a person watching said "too windy" twice. Force 3's own wording is
+the tell: *constant* motion describes a busy scene, and this is a quiet close study of
+one specimen. **2.5, upper-middle of force 2, is where a viewer reads air rather than
+weather.** The load is quadratic in speed, so that is 39% of the force-3 pressure and
+eleven times the force-1 pressure.
+
+**This is the one number in the mechanics where the eye is the right instrument**, and
+that is not a contradiction of the rest of this file. Everything downstream of `uRef` is
+derived from it, so a wrong value here cannot make the physics wrong — it can only put
+the scene in the wrong weather, and choosing the weather is composition, not physics.
+There is no experiment that settles it. So it is also a **slider in the UI**: `app.setWind(u)`
+rebakes the field, keeping the seed, so dragging it reads as the wind getting up rather
+than as a different day each frame. `tools/clip.mjs` and `tools/jitter.mjs` both take a
+`uRef` argument for the same reason — a before/after on the weather should be two runs
+of one binary, not two checkouts.
 
 `uRef: 0` is a dead calm and the field is then **identically zero everywhere** —
 asserted in the gate, because a field that trembled at zero wind would be the old
@@ -507,14 +520,19 @@ octave amplitudes are Kolmogorov's and normalised so their variances sum to
 `sigma_u²`, then each mode's frequency is Taylor's `k·U` plus its own turnover.
 **So "how gusty is it" is not a second dial.** At the shipped weather:
 
-| | value |
-|---|---|
-| `u*` | 0.407 m/s |
-| `sigma_u` | 1.017 m/s (turbulence intensity 25%) |
-| mean speed at 1 m / at 0.25 m | 4.00 / 2.65 m/s |
-| gust peak seen over 40k samples | 2.59 m/s = 2.54 sigma |
-| mode frequencies | 0.15, 0.13, 0.43, 0.61, 0.83, 0.61, 2.86 Hz |
-| gust variance in 0.3-6 Hz | 37%, 5 of 7 modes |
+| | at the shipped 2.5 m/s | at the 4.0 it shipped at first |
+|---|---|---|
+| `u*` | 0.254 m/s | 0.407 |
+| `sigma_u` | 0.636 m/s (turbulence intensity 25%) | 1.017 (25%) |
+| mean speed at 1 m / at 0.25 m | 2.50 / 1.66 m/s | 4.00 / 2.65 |
+| gust peak seen over 40k samples | 1.54 m/s = 2.42 sigma | 2.59 = 2.54 sigma |
+| mode frequencies | 0.09, 0.08, 0.27, 0.38, 0.52, 0.38, 1.78 Hz | 0.15, 0.13, 0.43, 0.61, 0.83, 0.61, 2.86 |
+| gust variance in 0.3-6 Hz | 22%, 4 of 7 modes | 37%, 5 of 7 |
+
+Turbulence intensity is 25% at both, which is the point of the section below it: the
+gustiness is a property of the surface, not of the speed, so turning the wind down does
+not make it a different *kind* of air. Every frequency scales with `uRef` — Taylor's
+hypothesis is `k·U` — so the slower weather is also literally slower, by the same factor.
 
 ### The integral length scale was wrong, and you could SEE it
 
@@ -535,15 +553,24 @@ fast" and "some leaves do a fast jitter" — and both were this one number. Meas
 | stem tip | 0.00 Hz (the old sway was shader-only, so the geometry never moved) | 0.41-0.46 Hz |
 | individual blades | **3.8-16.5 Hz** | 0.29-1.10 Hz |
 
-At 32 m the ladder runs down to 0.5 m, the frequencies run 0.13 to 2.9 Hz, and about 63%
-of the gust variance sits in the two slowest octaves, because Kolmogorov gives the big
-eddies the big amplitudes. Keep the ladder **wide** rather than sliding it: the largest
-eddy is much bigger than the plant so it pushes the whole specimen together, and the
-smallest is a fraction of it so the load still varies along the stem.
+At 32 m the ladder runs down to 0.5 m, the frequencies run 0.08 to 1.8 Hz at the shipped
+speed, and about 63% of the gust variance sits in the two slowest octaves, because
+Kolmogorov gives the big eddies the big amplitudes. Keep the ladder **wide** rather than
+sliding it: the largest eddy is much bigger than the plant so it pushes the whole
+specimen together, and the smallest is a fraction of it so the load still varies along
+the stem.
 
-Note the frequencies are not monotonic in the mode index (0.15, 0.13, 0.43, 0.61, 0.83,
-0.61, 2.86). That is Taylor's hypothesis behaving correctly: a mode whose wavevector is
+Note the frequencies are not monotonic in the mode index (0.09, 0.08, 0.27, 0.38, 0.52,
+0.38, 1.78). That is Taylor's hypothesis behaving correctly: a mode whose wavevector is
 nearly perpendicular to the mean flow is swept past slowly whatever its size.
+
+**And note what the second fix did NOT change.** Dropping `uRef` from 4.0 to 2.5 barely
+moved the dominant frequency of the drawn motion — Spiral Ossuary's stem went 0.53 to
+0.60 Hz — because that frequency is the *stem's own first mode*, not the wind's. What
+changed by a factor of six was the peak slew, how fast the tip travels through space:
+4.15 to 0.67 world units per second. Both complaints were phrased as speed and only the
+first one was about frequency; the second was amplitude wearing the same word. If
+somebody says it is moving too fast, measure both.
 
 ### The two invariants worth knowing about
 
@@ -626,12 +653,15 @@ STEM's radius at the node — a number nobody derived. Measured on a Cathedral F
 | radius as a fraction of the blade's own chord | 0.14-0.27 — **a real leaf is nearer 0.02** |
 | torsional stiffness `k` | 30-108 world torque/rad |
 | first torsional frequency | **374-4040 Hz** |
-| rock at force 3, all 110 blades | 0.28° rms, 4.6° peak |
-| rock at force 2 / force 4-5 | 0.07° / 1.09° rms |
+| rock at the shipped 2.5 m/s, all 110 blades | 0.097° rms, 0.93° peak |
+| rock at 1.25 / 5.0 m/s | 0.024° / 0.38° rms — quadratic, as it must be |
 
 So the mechanism is correct — quadratic in wind speed, zero in still air, larger for a
 bigger blade on the same stalk, all asserted — and it is **quasi-static and nearly
-invisible**, because the blade is hanging off a fat rubber rod. An order of magnitude
+invisible**, because the blade is hanging off a fat rubber rod. Turning the weather down
+to force 2 made it a tenth of a degree instead of a quarter, which changes nothing about
+the diagnosis: at either speed this is the defect, and it is the reason the blade does
+not move on its own stalk even when the stem it hangs from is swaying visibly. An order of magnitude
 in radius is four orders in stiffness. Do not tune `eModulus` down to compensate: that
 is the compensation the pre-flight already spent once, and doing it twice would make a
 petiole out of jelly. **The number to fix is the radius**, and it is ROADMAP 5.
@@ -715,22 +745,30 @@ Three numbers to check first if this ever looks wrong:
 
 ### Sway, which is emergent and enormous in spread
 
-Tip displacement from the grown shape, world units, at each Beaufort force:
+Tip displacement from the grown shape, world units, at Beaufort band edges. The starred
+column is what ships. `test/stem.mjs` reads the shipped speed out of `WIND_DEFAULTS`
+rather than keeping its own copy — it used to hardcode 4.0, and when the default dropped
+it went on faithfully reporting a scene that no longer existed.
 
-| species | force 2 | force 3 | force 4 | tip angle at f3 |
-|---|---|---|---|---|
-| Spiral Ossuary | 0.46 | **2.12** | 8.13 | 4.8° |
-| Ember Creeper | 0.31 | 1.41 | 5.56 | 3.2° |
-| Abyssal Frond | 0.34 | 1.26 | 4.40 | 3.6° |
-| Cathedral Fern | 0.12 | 0.43 | 1.91 | 1.4° |
-| Sun Coral | 0.05 | 0.20 | 0.88 | 0.8° |
-| Hoarfrost Thicket | 0.01 | 0.02 | 0.11 | 0.1° |
-| Nightglass Parasol | 0.00 | 0.02 | 0.08 | 0.1° |
-| Sulphur Rosette | 0.00 | 0.00 | 0.01 | 0.0° |
+| species | 1.6 | **\*2.5** | 3.4 | 5.5 | tip angle at 2.5 |
+|---|---|---|---|---|---|
+| Spiral Ossuary | 0.29 | **0.82** | 1.57 | 4.12 | 1.9° |
+| Ember Creeper | 0.20 | 0.58 | 1.04 | 2.85 | 1.3° |
+| Abyssal Frond | 0.19 | 0.40 | 0.89 | 2.13 | 1.1° |
+| Cathedral Fern | 0.07 | 0.17 | 0.31 | 0.80 | 0.6° |
+| Sun Coral | 0.03 | 0.08 | 0.14 | 0.37 | 0.3° |
+| Hoarfrost Thicket | 0.00 | 0.01 | 0.01 | 0.05 | 0.1° |
+| Nightglass Parasol | 0.00 | 0.01 | 0.01 | 0.04 | 0.0° |
+| Sulphur Rosette | 0.00 | 0.00 | 0.00 | 0.00 | 0.0° |
 
-Fiftyfold between the extremes, off no per-species number: `EI` goes as r⁴ and the load
-goes as the canopy area, so a tall thin shoot with a big canopy moves and a cushion does
-not. **Do not "fix" the bottom of that table.**
+Around eightyfold between the extremes at the shipped speed, off no per-species number:
+`EI` goes as r⁴ and the load goes as the canopy area, so a tall thin shoot with a big
+canopy moves and a cushion does not. **Do not "fix" the bottom of that table.**
+
+The harness also asserts that the *top* of the slider still does something — that the
+deflection at 5.5 m/s is at least 1.5x the deflection at the shipped speed, for every
+species that moves at all. Without that, a `maxTilt` stop could quietly saturate the
+whole upper half of the control and the gale would draw the same picture as the breeze.
 
 ### Gravity is in the rest shape, and it is not a shortcut
 

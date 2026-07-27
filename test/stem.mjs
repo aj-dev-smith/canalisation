@@ -24,7 +24,7 @@ import { MERISTEM_DEFAULTS } from '../src/20_meristem.js';
 import { LEAF_DEFAULTS } from '../src/30_leaf.js';
 import { Plant, SPECIES_DEFAULTS } from '../src/40_plant.js';
 import { STEM_DEFAULTS, stemScales, cantileverHz } from '../src/39a_stem.js';
-import { WORLD, windField } from '../src/37_wind.js';
+import { WORLD, windField, WIND_DEFAULTS } from '../src/37_wind.js';
 import { v3, v3len, v3sub } from '../src/00_math.js';
 
 const only = process.argv[2];
@@ -176,25 +176,40 @@ for (const name of names) {
 
 // --- 2. how far does the wind actually move it? -----------------------------------
 
-console.log('\n=== 2. SWAY: how far does a force 3 push each species? ===');
+// THE SHIPPED SPEED IS READ, NOT COPIED. This table used to hardcode 4.0 and call that
+// column "force 3", and when the default dropped to force 2 the harness went on
+// reporting how a scene that no longer exists behaves — a table that agrees with itself
+// and not with the piece. `SHIP` is whatever `WIND_DEFAULTS` says today; the columns
+// either side of it are Beaufort band edges so the shipped value has context.
+const SHIP = WIND_DEFAULTS.uRef;
+const BANDS = [0, 1.6, SHIP, 3.4, 5.5];
+const SI = BANDS.indexOf(SHIP);
+console.log(`\n=== 2. SWAY: how far does the wind push each species? (ships at ${SHIP} m/s) ===`);
 console.log('  Tip displacement from the shape it grew into, in world units and as an');
-console.log('  angle at the base. Prints; a number here is a judgement, not a fact.\n');
-console.log('  species                calm    force2   force3   force4   tip angle f3');
+console.log('  angle at the base. Prints; a number here is a judgement, not a fact.');
+console.log('  Columns are Beaufort band edges: 0 calm, 1.6 leaves rustle, 3.4 constant');
+console.log('  motion, 5.5 dust raised. The starred column is what ships.\n');
+console.log('  species                ' + BANDS.map((u, i) =>
+  ((i === SI ? '*' : '') + u).padStart(7)).join('') + `   angle @${SHIP}`);
 for (const name of names) {
   const P = grown[name] || (grown[name] = grow(name));
   const row = [];
-  for (const u of [0, 2, 4, 8]) row.push(tipSway(P, name, u));
+  for (const u of BANDS) row.push(tipSway(P, name, u));
   if (!row[0]) { console.log(`  ${name.padEnd(22)} —`); continue; }
-  const ang = Math.atan2(row[2].peak, row[2].L) * DEG;
-  console.log(`  ${name.padEnd(22)} ${row.map(r => r.peak.toFixed(2).padStart(6)).join('  ')}`
+  const ang = Math.atan2(row[SI].peak, row[SI].L) * DEG;
+  console.log(`  ${name.padEnd(22)} ${row.map(r => r.peak.toFixed(2).padStart(7)).join('')}`
     + `   ${ang.toFixed(1).padStart(6)}°`);
   // Not exactly zero: `Plant.stepBend` stops stepping once every station is below its
   // quiescence threshold, so a calm scene settles to a residual rather than to a hard
   // zero. 1e-4 world units is six microns on a metre-tall plant.
   ok(row[0].peak < 1e-4, `${name}: dead calm settles the stem`, row[0].peak);
-  ok(row[2].peak > row[1].peak, `${name}: harder wind moves it further`);
+  ok(row[row.length - 1].peak > row[1].peak, `${name}: harder wind moves it further`);
   ok(row.every(r => Number.isFinite(r.peak)), `${name}: the deflection stays finite`);
-  ok(row[2].hit === 0, `${name}: force 3 does not reach the stop`, row[2].hit);
+  ok(row[SI].hit === 0, `${name}: the shipped wind does not reach the stop`, row[SI].hit);
+  // A GALE MUST NOT BE THE SAME PICTURE AS A BREEZE. The slider goes to 8, and if the
+  // deflection saturated at the `maxTilt` stop the top of its range would be a lie.
+  ok(row[row.length - 1].peak > 1.5 * row[SI].peak || row[SI].peak < 0.02,
+    `${name}: the slider's top end still does something`, `${row[SI].peak} -> ${row[row.length - 1].peak}`);
 }
 
 // --- 3. is `stations` a resolution or a dial? --------------------------------------
