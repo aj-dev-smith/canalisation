@@ -633,3 +633,18 @@ the constant torque, including a term that can be **negative**: rotational circu
 acting through a centre of area the margin put off the midrib feeds the rock, which is
 what leaf flutter is. Held constant across a substep instead, it pumped the spring —
 a ringdown in dead air grew from 12° to 27° over eight cycles, with no energy source.
+
+### `tiltPlane` — off, and it is a falsified experiment (2026-07-26)
+
+```
+tiltPlane  false   a second rotational plane: the long axis levelling itself
+```
+
+Not a dial and not a work in progress: a hypothesis that was tested and failed, kept
+runnable so it stays re-measurable (`node test/fall.mjs tilt`). It closes the abscission
+seam exactly — long-axis jump 27.1° → 0.00°, chord jump 4.0 → 1.0 — and from any tilt
+between 5° and 40° it levels in 0.10 s with no blade of forty going over. Then, once the
+pitch tumbles, 32-39 of 40 blades take the long axis past 90° with median excursions of
+600-900°, because two independently-solved 2D planes do not exchange angular momentum.
+Full reasoning in JOURNAL.md. **Do not switch it on to see if it looks better** — it
+manufactures energy, which is not a thing to ship whatever it looks like.

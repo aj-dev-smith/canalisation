@@ -145,6 +145,55 @@ export const FALL_DEFAULTS = {
   // steeply. Which of those a given blade is was decided by its own silhouette.
   arCorrect: true,  // set false in a harness to see the 2D behaviour it replaced
 
+  // A SECOND ROTATIONAL PLANE — FALSIFIED, SHIPS DISABLED.
+  //
+  // Kept off, and kept runnable, for the same reason `rhoI: 0` keeps the dead second
+  // inhibitor in `10_auxin.js` and `shootOpts.enabled` keeps the whole-plant stream in
+  // `38_shoot.js`: a negative result you cannot re-measure is just a story. Switch it
+  // on with `{tiltPlane: true}` and `test/fall.mjs`'s third section reproduces both
+  // halves of what follows.
+  //
+  // WHAT IT WAS FOR. `fallFrame` draws a falling blade with its long axis LEVELLED,
+  // because the borrowed 2D model needs gravity in the pitch plane and therefore needs a
+  // horizontal pitch axis. So a blade hanging at a droop straightens out on the exact
+  // frame it detaches on — measured at a median 27 degrees and up to 44 — which is the
+  // one thing ROADMAP 7 step 4 says must not happen. This integrates the cross-section
+  // along the blade's LENGTH as well, so the tilt is carried over at abscission and then
+  // levelled aerodynamically by the same added-mass couple, with no new coefficient.
+  //
+  // IT WORKS, AND THEN IT DOES NOT.
+  //
+  //   * The seam closes completely: the long-axis jump goes 27.1 deg -> 0.00, and the
+  //     chord jump 4.0 -> 1.0, over 24 blades caught letting go.
+  //   * Dropped with its pitch at rest it is exactly what was wanted: from tilts of
+  //     5-40 degrees it levels in 0.10-0.11 s, overshoots by at most 11, and not one
+  //     blade of forty goes over.
+  //   * But **once the pitch tumbles, this plane is pumped without bound.** With the
+  //     pitch released anywhere between 15 and 75 degrees, 32-39 of 40 blades take the
+  //     long axis past 90 degrees and the median excursion reaches 600-900 degrees —
+  //     end over end, repeatedly.
+  //
+  // WHY, and it is a statement about the reduction rather than a bug to find. Two
+  // independently-solved 2D planes do not exchange angular momentum. A real rigid body
+  // has gyroscopic terms that move it between the planes and conserve the total; here
+  // the pitch feeds the tilt through the frame (the sign of the tilt's restoring couple
+  // goes as cos(th)) and nothing carries energy back, so a tumbling pitch drives the
+  // tilt resonantly and there is no term that can stop it. It is well behaved only on
+  // the knife-edge th = 0 or 90, which is not a solution.
+  //
+  // The route out is a genuine 3D rigid-body fall: one angular velocity, one inertia
+  // tensor, Euler's equations, and the quasi-steady load evaluated on the 3D relative
+  // flow. That should reproduce the validated 2D flutter/tumble ordering as its
+  // in-plane limit, which is a real test to hold it to — and it is a rewrite of a
+  // shipped file, so it wants its own branch.
+  //
+  // The cheaper route out is to stop handing it a 27-degree tilt. That tilt is
+  // `sp.droop`, which is imposed; the pre-flight in ROADMAP 5 measured what a blade's
+  // own weight would actually bend its petiole to, and got 4.8-13.2 degrees. At tilts
+  // that size this plane never misbehaves. **So ROADMAP 7b would close most of this
+  // seam by deleting the constant that opens it.**
+  tiltPlane: false,
+
   // --- housekeeping ----------------------------------------------------------
   // HOW LONG A SHED BLADE IS DRAWN, and this stopped being a single number when
   // the fall became real.
@@ -294,14 +343,21 @@ export function plateOf(leaf, len, sen, opt) {
 // that is the attitude with the most drag — tilted by the blade's own asymmetry, and
 // with an initial rate scaled off that same asymmetry by `wobble`. They are still
 // used by `test/fall.mjs`, which drops blades in isolation with no plant attached.
-export function fallState(plate, drop = Infinity, th0, om0) {
+export function fallState(plate, drop = Infinity, th0, om0, ph0) {
   const skew = plate.skew;
   const th = th0 === undefined ? skew * 0.5 : th0;
+  const tilt = plate.o.tiltPlane && ph0 !== undefined ? ph0 : 0;
   return {
     plate, t: 0,
     s: 0, y: 0, th,
     vs: 0, vy: 0,
     om: om0 === undefined ? -skew * plate.o.wobble : om0,
+    // The tilt of the long axis out of horizontal, and its rate. `ph0` is the tilt the
+    // blade was hanging at, so the drawn axis need not jump at abscission — but only if
+    // `tiltPlane` is on, which it is not: see FALL_DEFAULTS for the measurement that
+    // switched it off, and note that a tilt carried over with nothing integrating it
+    // would be worse than the jump, since it would never level at all.
+    ph: tilt, omPh: 0, ph0: tilt,
     th0: th,
     turns: 0, sMin: 0, sMax: 0, vyPeak: 0,
     revs: 0, _sgn: 0, spin: 0,
@@ -330,6 +386,10 @@ export function fallStep(st, dt) {
     // `50_geom.js` already draws a dried blade curling into.
     st.t += dt;
     st.th += (Math.round(st.th / Math.PI) * Math.PI - st.th) * Math.min(1, dt * 0.02);
+    // ...and the long axis settles level, on the same relaxation, so litter lies flat
+    // rather than propped on one end.
+    st.ph += (Math.round(st.ph / Math.PI) * Math.PI - st.ph) * Math.min(1, dt * 0.02);
+    st.omPh = 0;
     return st;
   }
   let rem = dt, guard = 0;
@@ -374,6 +434,44 @@ export function fallStep(st, dt) {
       - p.cRot * o.rhoF * p.c * p.c * p.c * p.c * Math.abs(st.om) * st.om / 64;
     const aOm = tq / (p.I + p.Ia);
 
+    // THE SECOND PLANE: the long axis levelling itself.
+    //
+    // Everything above solves the cross-section across the WIDTH. This solves the one
+    // along the LENGTH, and it exists because the blade has to come off the plant at
+    // the tilt it was hanging at rather than snapping level — a drooping blade
+    // straightened out on the exact frame it detached on, by a median of 27 degrees,
+    // which is precisely the tell ROADMAP 7 step 4 forbids.
+    //
+    // It is the SAME added-mass couple, and it needs no new coefficient: a plate turns
+    // its face into the flow, and for a blade coming down that means its plane goes
+    // horizontal, which levels the long axis. The "chord" of this cross-section is the
+    // blade's length and its "span" is the width, so every quantity is the pitch
+    // plane's with `c` and the length swapped. Since the equation is a torque over an
+    // inertia and both scale with the span, the span cancels and this is written per
+    // unit width exactly as the pitch is written per unit span.
+    //
+    // WHAT THIS IS NOT is a three-dimensional rigid body. The coupling runs one way:
+    // the pitch drives the tilt through the frame, the tilt does not feed back into the
+    // pitch, and gravity stays in the pitch plane where the borrowed model needs it.
+    // That keeps the validated flutter/tumble physics above bit-for-bit unchanged —
+    // `test/fall.mjs`'s regime ordering is an assertion about it — and buys continuity
+    // of the drawn attitude, which is what was actually wrong. A real 3D solve would be
+    // a different piece of work and would invalidate that validation.
+    if (o.tiltPlane) {
+    const spn = Math.max(1e-4, p.AR * p.c);          // the blade's length
+    const m22b = 0.25 * Math.PI * o.rhoF * spn * spn;
+    const Ib = p.sigma * spn * spn * spn / 12 + Math.PI * o.rhoF * Math.pow(spn, 4) / 128;
+    // The world velocity resolved on the tilted long axis and on the plate normal. Both
+    // fall out of the frame `fallFrame` builds; see the derivation there.
+    const cp = Math.cos(st.ph), sp2 = Math.sin(st.ph);
+    const vLen = st.vy * sp2;
+    const vNrm = -st.vs * sn + st.vy * c * cp;
+    const tqPh = -(m22b - o.rhoF * 0.25 * Math.PI * p.h * p.h) * vLen * vNrm
+      - p.cRot * o.rhoF * Math.pow(spn, 4) * Math.abs(st.omPh) * st.omPh / 64;
+    st.omPh += (tqPh / Ib) * h;
+    st.ph += st.omPh * h;
+    }
+
     const nPar = vPar + aPar * h, nPerp = vPerp + aPerp * h;
     st.om += aOm * h;
     st.th += st.om * h;
@@ -389,7 +487,7 @@ export function fallStep(st, dt) {
     if (st.y <= st.ground) {
       st.y = st.ground;
       st.landed = 1; st.tLand = st.t;
-      st.vs = st.vy = 0; st.om = 0;
+      st.vs = st.vy = 0; st.om = 0; st.omPh = 0;
       rem = 0;
       break;
     }
@@ -478,12 +576,19 @@ export function fallAxis(frame, out) {
 // own vertical plane.
 export function fallFrame(st, frame, axis, out) {
   const c = Math.cos(st.th), s = Math.sin(st.th);
+  // The long axis is no longer level. `ph` is its tilt out of horizontal, integrated
+  // in `fallStep`, and it starts at whatever tilt the blade was hanging at — which is
+  // what stops a drooping blade snapping straight the instant it lets go. `u` is the
+  // in-plane "up" the chord swings against, perpendicular to the tilted long axis, and
+  // it reduces to world up when the axis is level.
+  const cp = Math.cos(st.ph), sp = Math.sin(st.ph);
   // the in-plane horizontal, perpendicular to the pitch axis
   v3set(_fallPl, -axis[2], 0, axis[0]);
   for (let k = 0; k < 3; k++) {
     out.o[k] = frame.o[k] + _fallPl[k] * st.s + _fallUp[k] * st.y;
-    out.x[k] = axis[k];                                   // length: fixed, level
-    out.z[k] = _fallPl[k] * c + _fallUp[k] * s;            // width: the chord
+    out.x[k] = axis[k] * cp + _fallUp[k] * sp;             // length: tilted
+    const uk = -axis[k] * sp + _fallUp[k] * cp;            // in-plane up
+    out.z[k] = _fallPl[k] * c + uk * s;                    // width: the chord
   }
   // the normal follows, and the handedness is the one `50_geom.js` draws with:
   // an identity frame has z cross x = y

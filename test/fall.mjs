@@ -6,9 +6,14 @@
 // the only thing separating two leaves was a phase offset. That is the number this
 // harness exists to move.
 //
-//   node test/fall.mjs              # all three sections
+//   node test/fall.mjs              # all four sections
 //   node test/fall.mjs sweep        # just the model validation
 //   node test/fall.mjs blades       # just the real-blade table
+//   node test/fall.mjs tilt         # just the falsified second plane
+//
+// Section 4 is an ARCHIVED EXPERIMENT rather than a check, like `test/inhib.mjs` and
+// `test/ring2.mjs`: it switches on `FALL_DEFAULTS.tiltPlane`, which ships off, and
+// reproduces why. Nothing in the running piece reads it.
 //
 // THREE QUESTIONS, in the order that matters:
 //
@@ -256,6 +261,66 @@ function blades() {
   return rows;
 }
 
+// === 4. FALSIFIED: the second rotational plane ============================
+//
+// An ARCHIVED EXPERIMENT, not a live diagnostic. `FALL_DEFAULTS.tiltPlane` ships off;
+// this switches it on and reproduces both halves of why, in the same spirit as
+// `test/inhib.mjs` and `test/ring2.mjs`. Read the comment on `tiltPlane` first.
+//
+// The problem it addressed is real and is still open: `fallFrame` draws a falling blade
+// with its long axis LEVELLED, so a blade hanging at a droop straightens out on the
+// frame it detaches on — a median 27 degrees, measured in `test/wind.mjs`.
+function tilt() {
+  console.log('\n=== 4. FALSIFIED: a second rotational plane (tiltPlane) ===');
+  const P = new Plant(DEFAULT_PRM, MERISTEM_DEFAULTS, undefined, 21);
+  for (let i = 0; i < 6000; i++) P.step(1);
+  const organs = P.axes.flatMap(a => a.organs)
+    .filter(o => o.leaf && o.leaf.margin && o.leaf.margin.mature && o.dev > 0.5).slice(0, 40);
+  const opt = { tiltPlane: true };
+  const run = (o, th0, ph0) => {
+    const st = fallState(plateOf(o.leaf, drawnBladeLen(o.len, 1), 1, opt), 10, th0, 0, ph0);
+    let pk = 0, lvl = null;
+    for (let i = 0; i < 2000 && !st.landed; i++) {
+      fallStep(st, 1);
+      pk = Math.max(pk, Math.abs(st.ph));
+      if (lvl === null && Math.abs(st.ph) < Math.abs(ph0) * 0.2) lvl = st.t;
+    }
+    return { pk, lvl, st };
+  };
+  const med = (v) => { const a = [...v].sort((x, y) => x - y); return a.length ? a[a.length >> 1] : 0; };
+  const DEG = 180 / Math.PI;
+
+  // (a) WITH THE PITCH AT REST it does exactly what was wanted.
+  console.log('  released tilt, pitch at rest:');
+  console.log('    tilt in   went over 90   peak tilt med   levelled in');
+  for (const d of [5, 15, 25, 40]) {
+    const rs = organs.map(o => run(o, 0, d / DEG));
+    const lv = rs.filter(r => r.lvl !== null);
+    console.log(`    ${String(d).padStart(6)}deg   ${String(rs.filter(r => r.pk > Math.PI / 2).length).padStart(3)}/${rs.length}`
+      + `   ${(med(rs.map(r => r.pk)) * DEG).toFixed(0).padStart(12)}deg`
+      + `   ${lv.length ? (med(lv.map(r => r.lvl)) / FALL_DEFAULTS.ptPerSec).toFixed(2) + 's' : '   -'}`
+      + `  (${lv.length}/${rs.length})`);
+  }
+
+  // (b) WITH THE PITCH TUMBLING it is pumped without bound, and that is the result.
+  // Two independently-solved 2D planes do not exchange angular momentum: the pitch
+  // drives the tilt through the frame (the restoring couple goes as cos(th)) and
+  // nothing carries energy back, so a tumbling pitch drives the tilt resonantly.
+  console.log('  released pitch, tilt fixed at 25 deg:');
+  console.log('    pitch in   went over 90   peak tilt med/max');
+  for (const d of [0, 15, 45, 75, 90]) {
+    const rs = organs.map(o => run(o, d / DEG, 25 / DEG));
+    console.log(`    ${String(d).padStart(7)}deg   ${String(rs.filter(r => r.pk > Math.PI / 2).length).padStart(3)}/${rs.length}`
+      + `   ${(med(rs.map(r => r.pk)) * DEG).toFixed(0).padStart(12)}`
+      + `/${(Math.max(...rs.map(r => r.pk)) * DEG).toFixed(0)}deg`);
+  }
+  console.log('  Well behaved only on the knife-edge th = 0 or 90, which is not a');
+  console.log('  solution. The route out is a genuine 3D rigid-body fall, or ROADMAP 7b:');
+  console.log('  a derived droop hands this plane 5-13 degrees instead of 27, and at');
+  console.log('  tilts that size it never misbehaves.');
+}
+
 if (only === 'all' || only === 'sweep') sweep();
 if (only === 'all' || only === 'blades') blades();
+if (only === 'all' || only === 'tilt') tilt();
 console.log('');

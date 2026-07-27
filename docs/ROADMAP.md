@@ -241,11 +241,20 @@ Do not start by writing a solver. In order, each step measurable before the next
    pitch axis. A blade hanging at 27° straightens out on the frame it detaches on, which
    is exactly the tell this step forbids.
 
-   The honest fix is a **second rotational degree of freedom** — roll about the chord,
-   integrated with the same coefficients in the perpendicular plane. Two coupled 2D
-   solvers is a defensible reduction of a 3D problem, costs no new constants, and lets a
-   released blade level over a *timescale* rather than instantly, which is what a real
-   one does. Own branch: it changes a fall that shipped.
+   **That second degree of freedom was then built, measured, and falsified** — it is in
+   the tree behind `FALL_DEFAULTS.tiltPlane`, off, with `test/fall.mjs tilt` reproducing
+   it. It closes the seam exactly (27.1° → 0.00, chord 4.0 → 1.0) and levels in 0.10 s
+   from any tilt when the pitch is at rest, but once the pitch tumbles it is pumped
+   without bound: 32-39 of 40 blades take the long axis past 90°, median excursion
+   600-900°. Two independently-solved 2D planes do not exchange angular momentum, so the
+   pitch drives the tilt through `cos(th)` and nothing carries energy back. **A borrowed
+   model has assumptions, and one of them is its dimensionality** — the second time that
+   has been the answer in this file.
+
+   So what is left of step 4 needs either a genuine 3D rigid-body fall (which must
+   reproduce the validated 2D flutter/tumble ordering as its in-plane limit), or 7b: a
+   derived droop hands this plane 5-13° instead of 27, and at tilts that size it never
+   misbehaves. **Third independent argument for 7b.**
 5. **Delete `SWAY`.** Only once 1–4 hold. Two air models is the bug; adding a third
    temporarily is fine, shipping two is not.
 

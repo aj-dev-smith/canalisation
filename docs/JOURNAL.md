@@ -1208,3 +1208,71 @@ literature constant with the engine's own output, and gives a heavier-veined lea
 stouter stalk, which is variation nothing in the piece has. It does not remove the
 absolute scale, since drawn vein width is a display mapping — a better law with the same
 one free number.
+
+## Falsified: a second rotational plane for the falling blade (2026-07-26)
+
+The step-2 measurements left one thing much larger than anything else in the seam: a
+falling blade's long axis is drawn **levelled**, so a blade hanging at a droop
+straightens out on the exact frame it detaches on, by a median of 27° and up to 44°.
+`fallAxis` flattens it deliberately — the borrowed 2D plate model needs gravity in the
+pitch plane, which needs a horizontal pitch axis — so this is the reduction showing
+through the picture, not an oversight. It is also precisely the tell ROADMAP 7 step 4
+forbids: *you should not be able to tell from the motion which frame a blade detached
+on.*
+
+The obvious fix is a second rotational degree of freedom: integrate the cross-section
+along the blade's **length** as well as across its width, carry the tilt over at
+abscission, and let the same added-mass couple level it. No new coefficient — a plate
+turns its face into the flow, and for a blade coming down that means its plane goes
+horizontal, which levels the long axis. It was built. It is **off**, and it is kept
+runnable behind `FALL_DEFAULTS.tiltPlane` with `test/fall.mjs tilt` reproducing both
+halves, for the same reason `rhoI: 0` keeps the dead inhibitor and `shootOpts.enabled`
+keeps the whole-plant stream.
+
+**It works, and then it does not.**
+
+| | result |
+|---|---|
+| seam, long-axis jump | 27.1° → **0.00°** (max 0.02) |
+| seam, chord jump | 4.0° → **1.0°** |
+| dropped with the pitch at rest, tilt 5-40° | levels in 0.10-0.11 s, **0 of 40** go over |
+| pitch released at 15-75°, tilt 25° | **32-39 of 40** take the long axis past 90°, median excursion 600-900° |
+
+So it closes the seam exactly, behaves beautifully in the case it was designed for, and
+sends the majority of a real canopy end over end.
+
+**Why, and it is a statement about the reduction rather than a bug to find.** Two
+independently-solved 2D planes do not exchange angular momentum. A real rigid body has
+gyroscopic terms that move it between the planes and conserve the total; here the pitch
+feeds the tilt through the frame — the sign of the tilt's restoring couple goes as
+`cos(th)` — and nothing carries energy back, so a tumbling pitch drives the tilt
+resonantly and no term in the model can stop it. It is well behaved only on the
+knife-edge `th = 0` or `90`, which is not a solution. The same file already records the
+general form of this lesson from the finite-span correction: **a borrowed model has
+assumptions, and one of them is its dimensionality.** This is the second time that has
+been the answer here.
+
+Two routes out, and the cheap one is not in this file:
+
+1. **A genuine 3D rigid-body fall** — one angular velocity, one inertia tensor, Euler's
+   equations, and the quasi-steady load evaluated on the 3D relative flow. It has a real
+   test to hold it to: it must reproduce the validated 2D flutter/tumble ordering as its
+   in-plane limit. It is a rewrite of a shipped file, so it wants its own branch.
+2. **Stop handing it a 27° tilt.** That tilt *is* `sp.droop`, which is imposed; the
+   ROADMAP 5 pre-flight measured what a blade's own weight would actually bend its
+   petiole to and got 4.8-13.2°, and at tilts that size this plane never misbehaves.
+   **So 7b would close most of this seam by deleting the constant that opens it.** That
+   is the third independent argument for 7b in one day.
+
+### A measured consequence of step 4 that was worth checking
+
+Carrying the real release attitude over changed the release pitch from a near-broadside
+guess (`skew*0.5`, a degree or two) to what the blade was actually held at — a median of
+3-16° across the eight species, with a long tail. The isolated sweep above says that
+should matter, so the regime mix was re-measured on real specimens, 60 blades each:
+
+**Steady glides very nearly disappear** (per species: 6→1, 8→0, 4→0, 11→0, 5→0, 4→1) and
+flutter and tumble take them up. That is the expected direction and it is right: a blade
+released exactly broadside can settle into a straight glide, and one released a few
+degrees off starts rocking immediately. Every species still shows more than one regime,
+which is #8's headline and the thing that had to survive.

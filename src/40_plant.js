@@ -823,7 +823,12 @@ export class Plant {
     // axis, so what survives is the component along it. A blade hanging steeply
     // hands over less of its rock than a level one, which is geometry, not a fudge.
     const om0 = (o.flapSt ? o.flapSt.om : 0) * v3dot(o.frame.x, o.fallAxis);
-    o.fall = fallState(plate, Math.max(0.05, o.frame.o[1] - groundY), th0, om0);
+    // And the tilt of the long axis, which is the BIG one: the fall pitches about a
+    // levelled axis, so before this a blade hanging at 27 degrees straightened out on
+    // the frame it detached on. The fall now starts at the tilt the plant was holding
+    // it at and levels it aerodynamically — see the second plane in `fallStep`.
+    const ph0 = Math.asin(clamp(v3dot(o.frame.x, _zsy), -1, 1));
+    o.fall = fallState(plate, Math.max(0.05, o.frame.o[1] - groundY), th0, om0, ph0);
     // The frame is snapshotted because the axis keeps moving after the blade has
     // gone — it still sways, and a shed organ that kept reading its live frame was
     // hanging off a stem it was no longer attached to.
