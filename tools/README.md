@@ -46,6 +46,19 @@ inside **single** quotes, so it never interpolated.
   To compare against an older build, add a git worktree at the earlier commit, symlink
   `node_modules` into it, and run *this* copy of the tool with the worktree as cwd — the
   page URL comes from `process.cwd()` and the playwright import resolves from the script.
+- `jitter.mjs [species] [seed] [waitSeconds]` — **where is the movement's energy?**
+  Samples the drawn state at frame rate — the tip of the main axis and individual blade
+  normals — and reports a dominant rate per signal, plus a verdict at about 4 Hz, which
+  is where "sway" becomes "jitter" and where a 60 Hz display starts lying to you.
+
+  It exists because "it wobbles too fast" and "some leaves jitter" are the two reports a
+  still cannot answer and a person watching cannot quantify. It caught the wind field's
+  integral length scale being the vertical component's rather than the streamwise one:
+  blades were moving at 3.8-16.5 Hz. Run it after anything that touches the air, the
+  stem or the petiole. Note it freezes the camera but NOT growth — growth and the wind
+  share a clock, so `speedMul: 0` stops both — which means during the growing phase some
+  of what it measures is organs developing. Point it past the end of growth
+  (`waitSeconds` 26+) to isolate the air.
 - `sway.mjs` — **obsolete.** It pixel-diffed two frames to prove the old shader sway field
   animated, and that field was deleted in ROADMAP 7 step 5. Kept only until something
   wants its diffing trick; `clip.mjs` is what to reach for now

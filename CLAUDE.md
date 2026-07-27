@@ -108,11 +108,19 @@ evidence about what the gate imports.** It still cannot see the *scene*: whether
 `70_app.js` passes the right thing to `blade()` is a question only a browser can
 answer, and `tools/senesce_shot.mjs` is where it would show.
 
-One check cannot be done in Node at all: whether the GLSL the shader compiles is the
-same wind field the simulation sums. `tools/wind_check.mjs` evaluates the emitted
-shader on a real GPU and compares it to `windAt()` — the only thing in `tools/` that
-returns a number and an exit code instead of a picture. A wrong wind still looks like
-wind, so this is not a class of bug the eye can catch.
+Two checks cannot be done in Node at all.
+
+`tools/wind_check.mjs` evaluates the emitted shader on a real GPU and compares it to
+`windAt()` — the only thing in `tools/` that returns a number and an exit code instead of
+a picture. A wrong wind still looks like wind, so this is not a class of bug the eye can
+catch.
+
+`tools/jitter.mjs` asks **where the movement's energy sits in frequency**, sampling the
+drawn state at frame rate. Run it after anything that touches the air, the stem or the
+petiole. It exists because the wind field passed all twenty-four of its own assertions
+while every gust mode sat between 3.9 and 19.3 Hz — internally consistent, and nothing a
+person would call wind. `tools/clip.mjs` records a webm, which is the only artifact here
+that shows the piece *moving*.
 
 When you *do* need pixels, `tools/` drives a real browser with Playwright and
 [tools/README.md](tools/README.md) lists each capture script. Read that file first —
@@ -256,6 +264,13 @@ seven of eight species, its eigenvalue and its ringdown agree to under 1%, and t
 answer moves 0.3% across 4 to 24 stations. **Do not touch that solver without running
 `node test/stem.mjs`** — three separate bugs in it were invisible except by making it
 check itself against a number computed beforehand.
+
+**And do not trust that the field is right just because its own harness is green.** The
+gust spectrum shipped with the *vertical* component's integral length scale applied to
+the *streamwise* one, which put every gust mode between 3.9 and 19.3 Hz. The piece looked
+like it was vibrating, and a person watching said so; twenty-four passing assertions had
+not. `tools/jitter.mjs` is the check that closes that gap and it is the one to run after
+touching the air.
 
 **What is still wrong is the petiole**, and it is now the blocking item: it is drawn at
 half the *stem's* radius, torsional stiffness goes as r⁴, so an attached blade rocks by
