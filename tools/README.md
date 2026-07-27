@@ -70,9 +70,17 @@ inside **single** quotes, so it never interpolated.
   The tip signal is the tip's **offset from the rest shape**, not its position. It used
   to be the position, and since growth is a much larger displacement than sway the tool
   spent a while reporting an rms that barely moved when the wind was cut by a third.
-- `sway.mjs` — **obsolete.** It pixel-diffed two frames to prove the old shader sway field
-  animated, and that field was deleted in ROADMAP 7 step 5. Kept only until something
-  wants its diffing trick; `clip.mjs` is what to reach for now
+- `sway.mjs` — **deleted (2026-07-27).** It took two screenshots to show the old shader
+  sway field animating, and that field went in ROADMAP 7 step 5. It was left in place for
+  a day as "obsolete but harmless", which it was not: it froze the scene with
+  `speedMul = 0`, and since growth and the wind now share a clock that stops the air too,
+  so it would have reported *no motion at all* on a plant that moves — a false negative
+  dressed as a measurement. It also asked for swiftshader, which on macOS writes black
+  PNGs while reporting a full triangle count. `clip.mjs` replaces it.
+
+  The general rule, and `test/sweep.mjs` was removed for the same reason: **a harness can
+  outlive the thing it measures, and a stale one is worse than no harness** because it
+  still produces output that looks like evidence.
 - `wind_check.mjs ['{"uRef":3}'] [nSamples]` — **not a capture tool.** The one thing
   in here that returns a number and an exit code instead of a picture, and the only
   check in the repo that has to leave Node. Compiles the GLSL `windGLSL()` emits,
