@@ -106,3 +106,17 @@ inside **single** quotes, so it never interpolated.
   the drain reads, because the counts are blind to colour; `test/senesce.mjs` has
   those numbers. It reads the lit stage chip out of the DOM rather than off the
   model, so a display that silently stops matching the simulation shows up here
+- `cull.mjs [secsPerSpecies] [handoverSecs]` — **not a capture tool.** Like
+  `wind_check.mjs`, it returns numbers. Asks whether the occlusion cull in
+  `buildScene` is removing leaves the viewer can see. Pass 1 runs every species
+  through a whole life cycle with the director hands off and reports the share of
+  the canopy the cull hides plus `flips/frame`, the rate at which some blade
+  changes visibility — which is what a viewer actually notices, and is not
+  something a still can show. Pass 2 takes the camera mid apex shot the way a
+  pointerdown does, pulls back and orbits, and prints whether `focus` and
+  `subject` survived the handover.
+
+  It seeds every specimen with 4242 on purpose. Without a fixed seed each run
+  grows a different plant and the species numbers move by more than any change
+  you are trying to measure — the first two baseline runs of this tool disagreed
+  about which species was worst, because they were not looking at the same plants.

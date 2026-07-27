@@ -183,6 +183,33 @@ gains a point. This was most of the "jitter".
 
 **Lift veins off the blade along the normal** or they z-fight into speckle.
 
+**A constant triangle count is evidence, and it is the first thing to read when
+geometry looks wrong.** "Leaves snap in and out of existence" was chased through
+buffer saturation, NaN vertices, backface culling and depth precision before
+anybody looked at `renderer.nTri`, which sat on the same integer for 1202
+consecutive frames while nothing moved. Constant count with a changing picture
+rules out everything that *drops* geometry and points at the one thing that
+decides not to *build* it. See the 2026-07-27 JOURNAL entry.
+
+**Clearing the line of sight is a statement about ANGLE, not about world
+distance.** The occlusion cull compared each organ's world-space offset from the
+sight line against the subject's world-space clearance at any depth, so a leaf
+beside the lens was given the same allowance as one touching the subject. Scale
+the radius by `t / distanceToSubject` — a cone, not a cylinder.
+
+**Anything that hides geometry must open as the camera ARRIVES, not on the cut.**
+This is written down twice now because it was fixed once for the leaf close-up and
+then not applied to the director's own shots, which had it identically. A cut that
+engages a clearance at full width from the wide shot removes a third of the canopy
+in one frame, before anything has moved. Ramp on apparent subject size.
+
+**`takeOver()` must drop everything the director owns, not just some of it.** It
+cleared `subject` and left `focus`, and because the auto-framer is already locked
+out while the viewer drives, the only surviving effect of that stale focus was to
+keep the occlusion cull running against a subject nobody was looking at — 80% of
+the canopy blinking as the viewer orbited, forever, since `giveBack()` only fires
+on idle. **When a handover clears state, enumerate the state.**
+
 **A reveal driven purely by distance does not survive many instances of the
 thing.** The growing-tip close-up has no mode to find: come close enough and the
 mechanism fades up. That works because there is one meristem and the camera is

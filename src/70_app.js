@@ -300,6 +300,9 @@ export class App {
     this.showMeristem = true;
     this.detail = 0;
     this.focus = null;
+    // who asked for the current focus — the film, or the person watching it.
+    // `takeOver()` drops the film's, keeps the viewer's.
+    this.focusByDirector = false;
     this.userDriving = false;
     this.subject = null;
     this.shot = null; this.shotT = 0;
@@ -608,6 +611,7 @@ export class App {
     const sh = this.shot;
     if (sh.kind === 'apex' && (!sh.ax.alive || !sh.ax.meristem)) { this.shot = null; return; }
     this.focus = sh.kind === 'apex' ? 'apex' : null;
+    this.focusByDirector = true;
     this.subject = (sh.kind === 'fruit' || sh.kind === 'flower' || sh.kind === 'organ') ? sh : null;
   }
 
@@ -699,6 +703,7 @@ export class App {
   // you are taken there; touch the controls and it lets go for good.
   enterFocus(f) {
     this.focus = f;
+    this.focusByDirector = false;      // the viewer asked for this one
     this.focusFly = f ? 2600 : 0;
   }
 
@@ -708,11 +713,20 @@ export class App {
     if (this.userDriving) return;
     this.userDriving = true;
     this.subject = null;
+    // The director's focus goes with its subject. Only the subject was being
+    // cleared here, so an apex shot's `focus` survived the handover — and since
+    // the auto-framer is locked out while the viewer drives, the ONLY thing it
+    // still did was keep the occlusion cull running, clearing the canopy along
+    // a sight line to a growing tip nobody was looking at any more. Orbiting
+    // then swept that clearance through the plant: 80% of the blades gone at
+    // the peak, a blade changing visibility every few frames. A focus the
+    // VIEWER asked for stays — that is the close-up they pressed a button for.
+    if (this.focusByDirector) { this.focus = null; this.focusByDirector = false; }
     if (this.onHandover) this.onHandover();
   }
   giveBack() {
     this.userDriving = false;
-    this.focus = null; this.focusFly = 0;
+    this.focus = null; this.focusByDirector = false; this.focusFly = 0;
     this.shot = null; this.shotT = 0;
     this.cam.autoRot = true;
   }
@@ -945,19 +959,40 @@ export class App {
         cullKeepOrg = org;    // never clear away the leaf we came to look at
       }
     }
+    // Open the clearance as the camera arrives, not on the cut.
+    //
+    // The leaf close-up already did this, for a reason written out below it: it
+    // used to engage at full width while the camera was still out at the wide
+    // shot, and pressing the button made half the plant vanish in one frame.
+    // The director's own shots had exactly the same defect and nobody had
+    // joined it up — a cut to a fruit or a growing tip cleared a third of the
+    // canopy instantly, from a viewpoint the clearance was not sized for, and
+    // then handed it back on the next cut. That is the blinking.
+    //
+    // Same ramp, same quantity: how much of the frame the subject spans.
+    // Measured over all eight species, every shot type is above 0.41 once it
+    // has settled, while the apex and fruit cuts start around 0.21 — so the
+    // clearance is fully open by the time the shot is, and shut at the cut.
+    if (cullFrom && this.focus !== 'leaf') {
+      const de = Math.hypot(cullFrom[0] - this.cam.eye[0],
+        cullFrom[1] - this.cam.eye[1], cullFrom[2] - this.cam.eye[2]);
+      const near = smoothstep(0.20, 0.38, 2 * cullRad / Math.max(0.01, de));
+      if (near < 0.01) cullFrom = null; else cullRad *= near;
+    }
     // Clear a cylinder along the line of sight rather than a sphere around the
     // eye. The old test compared each organ's BASE distance to the subject
     // distance, which both stripped lateral scenery that was never in the way and
     // — worse — kept long leaves whose base sits behind the subject while the
     // blade reaches right across the front of it. That is what was burying the
     // flower shot.
-    let sdx = 0, sdy = 0, sdz = 0;
+    let sdx = 0, sdy = 0, sdz = 0, cullDist = 1;
     if (cullFrom) {
       sdx = cullFrom[0] - this.cam.eye[0];
       sdy = cullFrom[1] - this.cam.eye[1];
       sdz = cullFrom[2] - this.cam.eye[2];
       const sl = Math.hypot(sdx, sdy, sdz) || 1;
       sdx /= sl; sdy /= sl; sdz /= sl;
+      cullDist = sl;
       cullR = sl - cullRad;      // stop clearing just short of the subject
     }
     const nOrg = P.organCount();
@@ -1006,7 +1041,17 @@ export class App {
             const px2 = ox - sdx * t, py2 = oy - sdy * t, pz2 = oz - sdz * t;
             // how far off the sight line it sits, allowing for its own reach
             const lat = Math.hypot(px2, py2, pz2) - (org.len || 0);
-            occluded = lat < cullRad * (org._occ ? 1.20 : 0.86);
+            // A CONE from the eye to the subject, not a cylinder. Being "in the
+            // way" is a statement about angle: a leaf a tenth of the way along
+            // the sight line only has to be a tenth as far off it to cover the
+            // same part of the frame. Tested as a cylinder, every leaf got the
+            // subject's full world-space clearance no matter how near the lens
+            // it sat, which cleared great swathes of canopy that were nowhere
+            // near the subject on screen — 28.8% of a Cathedral Fern's blades
+            // on average, half of them at once at the peak, blinking as the
+            // shot moved. The radius at the subject is unchanged, so the thing
+            // the clearance exists for still happens.
+            occluded = lat < cullRad * (t / cullDist) * (org._occ ? 1.20 : 0.86);
           }
         }
         org._occ = occluded;
