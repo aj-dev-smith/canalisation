@@ -57,6 +57,7 @@ node test/shoot.mjs                                # senescence: does the specim
 node test/senesce.mjs                              # senescence, drawn: does a dying blade change, and do the veins go last
 node test/fall.mjs                                 # a shed blade: is the fall a falling plate, and do real blades differ
 node test/wind.mjs '{"uRef":3}'                    # the wind field: profile, gusts, spectrum, divergence, GLSL round trip
+node test/stem.mjs                                 # the stem as a beam: ringdown vs the pre-flight, sway per species, convergence
 ```
 
 `test/fall.mjs` has a fourth section that is an archived experiment rather than a check:
@@ -107,11 +108,19 @@ evidence about what the gate imports.** It still cannot see the *scene*: whether
 `70_app.js` passes the right thing to `blade()` is a question only a browser can
 answer, and `tools/senesce_shot.mjs` is where it would show.
 
-One check cannot be done in Node at all: whether the GLSL the shader compiles is the
-same wind field the simulation sums. `tools/wind_check.mjs` evaluates the emitted
-shader on a real GPU and compares it to `windAt()` — the only thing in `tools/` that
-returns a number and an exit code instead of a picture. A wrong wind still looks like
-wind, so this is not a class of bug the eye can catch.
+Two checks cannot be done in Node at all.
+
+`tools/wind_check.mjs` evaluates the emitted shader on a real GPU and compares it to
+`windAt()` — the only thing in `tools/` that returns a number and an exit code instead of
+a picture. A wrong wind still looks like wind, so this is not a class of bug the eye can
+catch.
+
+`tools/jitter.mjs` asks **where the movement's energy sits in frequency**, sampling the
+drawn state at frame rate. Run it after anything that touches the air, the stem or the
+petiole. It exists because the wind field passed all twenty-four of its own assertions
+while every gust mode sat between 3.9 and 19.3 Hz — internally consistent, and nothing a
+person would call wind. `tools/clip.mjs` records a webm, which is the only artifact here
+that shows the piece *moving*.
 
 When you *do* need pixels, `tools/` drives a real browser with Playwright and
 [tools/README.md](tools/README.md) lists each capture script. Read that file first —
@@ -176,9 +185,12 @@ src/38_shoot.js     FALSIFIED EXPERIMENT, ships disabled. Whole-plant auxin tran
 src/39_fall.js      A BLADE IN AIR, attached or shed. Quasi-steady plate
                     aerodynamics; the petiole as a damped torsional spring
 src/40_plant.js     the organism: axes, elongation, branching, florigen, fruit set, senescence
+src/39a_stem.js     THE STEM BENDS. Axes as coupled damped cantilevers off EI on the
+                    radii Murray's law grew, loaded by the canopy. Lettered, not
+                    numbered, because it must load after the air and before the organism
 src/50_geom.js      simulation state -> triangles, ribbons, points; senescence colour
-src/60_render.js    WebGL2: forward pass, bloom, depth of field, grade, and `SWAY` —
-                    a decorative vertex wobble the simulation cannot see. ROADMAP 7 deletes it
+src/60_render.js    WebGL2: forward pass, bloom, depth of field, grade. No sway — the
+                    geometry moves for real now
 src/70_app.js       species presets, camera director, scene assembly
 src/80_main.js      UI wiring
 ```
@@ -238,33 +250,42 @@ so the blades on one specimen do not fall alike: all eight species show more tha
 one regime among their own leaves. Blades also land now, which they could not
 before.
 
-**There is one air now, and it is half wired in.** `37_wind.js` is a real wind
-field — log-law boundary layer, Kolmogorov gust ladder, Taylor advection, exactly
+**There is one air, and the whole plant is in it.** `37_wind.js` is a real wind field
+— log-law boundary layer, Kolmogorov gust ladder, Taylor advection, exactly
 divergence-free — evaluated by the simulation and (in the emitted GLSL) by the shader
 from **one baked table of modes**, so it cannot be two functions that resemble each
-other. Every attached blade is now loaded through the same plate model the fall uses,
-and hands its attitude and rate to the fall at abscission. ROADMAP 7 steps 1, 2 and
-half of 4.
+other. Attached blades are loaded through the same plate model the fall uses and hand
+their attitude and rate to the fall at abscission. The axes are damped cantilevers off
+`EI` on the radii Murray's law grew (`39a_stem.js`), and **`SWAY` is deleted** — the
+geometry moves for real. ROADMAP 7 steps 1, 2, 3, 5 and half of 4.
 
-**`SWAY` is still there and still what moves the scene, because the attached blade
-rocks by a quarter of a degree.** That is not a solver bug: the petiole is drawn at
-half the *stem's* radius — 8 mm through — and torsional stiffness goes as r⁴, so the
-blade is a rigid card on a rubber rod. The next thing to do is therefore ROADMAP 5,
-the petiole's radius, which arrived at the same defect from the cosmetic side. Read
-the 2026-07-26 JOURNAL entries before touching either; they rank three ways out and
-say why softening `eModulus` is not one of them.
+The stem's first mode lands within 0.90-1.21 of the pre-flight's analytic value on
+seven of eight species, its eigenvalue and its ringdown agree to under 1%, and the
+answer moves 0.3% across 4 to 24 stations. **Do not touch that solver without running
+`node test/stem.mjs`** — three separate bugs in it were invisible except by making it
+check itself against a number computed beforehand.
+
+**And do not trust that the field is right just because its own harness is green.** The
+gust spectrum shipped with the *vertical* component's integral length scale applied to
+the *streamwise* one, which put every gust mode between 3.9 and 19.3 Hz. The piece looked
+like it was vibrating, and a person watching said so; twenty-four passing assertions had
+not. `tools/jitter.mjs` is the check that closes that gap and it is the one to run after
+touching the air.
+
+**What is still wrong is the petiole**, and it is now the blocking item: it is drawn at
+half the *stem's* radius, torsional stiffness goes as r⁴, so an attached blade rocks by
+a quarter of a degree. Read the 2026-07-26 JOURNAL entries before touching it; they rank
+three ways out and say why softening `eModulus` is not one of them.
 
 ### Where the work goes next
 
 [docs/ROADMAP.md](docs/ROADMAP.md) is the ranked list and has the reasoning; the
 short version, in order:
 
-1. **One air, continued** — the field and the attached blades have landed; what is
-   left is **the stem genuinely bending** (step 3), the second rotational degree of
-   freedom that would stop a falling blade snapping its long axis level (the other
-   half of step 4), and deleting `SWAY` (step 5). Days, not an afternoon.
-   **But do the petiole's radius first:** step 2 measured itself into needing it, and
-   nothing about attached-blade motion will be visible until it is fixed.
+1. **The petiole's radius, with droop as a force balance (ROADMAP 5 + 7b)** — the
+   blocking item. Two independent routes arrived at the same defect, the pre-flight in
+   ROADMAP 5 has the numbers for all eight species, and it deletes a stated constant
+   from SCIENCE.md's imposed list.
    ROADMAP 7 has the staged order and the pre-flight table: `EI ∝ r⁴` on the radii
    the plant already grows gives plant-like sway (0.5–4.6 Hz on seven of eight
    species) off **one** material constant, `E ≈ 60 MPa`. `droop` is deliberately held
@@ -285,13 +306,13 @@ short version, in order:
 number, spread and all, is the point. Two hypotheses have been tested and
 falsified; the third is ROADMAP 3.
 
-**The scene still has two models of the same air, and now three.** A shed blade and
-an attached blade are both properly loaded aerodynamic bodies off one field — that is
-new — but `SWAY` in the shader is still what visibly moves the scene, and the stem does
-not bend at all. That is deliberate rather than half-finished: ROADMAP 7's own order
-says two air models is the bug and adding a third temporarily is fine, and `SWAY` goes
-only once steps 3 and 4 hold. **If you are picking up work with no other instruction,
-pick up the petiole's radius (ROADMAP 5) and then step 3.**
+**The attached blade barely moves, and the petiole is why.** The stem bends for real
+and `SWAY` is gone, so the air is one model now — but the blade's own rock on its stalk
+is a quarter of a degree, because the petiole is drawn at half the stem's radius and
+torsional stiffness goes as r⁴. **If you are picking up work with no other instruction,
+pick up ROADMAP 5 + 7b.** What is also still open is the other half of step 4: a falling
+blade's long axis snaps level on the frame it detaches on, by a median 27°, and the
+obvious fix was built and falsified — see `FALL_DEFAULTS.tiltPlane`.
 
 **Senescence is built and drawn, but it is split down the middle.** *When* a
 specimen senesces is emergent — `Plant.spent()`, a physical condition with nothing

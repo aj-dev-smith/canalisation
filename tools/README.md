@@ -34,7 +34,34 @@ inside **single** quotes, so it never interpolated.
   into line only read if the camera is square to the blade — a leaf seen edge-on
   puts six hundred cells on one line and looks like an empty stalk, so check the
   `-mid` frame before believing a "nothing is drawn" report
-- `sway.mjs` — pixel-diffs two frames to prove the sway field animates
+- `clip.mjs OUTDIR SECONDS [species] [seed] [speed] [waitSeconds] [w] [h]` — **records a
+  webm.** The only artifact in the repo that shows the piece MOVING, which everything
+  else here explicitly cannot judge. Records square by default (1000×1000): the camera
+  fits the specimen's height into 66% of the frame, so a tall narrow plant on a 16:10
+  viewport is framed correctly and looks lost. Also drops a matching still. `waitSeconds`
+  runs at 4x and decides which act gets filmed — 3-5s for a full canopy, 20s+ for the
+  seed head. Same GL-backend choice as `flower_shot.mjs`; **never read a clip recorded on
+  the software path**, it runs at ~16fps and reads as the simulation stuttering.
+
+  To compare against an older build, add a git worktree at the earlier commit, symlink
+  `node_modules` into it, and run *this* copy of the tool with the worktree as cwd — the
+  page URL comes from `process.cwd()` and the playwright import resolves from the script.
+- `jitter.mjs [species] [seed] [waitSeconds]` — **where is the movement's energy?**
+  Samples the drawn state at frame rate — the tip of the main axis and individual blade
+  normals — and reports a dominant rate per signal, plus a verdict at about 4 Hz, which
+  is where "sway" becomes "jitter" and where a 60 Hz display starts lying to you.
+
+  It exists because "it wobbles too fast" and "some leaves jitter" are the two reports a
+  still cannot answer and a person watching cannot quantify. It caught the wind field's
+  integral length scale being the vertical component's rather than the streamwise one:
+  blades were moving at 3.8-16.5 Hz. Run it after anything that touches the air, the
+  stem or the petiole. Note it freezes the camera but NOT growth — growth and the wind
+  share a clock, so `speedMul: 0` stops both — which means during the growing phase some
+  of what it measures is organs developing. Point it past the end of growth
+  (`waitSeconds` 26+) to isolate the air.
+- `sway.mjs` — **obsolete.** It pixel-diffed two frames to prove the old shader sway field
+  animated, and that field was deleted in ROADMAP 7 step 5. Kept only until something
+  wants its diffing trick; `clip.mjs` is what to reach for now
 - `wind_check.mjs ['{"uRef":3}'] [nSamples]` — **not a capture tool.** The one thing
   in here that returns a number and an exit code instead of a picture, and the only
   check in the repo that has to leave Node. Compiles the GLSL `windGLSL()` emits,
@@ -50,9 +77,12 @@ inside **single** quotes, so it never interpolated.
   itself and captures `-onset`, `-mid`, `-spent`. Picks its GL backend the way
   `flower_shot.mjs` does. The three frames now differ: on Cathedral Fern seed 21
   the count holds at 63594 tri while the plant is only draining — colour costs no
-  geometry — and falls to 16-22k at `dead`, which is the canopy having left. The
+  geometry — and falls to **16-28k** at `dead`, which is the canopy having left. The
   spread is the poll catching `dead()` a few frames either side, with blades still
-  mid-fall. **A count that does not fall by `spent` means shed blades are going
+  mid-fall. The top of that range moved up on 2026-07-26 when blades started letting go
+  at the attitude they were actually held at: steady glides nearly disappeared in favour
+  of flutter and tumble, which descend more slowly, so more blades are still in the air
+  when the poll fires. Measured 27738 on this seed. **A count that does not fall by `spent` means shed blades are going
   nowhere**, whatever the frames look like. What it cannot judge is whether
   the drain reads, because the counts are blind to colour; `test/senesce.mjs` has
   those numbers. It reads the lit stage chip out of the DOM rather than off the

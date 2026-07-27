@@ -10,10 +10,11 @@ import { Meristem } from './20_meristem.js';
 import { Leaf } from './30_leaf.js';
 import { Fruit } from './35_fruit.js';
 import { Vasculature } from './38_shoot.js';
-import { windField, windAt } from './37_wind.js';
+import { windField, windAt, WORLD } from './37_wind.js';
+import { Bend, stemScales, STEM_DEFAULTS } from './39a_stem.js';
 import {
-  plateOf, fallState, fallStep, fallAxis, drawnBladeLen,
-  petioleOf, flapOf, flapState, flapStep,
+  plateOf, fallState, fallStep, fallAxis, drawnBladeLen, bladeSection,
+  petioleOf, flapOf, flapState, flapStep, fallScales, FALL_DEFAULTS,
 } from './39_fall.js';
 import {
   v3, v3set, v3copy, v3add, v3sub, v3scale, v3addScaled, v3dot, v3cross,
@@ -52,6 +53,16 @@ class Axis {
     v3norm(this.ref, v3cross(this.ref, Math.abs(this.dir[1]) > 0.9 ? v3(1, 0, 0) : v3(0, 1, 0), this.dir));
     this.organs = [];
     this.nodes = [];
+    this.kids = [];        // axes branching off this one, so they ride it when it bends
+    this.parent = null;
+    // THE REST SHAPE AND THE BENT ONE. `pts` is what everything draws and measures
+    // off; `rest` is the shape growth actually produced. Each step the pose is
+    // restored, grown, saved, and then bent — so growth never compounds on top of
+    // last frame's wind, and the deflection is always about the shape the plant grew
+    // into. See the gravity note at the top of `39a_stem.js` for why that shape is
+    // the right thing to deflect about.
+    this.rest = null;
+    this.bend = new Bend(plant.sp && plant.sp.stemOpts);
     this.alive = true;
     this.length = 0;
     this.twist = 0;
@@ -209,7 +220,7 @@ class Axis {
         // competent plant → this bud makes a flower rather than a branch
         const flowering = this.plant.florigen > sp.florigenThresh;
         if (flowering && this.plant.flowerCount() >= sp.maxFlowers) break;
-        const ax = this.plant.addAxis(org.frame.o, dir, this.gen + 1, org.vStem);
+        const ax = this.plant.addAxis(org.frame.o, dir, this.gen + 1, org.vStem, this);
         if (flowering) ax.goFloral(sp, true);
         break;
       }
@@ -394,6 +405,55 @@ class Axis {
       const t = (L - oldArc[lo]) / Math.max(1e-6, oldArc[hi] - oldArc[lo]);
       org.birthLen = newArc[lo] + t * (newArc[hi] - newArc[lo]);
     }
+  }
+
+  // Put the axis back in the shape growth left it in, undoing last step's deflection.
+  // Two array copies per axis per step, and it is what keeps the wind from compounding
+  // into the grown form.
+  restorePose() {
+    const r = this.rest;
+    if (!r) return;
+    const n = Math.min(r.length, this.pts.length);
+    for (let i = 0; i < n; i++) v3copy(this.pts[i], r[i]);
+  }
+
+  // The point arrays of every axis below this one, so a bend can carry them.
+  subtreePoints(out) {
+    const acc = out || [];
+    for (const k of this.kids) { acc.push(k.pts); k.subtreePoints(acc); }
+    return acc;
+  }
+
+  savePose() {
+    const r = this.rest || (this.rest = []);
+    while (r.length < this.pts.length) r.push(v3());
+    r.length = this.pts.length;
+    for (let i = 0; i < this.pts.length; i++) v3copy(r[i], this.pts[i]);
+  }
+
+  // Everything the bend solver needs to know about an organ: where it sits along the
+  // axis, how much it weighs, and how much of it the wind can push on. Recorded here
+  // because this is where the arc positions are already known.
+  tagOrgansForBend(S) {
+    for (const org of this.organs) this._tagOrgan(org, S);
+  }
+
+  _tagOrgan(org, S) {
+    if (org.shed) { org.bendArea = 0; org.bendMass = 0; return; }
+    const len = org.len || 0;
+    // The blade the renderer draws, at 0.80 of the organ (39_fall.js), and its area
+    // from the silhouette the margin grew rather than from a rectangle.
+    const bl = drawnBladeLen(len, org.sen || 0) * (org.dev || 0);
+    const sec = org.leaf && org.leaf.margin && org.leaf.margin.mature
+      ? bladeSection(org.leaf) : null;
+    const area = sec ? sec.area * bl * bl : bl * bl * 0.5;
+    org.bendArea = area;
+    // lamina mass plus the petiole's, which is small but is the only mass a bare
+    // stalk has once its blade has gone
+    const pet = petioleOf(org);
+    org.bendMass = S.sigma * area
+      + S.rho * Math.PI * pet.r0 * pet.r0 * pet.len * 0.6;
+    org.bendS = clamp(org.birthLen, 0, this.length);
   }
 
   // Murray's law: a stem is exactly as thick as the traffic it carries.
@@ -667,9 +727,13 @@ export class Plant {
   // `parentNode` is the stem node of the organ this shoot came out of, so a
   // branch joins the transport stream where it physically joins the plant.
   // Undefined means the leader, which taps the root directly.
-  addAxis(base, dir, gen, parentNode) {
+  addAxis(base, dir, gen, parentNode, parentAxis) {
     const a = new Axis(this, base, dir, gen, (this.seed * 31 + this.axes.length * 6151) >>> 0);
     a.vApex = this.vasc.startAxis(parentNode);
+    // A branch has to ride the axis it came off when that axis bends, or it swings
+    // free of the stem it is attached to — which at ten degrees of sway is very
+    // visible indeed.
+    if (parentAxis) { a.parent = parentAxis; parentAxis.kids.push(a); }
     this.axes.push(a);
     return a;
   }
@@ -728,11 +792,16 @@ export class Plant {
   step(dt) {
     this.time += dt;
     this.leaves.step();
+    // Undo last step's deflection before growing, so the wind never compounds into
+    // the grown shape — see `Axis.restorePose`.
+    for (const a of this.axes) a.restorePose();
     for (const a of this.axes) {
       a.step(dt, this.sp);
       // the fruit runs faster than the shoot; there is a lot to resolve
       if (a.fruit) for (let k = 0; k < 3; k++) a.fruit.step(dt);
     }
+    for (const a of this.axes) a.savePose();
+    this.stepBend(dt);
     // the stream is stepped once the sources have moved, so it always sees the
     // plant as it is this frame. Off by default — see 38_shoot.js.
     if (this.vasc.o.enabled) this.vasc.step(this, dt);
@@ -789,6 +858,62 @@ export class Plant {
         o.flap = o.flapSt.phi;
       }
     }
+  }
+
+  // EVERY AXIS BENDS — ROADMAP 7 step 3, and the step that makes the air visible.
+  //
+  // The load is the canopy's, not the stem's: ninety-odd blades at their own attitudes
+  // against a stem whose projected area is a seventh of theirs. The stiffness is
+  // `EI/ds` on radii Murray's law grew. Neither end of that was chosen.
+  //
+  // Solved about the REST shape — the pose growth produced — for the reason set out at
+  // the top of `39a_stem.js`: a cantilever's self-weight sag and its first frequency are
+  // the same stiffness-to-mass group, so a stem that sways like a plant must also hang
+  // 27 cm below where it grew. Real stems escape that by being continuously remodelled
+  // toward their target, so the grown shape IS the static equilibrium and this solves
+  // the deviations about it. Nothing here changes a silhouette.
+  //
+  // Parents are stepped and applied before their children, and each axis carries its
+  // whole subtree, because a branch that did not ride its parent would swing free of
+  // the stem it is attached to.
+  stepBend(dt) {
+    const w = this.wind;
+    if (!w) return;
+    // A DEAD CALM STILL HAS TO RELAX. Returning early on `uRef: 0` froze the plant in
+    // whatever pose the last gust left it in, which is worse than not modelling wind at
+    // all — so a calm scene keeps stepping until the deflection has actually decayed,
+    // and only then costs nothing.
+    if (w.o.uRef <= 0) {
+      let moving = false;
+      for (const a of this.axes) {
+        const b = a.bend;
+        for (let j = 0; j < b.n; j++) {
+          if (v3len(b.st[j].th) > 1e-6 || v3len(b.st[j].om) > 1e-6) { moving = true; break; }
+        }
+        if (moving) break;
+      }
+      if (!moving) return;
+    }
+    const o = { ...STEM_DEFAULTS, ...(this.sp.stemOpts || {}) };
+    const S = this._stemS || (this._stemS = {});
+    const sc = stemScales(o, WORLD);
+    S.E = sc.E; S.rho = sc.rho;
+    S.sigma = fallScales(FALL_DEFAULTS).sigmaFresh;
+    for (const a of this.axes) {
+      if (!a.rest) continue;
+      a.tagOrgansForBend(S);
+      a.bend.sync(a.rest, a.radii, a.rest.length, a.organs, S);
+      a.bend.step(dt, w, this.time, WORLD);
+    }
+    // `axes` is in creation order and a branch is always created after the axis it
+    // came off, so this is already parents-first.
+    for (const a of this.axes) {
+      if (!a.rest || !a.bend.live) continue;
+      a.bend.apply(a.pts, a.pts.length, a.bend._arc, a.subtreePoints());
+    }
+    // ...and rebuild the frames off the shape that will actually be drawn, so organs,
+    // blades and shed-blade snapshots all ride the bent stem.
+    for (const a of this.axes) a.updateRadii(this.sp);
   }
 
   // A blade lets go: hand it to the aerodynamics in 39_fall.js.

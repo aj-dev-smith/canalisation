@@ -1276,3 +1276,153 @@ flutter and tumble take them up. That is the expected direction and it is right:
 released exactly broadside can settle into a straight glide, and one released a few
 degrees off starts rocking immediately. Every species still shows more than one regime,
 which is #8's headline and the thing that had to survive.
+
+## One air, steps 3 and 5: the stem bends, and the fake sway is deleted (2026-07-26)
+
+The last two steps of ROADMAP 7, and the ones that make the branch visible. The axes are
+damped cantilevers loaded by the wind field and their own canopy, and `SWAY` — three
+sines of position and wall-clock time in the vertex shader — is gone. That was the last
+authored motion in the piece.
+
+### The pre-flight paid for itself
+
+The value of ROADMAP 7's step 0 was never the table; it was that the table existed
+*before the solver did*, so there was a number to be wrong against. Three separate bugs
+were caught by that comparison and **not one of them would have been visible on screen** —
+each produced a plant that swayed pleasantly at a frequency that happened to be wrong.
+
+| species | analytic | solver mode 1 | ringdown | ratio |
+|---|---|---|---|---|
+| Cathedral Fern | 1.17 | 1.26 | 1.25 | 1.07 |
+| Spiral Ossuary | 0.48 | 0.58 | 0.57 | 1.21 |
+| Abyssal Frond | 0.84 | 0.75 | 0.75 | 0.90 |
+| Sun Coral | 1.49 | 1.57 | 1.56 | 1.05 |
+| Hoarfrost Thicket | 3.06 | 3.51 | 3.48 | 1.15 |
+| Ember Creeper | 0.53 | 0.62 | 0.62 | 1.16 |
+| Sulphur Rosette | 15.06 | 9.35 | 9.15 | 0.62 |
+| Nightglass Parasol | 4.57 | 4.53 | 4.47 | 0.99 |
+
+Seven of eight within 0.90-1.21 of the paper answer, off one material constant, with the
+eigenvalue and the stopwatch agreeing to under 1% and the discretisation converged to
+0.3% across 4 to 24 stations.
+
+### The three bugs, because the shape of them generalises
+
+**A diagonal mass matrix is not a beam.** Each station an independent oscillator, `EI/ds`
+against the inertia above it. `ds` goes as `1/M`, so every spring stiffens as the mesh
+refines while its inertia does not: 1.57 Hz at four stations, 2.76 at sixteen, still
+climbing. The coordinates genuinely share inertia — rotating station j carries the mass
+above station k as well — so the mass matrix has off-diagonal terms, and with them
+compliances add in series the way a cantilever's do.
+
+**Then it would not integrate.** The coupled mass matrix is ill-conditioned by
+construction (neighbouring stations see nearly the same mass at nearly the same
+distance), so `M⁻¹K` spans a huge range and an explicit step rang at exactly Nyquist with
+zero damping. Backward Euler and one Cholesky per axis per step.
+
+**And then it was 20% fast.** The rotations should stay perpendicular to the axis they
+bend, so the state was projected onto that plane every substep — which on a curving stem
+deletes a fixed fraction of the deflection each time. A constraint enforced by wiping
+part of the state is a damper with no physics in it. The torque already drops its axial
+component, which is where the exclusion belongs.
+
+Two harness bugs sat on top of those, and they are the same lesson from the other side:
+counting zero crossings into the decayed tail measured float noise, and a uniform kick
+excited every mode the mesh carried so the count read a mixture. **When the eigenvalue
+and the stopwatch disagree, suspect both.**
+
+### Gravity had to stay in the rest shape, and the arithmetic is pretty
+
+The obvious move is to load the stem with its own weight as well as the wind. It does not
+survive contact with the numbers. A cantilever's static sag and its first frequency are
+the same stiffness-to-mass group, and eliminating `EI` between them leaves
+
+    delta = 1.545 g / omega_1^2
+
+with nothing free in it at all. At the measured 1.26 Hz, a Cathedral Fern's tip hangs
+**27 cm** below where it grew, on a plant 1.08 m tall. Wanting the sag under 5% of the
+height forces the first mode above 2.8 Hz, which is not a plant-like sway. **There is no
+stiffness that gives both.**
+
+Real plants are not exempt from that arithmetic; they escape it by not being static
+structures. A stem is continuously remodelled toward its target orientation, so the shape
+it has grown into *is* its static equilibrium and the sag is already spent. `40_plant.js`
+grows that shape and `39a_stem.js` solves the deviations about it — which also means the
+whole branch changes no silhouette at all.
+
+That same rigid link is the real content of ROADMAP 7b, and it is the third independent
+argument today that 7b is the keystone: a petiole bending under its blade's weight is the
+same trade between hanging and swaying.
+
+### What it looks like, in numbers
+
+Force-3 tip sway spans **fiftyfold** across the catalogue with no per-species value
+anywhere: Spiral Ossuary 2.12 world units, Ember Creeper 1.41, Abyssal Frond 1.26,
+Cathedral Fern 0.43, Sun Coral 0.20, and Hoarfrost, Nightglass and Sulphur Rosette
+essentially nothing. `EI` goes as r⁴ and the load goes as canopy area, so a tall shoot
+carrying a lot of leaf moves and a cushion does not. The pre-flight had already written
+down "if a fix makes Sulphur Rosette's stem sway, that fix is wrong"; it does not.
+
+And the number that made the whole exercise feel worthwhile: **the hand-tuned `SWAY`
+peaked at about 0.34 world units at the top of a Cathedral Fern, and the physics, asked
+independently, says 0.43.** Whoever tuned that sine had a very good eye. What changes is
+not the amplitude — it is that the motion now has the plant's own frequency, gusts that
+arrive as gusts, a stem and its leaves that move as one thing, and a response that
+differs by species because the species differ.
+
+## The wind was a vibration, and it took a person to notice (2026-07-26)
+
+The stem landed, the numbers all agreed with each other, sixty-five checks passed, and
+the first person to watch it said: *it wobbles way too fast, and some of the leaves do a
+super fast jitter that feels like a bug.*
+
+Two complaints, one wrong number, and it was mine.
+
+`lambdaM` — the integral length scale of the gust spectrum — shipped at 1.0 m, with the
+comment "in the surface layer it is of order the height above the ground". That rule is
+real, and it is about the **vertical** component: the eddies carrying `w` are limited by
+their distance from the wall. The **streamwise** component is not. Its integral scale is
+set by the depth of the boundary layer, and the standard wind-engineering figures are
+tens to hundreds of metres near the ground — roughly 30-60 m at a height of 1 m.
+
+I had applied one velocity component's length scale to a different one. The result was a
+field in which **every gust mode was between 3.9 and 19.3 Hz.** That is not wind. It is
+vibration, and it was driving both the stem and the attached blades directly.
+
+### Measured, because "feels like a bug" deserves a number
+
+`tools/jitter.mjs` samples the drawn state at frame rate and reports where the movement's
+energy sits. Cathedral Fern, seed 21, same moment in the arc:
+
+| | before | after |
+|---|---|---|
+| stem tip | 0.00 Hz | 0.41-0.46 Hz |
+| individual blades | **3.8-16.5 Hz** | 0.29-1.10 Hz |
+
+The stem's 0.00 Hz on the "before" build is not a bug in the measurement — it is the old
+`SWAY` being shader-only, so the geometry genuinely never moved. The blades did, at up to
+16.5 Hz, which is past what a 60 Hz display can even show honestly.
+
+At 32 m the ladder runs 32 m down to 0.5 m, the frequencies run 0.13 to 2.9 Hz, and about
+63% of the gust variance sits in the two slowest octaves because Kolmogorov gives the big
+eddies the big amplitudes. Force-3 sway went **up** slightly as a side effect — Cathedral
+Fern 0.30 to 0.43 world units — because a 32 m eddy pushes the whole specimen coherently
+where a 1 m one fights itself along the stem.
+
+### What to take from it
+
+**Every number in the field was checked against every other number in the field, and the
+field was still wrong.** Divergence-free to 1e-6, gust rms matching `2.5 u*` to 0.1%,
+Kolmogorov ratios exact to six figures, JS and GLSL agreeing to 1e-5 on a real GPU. All
+of that was true of a wind nobody would recognise as wind. Internal consistency is not
+external validity, and no amount of the first buys any of the second.
+
+The check that would have caught it does not exist in the repo and now does: **what
+frequencies is the thing actually moving at?** It is the one question the twenty-four
+assertions in `test/wind.mjs` never asked, because they were all about the field and none
+of them was about a plant standing in it.
+
+Second thing, smaller and more embarrassing: the harness *did* print the mode frequencies,
+in a table, every time it ran. 4.822, 3.946, 13.494, 19.263. I read that table repeatedly
+while chasing the stiffness of a petiole and never once asked whether 19 Hz was a
+plausible thing for weather to do.

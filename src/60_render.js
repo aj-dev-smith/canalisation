@@ -25,31 +25,33 @@ function prog(gl, vs, fs) {
 const HEAD = `#version 300 es
 precision highp float;`;
 
-// Every pass that draws world geometry displaces it by the same slow field, so
-// stems, blades, veins and cells stay welded together while the whole specimen
-// breathes. It also does the quiet work of hiding the fact that the geometry
-// itself is only rebuilt a few times a second.
-const SWAY = `
-uniform float uTime, uSway;
-vec3 sway(vec3 p){
-  float h = max(p.y, 0.0);
-  float amp = uSway * h * h * 0.0011;
-  float t = uTime * 0.00023;
-  float a = sin(t*1.00 + p.y*0.26 + p.x*0.13);
-  float b = sin(t*0.71 + p.z*0.23 - p.y*0.17);
-  float c = sin(t*1.63 + p.x*0.44 + p.z*0.37);
-  return p + vec3(a + c*0.22, c*0.10, b + c*0.18) * amp;
-}`;
+// `SWAY` WAS HERE, AND IT IS GONE (ROADMAP 7 step 5, 2026-07-26).
+//
+// It was three sines of position and wall-clock time, evaluated in the vertex shader,
+// displacing every pass by the same field so the specimen appeared to breathe. It was
+// the last authored motion in the piece: the simulation could not see it, it ran on
+// real milliseconds rather than plant time so it ignored the time slider, and a falling
+// blade got it added on top of its own integrated aerodynamics.
+//
+// The stem bends for real now (`39a_stem.js`), so the vertex shader does not have to
+// pretend. What replaced it is not a better wobble — it is the plant's own first
+// bending mode, off `EI` on radii Murray's law grew, driven by a wind field the
+// simulation shares with everything else in the scene.
+//
+// One number worth keeping: the hand-tuned displacement peaked at about 0.34 world
+// units at the top of a Cathedral Fern. The physics, asked independently, says 0.43.
+// Whoever tuned that sine had a good eye — the amplitude was never the problem. What
+// was wrong with it is that it ran on wall-clock time at a frequency nobody's plant
+// has, and the simulation could not see it.
 
 const MESH_VS = `${HEAD}
-${SWAY}
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aNrm;
 layout(location=2) in vec3 aCol;
 layout(location=3) in float aEmis;
 uniform mat4 uVP;
 out vec3 vP; out vec3 vN; out vec3 vC; out float vE;
-void main(){ vec3 P=sway(aPos); vP=P; vN=aNrm; vC=aCol; vE=aEmis; gl_Position=uVP*vec4(P,1.0); }`;
+void main(){ vP=aPos; vN=aNrm; vC=aCol; vE=aEmis; gl_Position=uVP*vec4(aPos,1.0); }`;
 
 const MESH_FS = `${HEAD}
 in vec3 vP; in vec3 vN; in vec3 vC; in float vE;
@@ -77,13 +79,12 @@ void main(){
 }`;
 
 const LINE_VS = `${HEAD}
-${SWAY}
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aCol;
 layout(location=2) in float aEmis;
 uniform mat4 uVP;
 out vec3 vC; out float vE; out vec3 vP;
-void main(){ vec3 P=sway(aPos); vC=aCol; vE=aEmis; vP=P; gl_Position=uVP*vec4(P,1.0); }`;
+void main(){ vC=aCol; vE=aEmis; vP=aPos; gl_Position=uVP*vec4(aPos,1.0); }`;
 
 const LINE_FS = `${HEAD}
 in vec3 vC; in float vE; in vec3 vP;
@@ -97,7 +98,6 @@ void main(){
 }`;
 
 const PT_VS = `${HEAD}
-${SWAY}
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aCol;
 layout(location=2) in float aSize;
@@ -105,7 +105,7 @@ uniform mat4 uVP; uniform vec3 uEye; uniform float uPx;
 out vec3 vC;
 void main(){
   vC=aCol;
-  vec4 cp = uVP*vec4(sway(aPos),1.0);
+  vec4 cp = uVP*vec4(aPos,1.0);
   gl_Position = cp;
   gl_PointSize = clamp(aSize*uPx/max(0.001,cp.w), 1.0, 64.0);
 }`;
@@ -345,8 +345,6 @@ export class Renderer {
     gl.uniform3fv(this.pMesh.u.uFog, pal.fog);
     gl.uniform1f(this.pMesh.u.uFogD, pal.fogD);
     gl.uniform1f(this.pMesh.u.uFogNear, cam.fogNear || 0);
-    gl.uniform1f(this.pMesh.u.uTime, t);
-    gl.uniform1f(this.pMesh.u.uSway, pal.sway);
     gl.bindVertexArray(this.vaoTri);
     if (this.nTri) gl.drawArrays(gl.TRIANGLES, 0, this.nTri);
 
@@ -361,8 +359,6 @@ export class Renderer {
     gl.uniform3fv(this.pLine.u.uFog, pal.fog);
     gl.uniform1f(this.pLine.u.uFogD, pal.fogD);
     gl.uniform1f(this.pLine.u.uFogNear, cam.fogNear || 0);
-    gl.uniform1f(this.pLine.u.uTime, t);
-    gl.uniform1f(this.pLine.u.uSway, pal.sway);
     gl.bindVertexArray(this.vaoLine);
     if (this.nLine) gl.drawArrays(gl.TRIANGLES, 0, this.nLine);
 
@@ -370,8 +366,6 @@ export class Renderer {
     gl.uniformMatrix4fv(this.pPt.u.uVP, false, this.vp);
     gl.uniform3fv(this.pPt.u.uEye, cam.eye);
     gl.uniform1f(this.pPt.u.uPx, this.H * 0.9);
-    gl.uniform1f(this.pPt.u.uTime, t);
-    gl.uniform1f(this.pPt.u.uSway, pal.sway);
     gl.bindVertexArray(this.vaoPt);
     if (this.nPt) gl.drawArrays(gl.POINTS, 0, this.nPt);
 

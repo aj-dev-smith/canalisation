@@ -404,6 +404,42 @@ with the field. Scale the step off the smallest length in the model, and where y
 assert the **convergence order** rather than a magnitude: halving the step must quarter
 the residual, which an approximately-correct field cannot fake.
 
+## Beam solvers, and three ways to be confidently wrong (2026-07-26)
+
+All three of these produced a solver that ran, looked plausible on screen, and reported
+a number. All three were caught by making the thing check itself against a value
+computed **before** it existed — which is the entire argument for pre-flighting.
+
+**A diagonal mass matrix is not a beam.** Stations as independent damped oscillators,
+each `EI/ds` against the inertia above it, is the obvious discretisation and it does not
+converge: `ds` goes as `1/M`, so every spring stiffens as the mesh refines while its
+inertia does not, and the measured frequency climbed as the square root of the station
+count — 1.57 Hz at four stations, 2.76 at sixteen, still rising. The coordinates share
+inertia (rotating station j carries the mass above station k too), so the mass matrix has
+off-diagonal terms; with them, compliances add in series the way a real cantilever's do.
+**Sweep your resolution parameter before you believe any number that comes out.**
+
+**The coupled mass matrix is ill-conditioned on purpose.** Neighbouring stations see
+nearly the same mass at nearly the same distance, so its rows are nearly parallel,
+`M⁻¹K` has an enormous spread of eigenvalues, and an explicit step at any affordable
+size rings at the sample rate — the first version reported exactly Nyquist and zero
+damping, which is a very recognisable fingerprint once you have seen it. Backward Euler
+plus one Cholesky per axis per step: unconditionally stable, kills the modes the mesh
+invented, and barely touches the one that matters.
+
+**A constraint enforced by deleting part of the state is a damper.** The rotations are
+meant to stay perpendicular to the axis they bend, so the state was projected onto that
+plane after every substep. On a stem that curves, the tangent has a component along the
+swing, so a fixed fraction of the deflection was deleted every substep — worth **20% of
+the frequency**, with the solver ringing at 1.52 Hz while its own eigenvalue said 1.26.
+Exclude the unwanted degree of freedom where it enters (here: drop the axial component
+of the *torque*), never by repeatedly wiping the state.
+
+**And measure a ringdown where the signal is.** Two harness bugs on top of the solver
+bugs: counting zero crossings into the decayed tail measured float noise, and kicking
+with a uniform shape excited every mode the mesh carried so the count read a mixture.
+Kick with the mode you want, and stop counting once the amplitude is into the noise.
+
 ## Performance
 
 Leaf and margin simulations dominate. Grow a small **library** and share it —

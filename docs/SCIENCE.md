@@ -145,33 +145,36 @@ Keep this list short. Every entry is a debt.
    left behind, below.
 
 Not simulated at all: pollination (parthenocarpy is real — auxin alone sets fruit),
-turgor and wall mechanics, light, nutrients, and — newly conspicuous — **air.**
+turgor and wall mechanics, light, and nutrients.
 
-Air is conspicuous because half of it now exists. A blade that has let go is a
-properly loaded aerodynamic body; a blade still attached is a rigid card in dead
-calm, and the stem it hangs from moves to a decorative vertex displacement in the
-shader that the simulation cannot see (`SWAY` in `60_render.js`). So the piece has
-two unrelated models of the same air, and the moment of abscission is a
-discontinuity between them: nothing establishes that the scene has air in it until
-a leaf needs some. The first person to watch it said so unprompted, and they were
-describing this. It is the top of the ROADMAP now.
+**Air used to be on that list and is not any more.** It went from being the most conspicuous
+omission — a blade that had let go was a properly loaded aerodynamic body while
+everything still attached was a rigid card in dead calm, and the first person to watch
+it said so unprompted — to being one field that the falling blade, the attached blade
+and the bending stem all read.
 
-**There is a wind field now, and attached blades are loaded by it** (`37_wind.js`,
-ROADMAP 7 steps 1-2). The field is a log-law boundary layer with a Kolmogorov gust
-spectrum advected by Taylor's hypothesis, it is exactly divergence-free, and the
-simulation and the shader evaluate it from one baked table of modes rather than from
-two functions that resemble each other. One number in it is a choice — how hard it is
-blowing — and even that is cited rather than picked: the Beaufort scale defines force 3
-as "leaves and small twigs in constant motion", which is the condition this piece is
-about. Everything else follows, including the gust strength, which is the measured
-surface-layer `2.5 u*` rather than a second dial.
+**There is one air now, and the whole plant responds to it** (`37_wind.js`,
+`39a_stem.js`, ROADMAP 7). The field is a log-law boundary layer with a Kolmogorov gust
+spectrum advected by Taylor's hypothesis, exactly divergence-free, and the simulation
+and the shader evaluate it from one baked table of modes rather than from two functions
+that resemble each other. One number in it is a choice — how hard it is blowing — and
+even that is cited rather than picked: the Beaufort scale defines force 3 as "leaves and
+small twigs in constant motion", which is the condition this piece is about. Everything
+else follows, including the gust strength, which is the measured surface-layer `2.5 u*`
+rather than a second dial.
 
-Every blade still on the plant now rocks on its petiole under that field, through the
-same plate model the fall uses, on the same angle the fall integrates. **It is a
-fraction of a degree**, because the petiole is drawn at half the stem's radius and
-torsional stiffness goes as the fourth power of it — so the mechanism is right and the
-motion is not yet visible. `SWAY` is still what moves the scene, and it is still the
-bug. See the 2026-07-26 JOURNAL entries and ROADMAP 5.
+**The axes are damped cantilevers.** Bending stiffness is `EI` on radii Murray's law
+grew, the load is the canopy's own blades at their own attitudes, and the first mode
+comes out within 0.90-1.21 of a frequency worked out on paper before the solver existed
+— on seven of eight species, off one material constant. How far each species sways is
+emergent and spans fifty-fold, from Spiral Ossuary's 1.53 world units down to Sulphur
+Rosette's nothing, because a 31 cm plant on an 18 mm base is a cushion and cushions do
+not sway.
+
+**`SWAY` is gone**, and with it the last authored motion in the piece. Blades still on
+the plant also rock on their petioles through the same plate model the fall uses — that
+part is a fraction of a degree, because the petiole is drawn at half the stem's radius
+and torsional stiffness goes as the fourth power of it. See ROADMAP 5.
 
 Note which direction that debt runs. Wind and gravity are *environment*, not shape,
 so responding to them is not an imposition in the sense this list means — and the

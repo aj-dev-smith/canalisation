@@ -6,23 +6,16 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
-1. **[#7, one air, and a plant that responds to it](#7-one-air-and-a-plant-that-responds-to-it)** —
-   went to the top on 2026-07-26, and **steps 1, 2 and half of 4 have landed.** There
-   is one field now (`37_wind.js`), attached blades are loaded through the plate model
-   the fall uses, and a blade hands its attitude and rate to the fall instead of
-   guessing them. It is the route to deleting `droop`
-   ([#7b](#7b-droop-as-a-force-balance)) and shares machinery with #3 below.
-   **The next thing to do is #5, not step 3** — see below.
-2. **[#5, the petiole's radius](#5-smaller-things), together with
+1. **[#5, the petiole's radius](#5-smaller-things), together with
    [#7b](#7b-droop-as-a-force-balance)** — was an afternoon's cosmetic fix and is now the
-   blocking item for #7. Step 2 measured an attached blade rocking by a quarter of a
-   degree because the petiole is drawn at half the *stem's* radius and torsional
-   stiffness goes as r⁴; two independent routes arrived at the same defect, which
-   usually means it is the real one. **Pre-flighted (#5 below):** the pipe model puts
-   every species' flap at 6.3-9.5 Hz off one constant, but the twist then saturates
-   against its stop, and the degree of freedom that behaves is *bending* — which is 7b.
-   Do them together, or the radius change trades one stated constant for a leaf pinned
-   at a stop.
+   blocking item. An attached blade rocks by a quarter of a degree because the petiole is
+   drawn at half the *stem's* radius and torsional stiffness goes as r⁴; two independent
+   routes arrived at the same defect, which usually means it is the real one.
+   **Pre-flighted (#5 below):** the pipe model puts every species' flap at 6.3-9.5 Hz off
+   one constant, but the twist then saturates against its stop, and the degree of freedom
+   that behaves is *bending* — which is 7b. Do them together, or the radius change trades
+   one stated constant for a leaf pinned at a stop. It also **deletes an entry from
+   SCIENCE.md's imposed list**, which almost nothing else here does.
 3. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
    of the life cycle, and the only part of senescence still unbuilt. `dead()` is
    the trigger and the camera director already exists. It carries the ending as a
@@ -33,7 +26,8 @@ priority.** The list below is the priority.
    machinery, so the two are cheaper together than apart.
 5. **[#4, lamina tensioning its own margin](#4-lamina-pulls-on-its-own-margin)** — meaningful quality jump, meaningful work.
 
-#1, #2, #4b and #8 are **done**; their entries are kept for what they record.
+#1, #2, #4b, #7 (bar 7b) and #8 are **done**; their entries are kept for what they
+record.
 
 ## 1. Life cycle and senescence — DONE (2026-07-26)
 Both halves, simulated and drawn, in one day and two branches.
@@ -226,9 +220,50 @@ Do not start by writing a solver. In order, each step measurable before the next
    which the Beaufort scale defines as the force where "leaves do not move". It is now
    4.0 — force 3, "leaves and small twigs in constant motion" — which is a cited choice
    rather than a taste, and eleven times the pressure.
-3. **The stem.** Axes as damped cantilevers off `E` and `ax.radii`. Check measured
-   frequencies against the table above; if they disagree, the solver is wrong, and
-   that is a genuinely valuable check to have precomputed.
+3. **Done (2026-07-26), and the precomputed check earned its keep three times over.**
+   `39a_stem.js`: each axis a chain of damped rotational springs with a coupled mass
+   matrix, stiffness `EI/ds` on the radii Murray's law grew, loaded by the canopy's own
+   blades at their own attitudes. Measured against the table above:
+
+   | species | analytic | solver mode 1 | ringdown | ratio |
+   |---|---|---|---|---|
+   | Cathedral Fern | 1.17 | 1.26 | 1.25 | 1.07 |
+   | Spiral Ossuary | 0.48 | 0.58 | 0.57 | 1.21 |
+   | Abyssal Frond | 0.84 | 0.75 | 0.75 | 0.90 |
+   | Sun Coral | 1.49 | 1.57 | 1.56 | 1.05 |
+   | Hoarfrost Thicket | 3.06 | 3.51 | 3.48 | 1.15 |
+   | Ember Creeper | 0.53 | 0.62 | 0.62 | 1.16 |
+   | Sulphur Rosette | 15.06 | 9.35 | 9.15 | 0.62 |
+   | Nightglass Parasol | 4.57 | 4.53 | 4.47 | 0.99 |
+
+   Seven of eight within 0.90-1.21 of a number worked out on paper before the solver
+   existed; Sulphur Rosette is the stubby outlier this entry already called. Eigenvalue
+   and stopwatch agree to under 1%, and the first mode moves 0.3% across 4 to 24
+   stations, so `stations` is a resolution rather than a dial.
+
+   **Force-3 sway is emergent and spans fiftyfold**: Spiral Ossuary 2.12 world units,
+   Ember Creeper 1.41, Abyssal Frond 1.26, Cathedral Fern 0.43, Sun Coral 0.20, and
+   Hoarfrost, Nightglass and Sulphur Rosette essentially nothing. "If a fix makes Sulphur
+   Rosette's stem sway, that fix is wrong" — it does not.
+
+   **Gravity stays in the rest shape, and that is arithmetic rather than convenience.**
+   `delta = 1.545 g / omega^2` with nothing free in it, so at 1.26 Hz a Cathedral Fern's
+   tip would hang 27 cm below where it grew. There is no stiffness giving both a
+   plant-like period and a stem that stands up; real stems escape it by being remodelled
+   toward their target as they grow, so the grown shape IS the equilibrium and the solver
+   does deviations about it. **The same rigid link is why 7b is subtler than it looks.**
+
+   Three bugs, all invisible except by making the solver check itself, all in PITFALLS: a
+   diagonal mass matrix is not a beam; the coupled mass matrix is ill-conditioned by
+   construction so an explicit step rings at Nyquist; and a constraint enforced by
+   deleting part of the state every substep is a damper worth 20% of the frequency.
+
+   **And one number that was wrong in the field rather than the solver.** The first build
+   read as "wobbles way too fast, and some leaves jitter" — two complaints, one cause:
+   `lambdaM` was the *vertical* component's integral length scale (1 m) applied to the
+   *streamwise* one, which put every gust mode between 3.9 and 19.3 Hz. Measured with
+   `tools/jitter.mjs`, blades went from 3.8-16.5 Hz to 0.29-1.10 Hz and the stem tip
+   settled at 0.41-0.46 Hz. See TUNING.
 4. **Half done (2026-07-26), and the other half is a bug this found rather than
    caused.** `startFall` now measures the attitude off the drawn chord and carries the
    rock's rate over, reduced by the cosine of the blade's droop, instead of guessing
@@ -255,8 +290,14 @@ Do not start by writing a solver. In order, each step measurable before the next
    reproduce the validated 2D flutter/tumble ordering as its in-plane limit), or 7b: a
    derived droop hands this plane 5-13° instead of 27, and at tilts that size it never
    misbehaves. **Third independent argument for 7b.**
-5. **Delete `SWAY`.** Only once 1–4 hold. Two air models is the bug; adding a third
-   temporarily is fine, shipping two is not.
+5. **Done (2026-07-26).** `SWAY` is deleted. The geometry moves for real, so the vertex
+   shader has nothing to pretend about, and `pal.sway` is gone with it.
+
+   One number worth keeping: the hand-tuned displacement peaked at about 0.34 world units
+   at the top of a Cathedral Fern, and the physics, asked independently, says 0.43.
+   Whoever tuned that sine had a good eye — amplitude was never what was wrong with it.
+   What was wrong is that it ran on wall-clock time at a frequency no plant has, and the
+   simulation could not see it.
 
 ### Decide this up front rather than discovering it in the docs
 

@@ -10,9 +10,8 @@
 // vertex shader, which the simulation could not see. So abscission was a
 // discontinuity between two airs, and the first person to watch it said so
 // unprompted. ROADMAP 7 is the fix, and its first step is this file: the field,
-// before anything read it. Attached blades read it now (`flapStep` in `39_fall.js`,
-// driven from `Plant.stepFlaps`); the stem does not yet, and `SWAY` is still what
-// visibly moves the scene.
+// before anything read it. Attached blades read it (`flapStep` in `39_fall.js`, driven
+// from `Plant.stepFlaps`), the axes bend under it (`39a_stem.js`), and `SWAY` is gone.
 //
 // "DEFINED ONCE" IS THE WHOLE POINT, and it is the one claim here that cannot be
 // checked by looking at the screen. Two functions that resemble each other is
@@ -132,13 +131,30 @@ export const WIND_DEFAULTS = {
   // blowing you have said how gusty it is. This is the constant that keeps `uRef`
   // from being two dials pretending to be one.
   sigmaOverUstar: 2.5,
-  // The integral length scale — the size of the biggest eddy that matters. In the
-  // surface layer it is of order the height above the ground, so at plant height it
-  // is of order a metre, which is also of order the plant. That coincidence is why
-  // a specimen will be pushed almost coherently by the largest mode and differently
-  // along its length by the smallest.
-  lambdaM: 1.0,
-  nMode: 4,         // octaves of it: 1.0, 0.5, 0.25, 0.125 m
+  // THE INTEGRAL LENGTH SCALE — the size of the biggest eddy that matters, and the
+  // number this file got wrong first time in a way that could be seen rather than
+  // measured.
+  //
+  // It shipped at 1.0 m, justified as "of order the height above the ground". That rule
+  // is real but it is about the VERTICAL component: the eddies that carry w are limited
+  // by their distance from the wall. The STREAMWISE component is not — its integral
+  // scale is set by the depth of the boundary layer, and standard wind-engineering
+  // values are tens to hundreds of metres near the ground (ESDU-type figures put L_u at
+  // roughly 30-60 m at a height of 1 m, and ~100 m at 10 m). Using the vertical
+  // component's scale for the streamwise one made **every gust mode 3.9 to 19.3 Hz**,
+  // which is not wind, it is vibration — and that is exactly how it read: the stem
+  // buzzed and the leaves near the tip shimmered. Both complaints, one wrong number.
+  //
+  // At 32 m the ladder runs 32 m down to 0.5 m and the frequencies run 0.13 Hz to 8 Hz,
+  // with about 63% of the gust variance in the two slowest octaves — because Kolmogorov
+  // gives the big eddies the big amplitudes. So a specimen gets slow coherent pushes
+  // with fine texture on top, which is what standing in a breeze is like.
+  //
+  // Keep the ladder wide rather than moving it: the largest eddy is much bigger than the
+  // plant, so it loads the whole specimen together, and the smallest is a fraction of it,
+  // so the loading still varies along the stem. Both ends are doing work.
+  lambdaM: 32.0,
+  nMode: 7,         // octaves: 32, 16, 8, 4, 2, 1, 0.5 m
   // Kolmogorov. E(k) ~ k^(-5/3) in the inertial range, so the velocity amplitude of
   // an octave goes as sqrt(k E(k)) ~ k^(-1/3). The exponent is written as the
   // spectral slope it comes from rather than as -1/3, so that it reads as a citation
