@@ -39,8 +39,10 @@ precision highp float;`;
 // simulation shares with everything else in the scene.
 //
 // One number worth keeping: the hand-tuned displacement peaked at about 0.34 world
-// units at the top of a Cathedral Fern. The physics, asked independently, says 0.30.
-// Whoever tuned that sine had a good eye.
+// units at the top of a Cathedral Fern. The physics, asked independently, says 0.43.
+// Whoever tuned that sine had a good eye — the amplitude was never the problem. What
+// was wrong with it is that it ran on wall-clock time at a frequency nobody's plant
+// has, and the simulation could not see it.
 
 const MESH_VS = `${HEAD}
 layout(location=0) in vec3 aPos;

@@ -496,8 +496,8 @@ yRefM      1.0      m       the height uRef is quoted at. A plant's height
 z0M        0.02     m       roughness length. Standard table: mown grass 0.008-0.03
 kappa      0.40     -       von Karman
 sigmaOverUstar  2.5  -      neutral surface layer. Sets the gust strength from u*
-lambdaM    1.0      m       integral length scale ~ height above ground
-nMode      4        -       octaves of it: 1.0, 0.5, 0.25, 0.125 m
+lambdaM    32.0     m       integral length scale, STREAMWISE. See below — 1.0 was wrong
+nMode      7        -       octaves of it: 32 down to 0.5 m
 spectralSlope  -5/3  -      Kolmogorov. Amplitude exponent is (slope+1)/2 = -1/3
 turnover   1.0      -       each eddy decorrelates at its own rate, a_i k_i
 ```
@@ -512,20 +512,38 @@ octave amplitudes are Kolmogorov's and normalised so their variances sum to
 | `u*` | 0.407 m/s |
 | `sigma_u` | 1.017 m/s (turbulence intensity 25%) |
 | mean speed at 1 m / at 0.25 m | 4.00 / 2.65 m/s |
-| gust peak seen over 40k samples | 2.31 m/s = 2.27 sigma |
-| mode frequencies | 4.8, 3.9, 13.5, 19.3 Hz |
-| gust variance in 0.3-6 Hz | 72%, 2 of 4 modes |
+| gust peak seen over 40k samples | 2.59 m/s = 2.54 sigma |
+| mode frequencies | 0.15, 0.13, 0.43, 0.61, 0.83, 0.61, 2.86 Hz |
+| gust variance in 0.3-6 Hz | 37%, 5 of 7 modes |
 
-That last row is the one to check first if a later step produces a plant that does
-not move. The ROADMAP 7 pre-flight put the stems' first cantilever mode at 0.5-4.6 Hz
-on seven of eight species, and 72% of the gust variance is in that band, carried by the
-two largest eddies — so the air contains energy where the stems will resonate.
+### The integral length scale was wrong, and you could SEE it
 
-**The fraction in band falls as the wind rises, and that is real.** At 1.2 m/s all four
-modes are in band; at 4 it is 72%; at 6 it is 44%. Taylor scaling sweeps the small
-eddies past faster, so their forcing moves out of the range anything structural
-answers to. A gale therefore moves the plant less per unit of wind than it looks like
-it should — worth knowing before somebody reads a stiff-looking plant as a solver bug.
+`lambdaM` shipped at 1.0 m, justified as "of order the height above the ground". That
+rule is real and it is about the **vertical** component — the eddies carrying `w` are
+limited by their distance from the wall. The **streamwise** component is not: its
+integral scale is set by the depth of the boundary layer, and standard wind-engineering
+values are tens to hundreds of metres near the ground (roughly 30-60 m at a height of
+1 m). Using the vertical component's scale for the streamwise one put **every gust mode
+between 3.9 and 19.3 Hz**, which is not wind, it is vibration.
+
+It was reported by eye as two separate complaints — "the whole thing wobbles way too
+fast" and "some leaves do a fast jitter" — and both were this one number. Measured with
+`tools/jitter.mjs`, before and after:
+
+| | before | after |
+|---|---|---|
+| stem tip | 0.00 Hz (the old sway was shader-only, so the geometry never moved) | 0.41-0.46 Hz |
+| individual blades | **3.8-16.5 Hz** | 0.29-1.10 Hz |
+
+At 32 m the ladder runs down to 0.5 m, the frequencies run 0.13 to 2.9 Hz, and about 63%
+of the gust variance sits in the two slowest octaves, because Kolmogorov gives the big
+eddies the big amplitudes. Keep the ladder **wide** rather than sliding it: the largest
+eddy is much bigger than the plant so it pushes the whole specimen together, and the
+smallest is a fraction of it so the load still varies along the stem.
+
+Note the frequencies are not monotonic in the mode index (0.15, 0.13, 0.43, 0.61, 0.83,
+0.61, 2.86). That is Taylor's hypothesis behaving correctly: a mode whose wavevector is
+nearly perpendicular to the mean flow is swept past slowly whatever its size.
 
 ### The two invariants worth knowing about
 
@@ -701,13 +719,13 @@ Tip displacement from the grown shape, world units, at each Beaufort force:
 
 | species | force 2 | force 3 | force 4 | tip angle at f3 |
 |---|---|---|---|---|
-| Spiral Ossuary | 0.39 | **1.53** | 5.69 | 3.4° |
-| Ember Creeper | 0.31 | 1.18 | 4.39 | 2.6° |
-| Abyssal Frond | 0.22 | 0.82 | 3.16 | 2.3° |
-| Cathedral Fern | 0.08 | 0.30 | 1.17 | 1.0° |
-| Sun Coral | 0.04 | 0.14 | 0.53 | 0.5° |
-| Hoarfrost Thicket | 0.01 | 0.03 | 0.07 | 0.2° |
-| Nightglass Parasol | 0.00 | 0.02 | 0.05 | 0.1° |
+| Spiral Ossuary | 0.46 | **2.12** | 8.13 | 4.8° |
+| Ember Creeper | 0.31 | 1.41 | 5.56 | 3.2° |
+| Abyssal Frond | 0.34 | 1.26 | 4.40 | 3.6° |
+| Cathedral Fern | 0.12 | 0.43 | 1.91 | 1.4° |
+| Sun Coral | 0.05 | 0.20 | 0.88 | 0.8° |
+| Hoarfrost Thicket | 0.01 | 0.02 | 0.11 | 0.1° |
+| Nightglass Parasol | 0.00 | 0.02 | 0.08 | 0.1° |
 | Sulphur Rosette | 0.00 | 0.00 | 0.01 | 0.0° |
 
 Fiftyfold between the extremes, off no per-species number: `EI` goes as r⁴ and the load
