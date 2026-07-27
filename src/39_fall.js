@@ -1,3 +1,13 @@
+// A BLADE IN AIR — ATTACHED, AND LET GO
+//
+// Two things live here and they are the same plate model. The bottom of the file is
+// the newer one: a blade still on its petiole, rocking under the wind field in
+// `37_wind.js`. The top is a blade that has let go and is falling. They share
+// `plateOf`, they share the quasi-steady coefficients, and they share one state
+// variable — the rock of the chord about the midrib — which is what makes abscission
+// continuous rather than a cut (ROADMAP 7 step 4).
+//
+// ---------------------------------------------------------------------------
 // A SHED BLADE FALLING
 //
 // This replaces four tuned animation constants — terminal velocity, swing
@@ -62,18 +72,17 @@
 // miniature. See TUNING.md.
 
 import { TAU, clamp, v3, v3set, v3norm, v3cross } from './00_math.js';
+import { WORLD } from './37_wind.js';
 
 export const FALL_DEFAULTS = {
-  // --- the world's two scales, both already implied by the piece --------------
+  // --- the world's scales and the air, both shared ---------------------------
   //
-  // Neither of these is new and neither is aesthetic. They are the exchange rates
-  // between this simulation and the world, and they were already fixed by things
-  // that shipped long before this file: a Cathedral Fern stands about 16 world
-  // units tall and reads as a metre of plant, and `App.step` advances plant time
-  // at 125 units per real second (70_app.js:743). Writing them down here is what
-  // lets everything below be a measured quantity instead of a chosen one.
-  unitM: 0.0625,    // metres per world unit — a 16-unit plant is 1m
-  ptPerSec: 125,    // plant-time units per real second at 1x
+  // `unitM`, `ptPerSec`, `gEarth` and `rhoAir` used to be written out here. They
+  // live in `WORLD` in `37_wind.js` now, because the wind field needs the same
+  // density of air and the same two exchange rates, and a second definition of the
+  // density of air is exactly the class of bug that branch exists to remove. Every
+  // key name is unchanged, so a harness can still override any of them.
+  ...WORLD,
 
   // --- measured physical quantities -------------------------------------------
   //
@@ -90,8 +99,6 @@ export const FALL_DEFAULTS = {
   // sitting to one side of it. That straddle is a RESULT, not a calibration. An
   // earlier draft of this file picked `sigma` by hand to try to achieve it and put
   // every blade on the same side; the real numbers did better than the chosen ones.
-  gEarth: 9.81,     // m/s^2
-  rhoAir: 1.2,      // kg/m^3
   lmaFresh: 0.120,  // kg/m^2, turgid lamina
   lmaDry: 0.072,    // kg/m^2, once it has drained into its own veins. A dry blade
                     // is lighter, which moves it in the regime plane, so drying
@@ -275,20 +282,30 @@ export function plateOf(leaf, len, sen, opt) {
 // scene 16 units tall — physically fine, and completely useless. A leaf that lands
 // is also the only version of this that can be MEASURED, because drift-to-landing
 // is the number that decides whether a fall stays in frame.
-export function fallState(plate, drop = Infinity) {
+// `th0` and `om0` CLOSE THE SEAM (ROADMAP 7 step 4). Pass the attitude and the
+// angular velocity the blade already had while it was attached and the fall starts
+// from the motion that was already happening, which is the acceptance criterion for
+// that step: you should not be able to tell from the motion which frame a blade
+// detached on. `40_plant.js:startFall` measures both off the drawn frame and the
+// attached rock.
+//
+// The fallbacks are what shipped before there was an attached model to be continuous
+// with: released nearly broadside — a leaf on a stem is held roughly horizontal, and
+// that is the attitude with the most drag — tilted by the blade's own asymmetry, and
+// with an initial rate scaled off that same asymmetry by `wobble`. They are still
+// used by `test/fall.mjs`, which drops blades in isolation with no plant attached.
+export function fallState(plate, drop = Infinity, th0, om0) {
   const skew = plate.skew;
-  // Released nearly broadside — a leaf on a stem is held roughly horizontal, and
-  // that is the attitude with the most drag, so this is where a fall starts. The
-  // tilt it starts with is the blade's own asymmetry, not a random number.
+  const th = th0 === undefined ? skew * 0.5 : th0;
   return {
     plate, t: 0,
-    s: 0, y: 0, th: skew * 0.5,
+    s: 0, y: 0, th,
     vs: 0, vy: 0,
-    om: -skew * plate.o.wobble,
-    th0: skew * 0.5,
+    om: om0 === undefined ? -skew * plate.o.wobble : om0,
+    th0: th,
     turns: 0, sMin: 0, sMax: 0, vyPeak: 0,
     revs: 0, _sgn: 0, spin: 0,
-    thMin: skew * 0.5, thMax: skew * 0.5,
+    thMin: th, thMax: th,
     ground: -Math.abs(drop), landed: 0, tLand: 0,
   };
 }
@@ -479,4 +496,271 @@ export function fallFrame(st, frame, axis, out) {
     ? clamp((st.t - st.tLand) / o.settle, 0, 1)
     : clamp((st.t - (o.life - o.settle)) / o.settle, 0, 1);
   return out;
+}
+
+// ===========================================================================
+// AN ATTACHED BLADE — ROADMAP 7 step 2
+//
+// The problem this half solves: everything still on the plant was a rigid card in
+// dead calm. A shed blade was a properly loaded aerodynamic body and an attached one
+// was not, so abscission was a discontinuity between two models of the same air.
+//
+// THE DEGREE OF FREEDOM IS THE ROCK ABOUT THE MIDRIB, and it is chosen to be the
+// same one the fall integrates. `org.roll` already rotates a blade about its own
+// petiole (40_plant.js:472) — that is the axis a leaf rocks on, it is the axis the
+// falling plate pitches about, and using anything else would mean the attitude and
+// the angular velocity had to be translated at the moment of letting go, which is
+// exactly the seam ROADMAP 7 step 4 has to close. So an attached blade has one
+// dynamic angle, it is added to the roll the organ grew, and at abscission it is
+// handed straight to `fallState`.
+//
+// It is worth being explicit that this is ONE degree of freedom and a leaf has more.
+// The petiole also BENDS — the blade lifts and drops as a whole — and that motion is
+// bigger than the rock in most winds. It is left out deliberately: bending under the
+// blade's own weight is what `sp.droop` currently stands in for, and deriving droop
+// from a force balance is ROADMAP 7b, held back so that a change to every silhouette
+// on every species does not arrive tangled up with a change to how things move.
+//
+// WHAT DRIVES IT. Three torques, all from the same quasi-steady plate as the fall,
+// evaluated on the wind at the blade rather than on the blade's own velocity:
+//
+//   1. THE ADDED-MASS (MUNK) TORQUE. The dominant one, and the reason this is
+//      interesting rather than decorative. A body in a flow feels a couple that turns
+//      its largest-added-mass direction into the velocity — for a plate that is the
+//      normal, so a plate turns its FACE to the flow. That is why a dropped card
+//      falls flat, and attached it means the wind is always trying to rotate a blade
+//      broadside to itself while the petiole pulls it back. Sign derived here rather
+//      than copied: the equilibrium has to be face-on, and `test/wind.mjs` asserts a
+//      free blade in steady wind rotates to it.
+//   2. THE OFFSET-AREA TORQUE. The normal force acts through the blade's centre of
+//      area, which is not on the midrib, because the two halves of a margin pattern
+//      independently (30_leaf.js:91). So the same wind gives every blade a slightly
+//      different steady twist, in a direction its own silhouette decided. Same
+//      `skew` the fall uses to break the symmetry of a tumble.
+//   3. ROTATIONAL DAMPING. The chord sweeping through air, `cRot`, unchanged from
+//      the fall. Whether this is enough on its own is a measurement, not an
+//      assumption — see `zeta` below.
+//
+// WHAT HOLDS IT. The petiole, as a torsional spring: `k = GJ/L` over the real
+// tapered length, with `G = E/(2(1+nu))` and `J = pi r^4 / 2`. **Every input to that
+// is already in the plant.** The petiole's length and radius are what the renderer
+// draws (moved here, below, for the same reason `BLADE_DRAWN` is here), the radius
+// comes off the stem radius which came off Murray's law, and `E` is the single
+// material constant the ROADMAP 7 pre-flight settled on. So step 2 costs one number
+// the project had already argued for, and no new geometry.
+//
+// WHY THE PETIOLE'S TAPER IS INTEGRATED RATHER THAN AVERAGED. Torsional stiffness
+// goes as the fourth power of the radius, so a stalk that narrows from 0.5 to 0.3 of
+// the stem radius is not adequately described by either end: the compliance is an
+// integral of `dx/J(x)` and the thin end dominates it. Averaging the radius first
+// would make the petiole 2.4x too stiff, which at fourth power is not a rounding
+// error. It is two lines of algebra and it is exact for a linear taper.
+
+export const FLAP_DEFAULTS = {
+  // THE ONE MATERIAL CONSTANT, and it is not new. The ROADMAP 7 pre-flight measured
+  // the plant's own emergent radii against a cantilever frequency and found that
+  // `E ~ 60 MPa` puts seven of eight species in 0.49-4.6 Hz off nothing per-species.
+  // 60 MPa is turgid, parenchyma-rich, succulent-like tissue — NOT wood, which is
+  // 1-10 GPa. These stems are genuinely fleshy: slenderness runs 16-99 where a real
+  // herbaceous stem is nearer 200. Do not reach for a woody `E` and then wonder why
+  // everything buzzes. See TUNING.md, "the air", and ROADMAP 7's pre-flight table.
+  eModulus: 60e6,   // Pa
+  // Turgid parenchyma is mostly water and nearly incompressible, so 0.5 rather than
+  // a metal's 0.3. It only enters as `G = E/(2(1+nu))`, so this is the difference
+  // between dividing by 3 and dividing by 2.6.
+  poisson: 0.5,
+  // STRUCTURAL DAMPING, and it is a THIRD material constant, which TUNING.md says
+  // should make you re-read the pre-flight rather than reach for it. It was reached
+  // for anyway, and here is the argument, because the argument is a measurement.
+  //
+  // The blade is already damped aerodynamically by `cRot` — the chord sweeping
+  // through air — and the hope was that this would be enough. It is not, and the
+  // reason is structural rather than adjustable: aero rotational damping is
+  // QUADRATIC in the rate, so at the microradian amplitudes this geometry produces it
+  // contributes essentially nothing, and a blade set ringing by a gust rings
+  // undamped forever. Material damping is linear and is what actually stops a real
+  // petiole. Damping ratios measured on plant stems and petioles run about 0.05-0.2,
+  // so 0.1 is mid-range and is not doing aesthetic work — at 800 Hz it means the ring
+  // is gone in a quarter of a plant-time unit and the blade simply follows the wind,
+  // which is the honest behaviour of a stalk this stout.
+  zeta: 0.10,
+  sub: 12,          // integrator substeps per period of the FORCING (the response is
+                    // solved exactly, so nothing here has to resolve the spring)
+  subCap: 96,
+  // A stop, not a shape: no torsional spring on a real petiole is linear out to a
+  // quarter turn, and a blade that has rotated this far has left the regime the
+  // quasi-steady model describes anyway.
+  maxFlap: 1.2,     // rad
+};
+
+// THE PETIOLE THE RENDERER DRAWS IS THE PETIOLE THAT HOLDS THE BLADE.
+//
+// These three numbers were in `70_app.js` and are here now, for exactly the reason
+// `BLADE_DRAWN` is: the mechanics has to be about the stalk on the screen. If the
+// drawn petiole and the sprung one disagree, a blade rocks on a spring nobody can
+// see. One definition, read by both — `70_app.js` calls `petioleOf` now.
+//
+// The numbers themselves are still arbitrary, and this is the honest weak point of
+// step 2 rather than something it fixed: the radius comes off the STEM's radius at
+// the node, not off the blade the petiole carries, which is already ROADMAP 5's
+// complaint about flower close-ups. Stiffness goes as r^4, so that arbitrariness is
+// now load-bearing — see the JOURNAL entry for the measurement and what it implies.
+export const PETIOLE = { ofOrganLen: 0.34, ofRadius: 1.8, rBase: 0.5, rTip: 0.30 };
+
+export function petioleOf(org) {
+  return {
+    len: Math.max(1e-4, org.len * PETIOLE.ofOrganLen + org.radius * PETIOLE.ofRadius),
+    r0: Math.max(1e-5, org.radius * PETIOLE.rBase),
+    r1: Math.max(1e-5, org.radius * PETIOLE.rTip),
+  };
+}
+
+// Young's modulus in world units. Stress has the dimensions of density times
+// velocity squared, and both of those are already fixed: the medium is 1 by
+// definition (`rhoF`) which is 1.2 kg/m^3, and one world velocity unit is
+// `unitM*ptPerSec` = 7.8125 m/s. So there is no freedom in this conversion either.
+export function stiffScales(o) {
+  const vs = o.unitM * o.ptPerSec;
+  const E = o.eModulus / (o.rhoAir * vs * vs);
+  return { E, G: E / (2 * (1 + o.poisson)) };
+}
+
+// Torsional stiffness of the tapered petiole: k = G / integral(dx / J(x)), with
+// J = pi r^4 / 2 and r linear along the stalk. Exact.
+export function torsionK(pet, G) {
+  const { len, r0, r1 } = pet;
+  const jOf = (r) => Math.PI * r * r * r * r / 2;
+  const comp = Math.abs(r1 - r0) < 1e-9
+    ? len / jOf(r0)
+    : (2 / Math.PI) * (len / (3 * (r1 - r0))) * (1 / (r0 * r0 * r0) - 1 / (r1 * r1 * r1));
+  return G / Math.max(1e-12, comp);
+}
+
+// Everything an attached blade needs, worked out once. `len` is the DRAWN blade
+// length, as for `plateOf` — the physics is about the blade on the screen.
+export function flapOf(leaf, len, sen, pet, opt) {
+  const o = { ...FALL_DEFAULTS, ...FLAP_DEFAULTS, ...(opt || {}) };
+  const p = plateOf(leaf, len, sen, o);
+  const S = stiffScales(o);
+  const k = torsionK(pet, S.G);
+  // The plate model is two-dimensional — per unit of span — so both the inertia and
+  // the torques are multiplied by the span, which is the blade's own length. A bigger
+  // blade therefore responds more slowly, which is the right way round.
+  const J = Math.max(1e-12, (p.I + p.Ia) * len);
+  return {
+    o, p, k, J, span: len,
+    om0: Math.sqrt(k / J),
+    // The offset of the centre of area from the midrib, in world units. `skew` is in
+    // the margin's own units, so it scales with the blade's length like every other
+    // width in `bladeSection`.
+    arm: p.skew * len,
+    cStruct: 2 * o.zeta * Math.sqrt(k * J),
+  };
+}
+
+export function flapState(f, phi = 0, om = 0) {
+  return { f, phi, om, t: 0, phiMin: phi, phiMax: phi, spin: 0, hit: 0 };
+}
+
+// The aerodynamic torque, per unit span, SPLIT BY WHAT IT DEPENDS ON — a torque that
+// does not care how fast the blade is turning, and a coefficient on how fast it is.
+//
+// The split is not cosmetic. Everything proportional to the rate belongs in the
+// oscillator's damping, where the closed-form solution can integrate it exactly; held
+// constant across a substep instead, it pumps the spring. That is not a hypothetical:
+// the first version held the whole torque constant and a ringdown in DEAD AIR grew
+// from 12 to 27 degrees over eight cycles. There is no energy source in still air, so
+// the growth was the integrator, and it was hiding a real instability underneath — see
+// `cCirc` below, which genuinely can be negative.
+export function flapTerms(f, wz, wy, om) {
+  const o = f.o, p = f.p;
+  const sp = Math.hypot(wz, wy);
+  // The plate's velocity through the air is minus the wind's. Every aerodynamic term
+  // below is either quadratic in it or uses it twice, so this sign cannot be got
+  // wrong — but writing it down is what makes these terms literally the fall's.
+  const vPar = -wz, vPerp = -wy;
+  // translational circulation: the flat-plate sin(2a) law, no rotation in it
+  const gamT = sp > 1e-9 ? -0.5 * p.c * (p.cT * 2 * vPar * vPerp / sp) : 0;
+  const dPerp = 0.5 * o.rhoF * p.c * o.cPerp * sp * vPerp;
+  const tq0 = -(p.m22 - p.m11) * vPar * vPerp        // (1) added mass: turns it face-on
+    + f.arm * (o.rhoF * gamT * vPar - dPerp);        // (2) force on the offset centre
+  // ROTATIONAL CIRCULATION ON AN OFFSET CENTRE OF AREA IS NEGATIVE DAMPING half the
+  // time, and this is the interesting term in the attached case. A rocking plate sheds
+  // circulation proportional to its own rate; that circulation acts through a centre
+  // of area the margin put off the midrib; so the resulting torque is proportional to
+  // the rate with a sign set by which way the flow crosses the chord. When it is
+  // negative it feeds the rock — which is what leaf flutter IS, and what the classical
+  // torsional-galloping instability is. It is left with its own sign rather than
+  // absolute-valued into a damper.
+  const cCirc = -f.arm * o.rhoF * 0.5 * p.c * p.c * p.cR * vPar;
+  // (3) form drag on the sweeping chord — `cRot`, the fall's. Quadratic in the rate,
+  // so linearised at the current rate: exact here, always dissipative, and vanishing
+  // at small amplitude, which is why it cannot be the only damping (see `zeta`).
+  const cRotL = p.cRot * o.rhoF * p.c * p.c * p.c * p.c * Math.abs(om) / 64;
+  return { tq0, cAero: cCirc + cRotL, sp };
+}
+
+// The whole aerodynamic torque, per unit span. Nothing in the simulation calls this —
+// the integrator wants the split — but a harness checking the model against the fall's
+// wants the sum, and writing it as the sum is what documents that the split is one.
+export function flapTorque(f, wz, wy, om) {
+  const t = flapTerms(f, wz, wy, om);
+  return t.tq0 - t.cAero * om;
+}
+
+// One step of the attached blade. `wz` and `wy` are the wind velocity resolved on the
+// blade's own chord and normal — `40_plant.js` does that projection, because it is the
+// thing that holds the frame. `dt` in plant time.
+//
+// The sense of `phi` is the sense of `org.roll` and of the fall's `th`: all three
+// rotate the chord toward the blade's normal. That is not a coincidence to be checked
+// later, it is the whole reason the seam can close.
+//
+// THE LINEAR PART IS SOLVED EXACTLY, and it has to be. A petiole this stout is a
+// violently stiff spring — measured at 374-4000 Hz on the radii the plant grows,
+// which is 19-200 radians per plant-time unit — and an explicit integrator needs
+// hundreds of substeps per unit not to explode. The first version stepped
+// symplectically with a cap of 96 and the stiffest blade on the specimen blew up
+// through the cap and pinned itself against `maxFlap`, where it read as a plausible
+// 68-degree twist. So the damped harmonic oscillator is advanced by its closed-form
+// solution over the substep with the aerodynamic torque held constant, which is
+// unconditionally stable at any stiffness and needs one substep rather than four
+// hundred. What is left explicit is the quadratic aero damping inside `flapTorque`,
+// which is a small correction at these amplitudes.
+export function flapStep(st, wz, wy, dt) {
+  const f = st.f, o = f.o, p = f.p;
+  const sp = Math.hypot(wz, wy);
+  // Substeps now resolve the FORCING rather than the response — the response is
+  // exact — so the rate that matters is how fast the flow crosses the chord.
+  const rate = sp / Math.max(1e-6, p.c);
+  const sub = Math.min(o.subCap, Math.max(1, Math.ceil(dt * rate * o.sub / TAU)));
+  const h = dt / sub;
+  const wn = f.om0;
+  const crit = 2 * Math.sqrt(Math.max(1e-30, f.k * f.J));
+  for (let i = 0; i < sub; i++) {
+    const T = flapTerms(f, wz, wy, st.om);
+    // The damping ratio is recomputed each substep because the air contributes to it,
+    // and the air's contribution CAN BE NEGATIVE — a blade can be self-exciting. It is
+    // clamped either side of critical rather than branching on the overdamped case,
+    // which no plant tissue is anywhere near, and bounded below so that an unstable
+    // blade grows at a finite rate instead of overflowing.
+    const zt = clamp((f.cStruct + T.cAero * f.span) / crit, -0.999, 0.999);
+    const wd = wn * Math.sqrt(1 - zt * zt);
+    // Where the spring would hold it if this torque were steady. For a petiole this
+    // stiff the blade is here almost immediately, which is the honest answer.
+    const eq = f.k > 0 ? T.tq0 * f.span / f.k : 0;
+    const A = st.phi - eq;
+    const B = wd > 1e-12 ? (st.om + zt * wn * A) / wd : 0;
+    const dec = Math.exp(-zt * wn * h);
+    const cs = Math.cos(wd * h), sn = Math.sin(wd * h);
+    st.phi = eq + dec * (A * cs + B * sn);
+    st.om = dec * ((-zt * wn * A + wd * B) * cs - (zt * wn * B + wd * A) * sn);
+    if (st.phi > o.maxFlap) { st.phi = o.maxFlap; st.om = Math.min(0, st.om); st.hit++; }
+    if (st.phi < -o.maxFlap) { st.phi = -o.maxFlap; st.om = Math.max(0, st.om); st.hit++; }
+    st.spin += Math.abs(st.om) * h;
+    st.t += h;
+    if (st.phi < st.phiMin) st.phiMin = st.phi;
+    if (st.phi > st.phiMax) st.phiMax = st.phi;
+  }
+  return st;
 }

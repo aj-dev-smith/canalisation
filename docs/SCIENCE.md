@@ -156,6 +156,23 @@ discontinuity between them: nothing establishes that the scene has air in it unt
 a leaf needs some. The first person to watch it said so unprompted, and they were
 describing this. It is the top of the ROADMAP now.
 
+**There is a wind field now, and attached blades are loaded by it** (`37_wind.js`,
+ROADMAP 7 steps 1-2). The field is a log-law boundary layer with a Kolmogorov gust
+spectrum advected by Taylor's hypothesis, it is exactly divergence-free, and the
+simulation and the shader evaluate it from one baked table of modes rather than from
+two functions that resemble each other. One number in it is a choice — how hard it is
+blowing — and even that is cited rather than picked: the Beaufort scale defines force 3
+as "leaves and small twigs in constant motion", which is the condition this piece is
+about. Everything else follows, including the gust strength, which is the measured
+surface-layer `2.5 u*` rather than a second dial.
+
+Every blade still on the plant now rocks on its petiole under that field, through the
+same plate model the fall uses, on the same angle the fall integrates. **It is a
+fraction of a degree**, because the petiole is drawn at half the stem's radius and
+torsional stiffness goes as the fourth power of it — so the mechanism is right and the
+motion is not yet visible. `SWAY` is still what moves the scene, and it is still the
+bug. See the 2026-07-26 JOURNAL entries and ROADMAP 5.
+
 Note which direction that debt runs. Wind and gravity are *environment*, not shape,
 so responding to them is not an imposition in the sense this list means — and the
 force balance that would make an attached blade hang correctly under its own weight

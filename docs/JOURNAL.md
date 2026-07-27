@@ -943,3 +943,268 @@ The condition to hold it to: stiffness must come from `EI ∝ r⁴` on radii the
 already grows, so the whole thing costs one or two material constants rather than
 eight species-specific ones. If it cannot be done that way it is a net loss by this
 project's own accounting, and that is the signal to stop rather than push on.
+
+## One air, step 1: the field, and nothing reading it (2026-07-26)
+
+ROADMAP 7 is the fix for the piece having **two unrelated models of the same air** —
+integrated aerodynamics for a blade that has let go, a decorative vertex displacement
+for everything still attached. The order written down for it starts with the field
+itself, before any solver, and this is that step. `37_wind.js` exists,
+`tools/wind_check.mjs` proves the shader would agree with it, and **nothing reads it.**
+`SWAY` is untouched and still moves the scene.
+
+### What the field is, and why each part of it is not a choice
+
+- **Height profile: the log law of the wall.** `U(y) ∝ ln(1 + y/z0)`, off von
+  Karman's 0.40 and a roughness length from a standard table (mown grass, 0.008-0.03 m;
+  0.02 taken). The `1 +` is the ordinary regularisation so it is finite and zero *at*
+  the ground rather than singular below the roughness height; above a few `z0` it is
+  the same curve. This replaces `SWAY`'s `h*h`, which is a drawn shape.
+- **Gust strength: derived, not dialled.** `sigma_u ≈ 2.5 u*` in the neutral surface
+  layer, and `u*` follows from the profile and the reference speed. So saying how hard
+  it is blowing says how gusty it is; there is no second knob, which is the failure mode
+  this project keeps finding (see `cRot` in the fall).
+- **Gust spectrum: Kolmogorov.** Four octaves, `E(k) ∝ k^(-5/3)`, so the amplitude
+  exponent is `-1/3` and the relative size of large and small eddies is not picked.
+  The harness measures the ratio off the baked table (0.7937 = 2^(-1/3), three times
+  over) rather than trusting the constant.
+- **Frequencies: Taylor's frozen-turbulence hypothesis.** An eddy's frequency at a
+  fixed point is `k·U`, the mean flow carrying it past, plus the eddy's own turnover
+  rate `a k`. **There is no "sway frequency" anywhere in the file.** `SWAY` had three,
+  set by ear: `t*1.00`, `t*0.71`, `t*1.63`.
+
+The one dial is the weather — `uRef`, and `bearing` for which way. A still day is
+`uRef: 0`, and it is exactly zero, which the gate asserts.
+
+### The invariant that earned its keep before anything used it
+
+The field is **exactly divergence-free**: each gust mode is polarised perpendicular
+to its own wavevector, so its divergence vanishes identically, and the mean flow is
+horizontal and depends only on height. Measured with a central difference the residual
+is truncation error and halves as `h²` (ratio 3.8 against the ideal 4).
+
+That is worth having because it is *assertable*, and because a field with sources in
+it pumps energy into whatever reads it — which, four steps from now, would be very
+hard to attribute. It also decided a modelling question that would otherwise have been
+decided by eye: **the gusts do not taper to zero at the ground.** Tapering them by the
+shear profile looks more physical and breaks the divergence; keeping `sigma_u` constant
+with height is both the measured surface-layer behaviour and exactly solenoidal. What
+quietens the bottom of a specimen is that the bottom of a specimen is stiff.
+
+The first version of the test fixed the difference step at 0.01 world units, which
+passed at four modes and failed at seven with 5e-4 of pure truncation — an assertion
+about a field whose divergence is analytically zero, failing because the test got
+stricter as the ladder got longer. The step now comes off the shortest wave in the
+field, and the *ratio* between two steps is asserted as well as the magnitude, which
+is the stronger statement: an approximately solenoidal field would flatten out at its
+own error instead of converging.
+
+### "Defined once" is a claim about two languages, so it needed a GPU
+
+The whole point of the branch is that two functions resembling each other is the bug.
+So the JS and the GLSL are not two implementations: `windField()` bakes a table of
+modes, `windAt()` sums it, and `windGLSL()` emits an unrolled sum of *the same table's
+numbers* as literals. Two checks, because they catch different things:
+
+- `windGLSLNumbers()` reads the constants back out of the emitted source and the gate
+  asserts they are the baked ones. This is the half that needs no browser, and it
+  caught the one real bug in the step: the emitter wrote `- om*t`, so **a sign that
+  lives in the operator cannot be read back out of the source** — the round trip
+  recovered `-om` for a positive frequency and `-om` for a negative one, and half the
+  table was silently wrong-signed. The frequency is now baked already negated and
+  every term is a `+`. Any constant a test has to verify should carry its own sign.
+- `tools/wind_check.mjs` compiles the emitted GLSL in a real browser, evaluates it at
+  96 points into an RGBA32F target, reads the floats back and compares them to
+  `windAt()`. Worst disagreement **2.5e-5 of the mean wind speed**, mean 4.3e-7, worst
+  case at the largest `t` — which is where `om*t` eats the float32 significand, exactly
+  as expected. It is the first tool in `tools/` that returns a number and an exit code
+  rather than a picture, because it is the browser half of a test whose Node half is
+  `test/wind.mjs`.
+
+### Two things this exposed rather than added
+
+**The density of air was about to be defined twice.** `gEarth`, `rhoAir`, `unitM` and
+`ptPerSec` lived in `FALL_DEFAULTS`, and the wind needs all four. They are now `WORLD`
+in `37_wind.js` and the fall spreads them, so every key name and every harness
+override still works, and the gate asserts the two agree. A second `rhoAir` is
+precisely the class of bug this branch exists to remove, and it would have been
+introduced *by the fix for it*.
+
+**The clocks are already two.** `70_app.js` keeps `age` in plant-time steps and `t` in
+real milliseconds, and `SWAY` reads `t`. So a wind field wired to the shader the
+obvious way would be driven by wall-clock while the simulation read plant time — two
+airs again, in a form that only shows up on the time slider, where the plant speeds up
+and the wind does not. Everything in `37_wind.js` is per plant-time unit and it says so
+at the top of the file.
+
+### What the numbers say about step 2, before it is written
+
+At the shipped weather (1.2 m/s at a metre, Beaufort 1-2): `u* = 0.122` m/s,
+`sigma_u = 0.305` m/s, turbulence intensity 25%, gust peaks at 2.3 sigma, mode
+frequencies 1.4 / 1.2 / 4.0 / 5.8 Hz. The pre-flight table put the stems' first
+cantilever mode at 0.5-4.6 Hz on seven of eight species, so **all four gust modes land
+in the band where the stems will resonate.** That was not arranged; it follows from the
+integral length scale being of order the height above the ground, which is of order the
+plant.
+
+It does not survive turning the wind up. At `uRef: 6` the small eddies advect past at
+12-36 Hz and only 44% of the gust variance is still in band. A gale moves the plant
+*less* per unit of wind than it looks like it should — correct physics, and worth
+knowing before somebody reads a stiff-looking plant as a solver bug.
+
+## One air, step 2: the attached blade is loaded, and it barely moves (2026-07-26)
+
+Step 2 of ROADMAP 7 asked for attached blades loaded through the same plate model the
+fall already uses, rocking on a petiole with elastic restoring torque and damping. That
+is built, wired into `Plant.step`, and measured. **The mechanism is right and the motion
+is nearly invisible**, for a reason that is worth more than the mechanism.
+
+### What was built
+
+One degree of freedom per blade: the rock of the chord about the midrib, which is the
+same angle `org.roll` already turned and the same angle the fall integrates. Choosing
+that DOF rather than a more obvious one (the petiole bending, which is bigger) was
+deliberate — it is the only choice that makes abscission continuous without translating
+anything, which is step 4.
+
+Three torques, all the fall's, evaluated on the wind rather than on the blade's own
+velocity: the added-mass (Munk) couple that turns a plate's face into the flow, the
+normal force acting through a centre of area the margin put off the midrib, and
+rotational damping. Held by the petiole as a torsional spring, `k = GJ/L`, integrated
+over the real taper, off the pre-flight's one material constant.
+
+Asserted in `test/wind.mjs`: zero in still air; growing faster than linearly with wind
+speed (it is a load, and loads go as U²); larger for a bigger blade on the same stalk;
+bounded by the stop in a gale rather than diverging; and — the one that checks the sign
+of the Munk term the way the fall's was checked, by behaviour rather than by reading —
+a blade with its spring removed turns its face to the wind, wind-along-chord going from
+62% to 19%.
+
+### The finding: an order of magnitude in the petiole is four orders in the answer
+
+| | measured |
+|---|---|
+| petiole base radius | 7.4-8.2 mm, i.e. **0.14-0.27 of the blade's own chord** |
+| a real leaf | nearer 0.02 |
+| first torsional frequency | 374-4040 Hz |
+| rock at the shipped weather | 0.28° rms, 4.6° peak over 110 blades |
+
+The petiole is drawn at half the stem's radius at the node. Nobody derived that, and
+until now nothing depended on it — it was a tube in a picture. Torsional stiffness goes
+as the fourth power of the radius, so a stalk that is ten times too thick is ten
+thousand times too stiff, and the blade hanging off it is mechanically a rigid card
+being held by a rubber rod 8 mm through.
+
+**Do not fix this by softening `eModulus`.** 60 MPa is already a soft answer chosen
+because this plant's radii are stout — the pre-flight says so plainly, and reaching for
+it again would make a petiole out of jelly to compensate for a radius nobody defended.
+Three candidate ways out, with numbers, in preference order:
+
+1. **The petiole radius should come off the blade it carries, not off the stem.** This
+   is ROADMAP 5's existing complaint ("at flower scale the stalks are fat opaque tubes
+   and the petals read as blades bolted to scaffolding") arriving from a completely
+   different direction, which is usually a sign it is the real defect. The pipe model —
+   petiole conducting area proportional to the leaf area it supplies — is the same
+   Murray's-law reasoning the stem taper already uses, so it needs no new mechanism,
+   only a measured proportionality. At a plausible one it gives a 0.4-0.5 mm petiole
+   and about 2.5 Hz, which is plant-like. It also thins every stalk in the piece, which
+   is a visual change to every specimen and wants its own before/after.
+2. **The compliance that ought to dominate is the blade's own midrib, and it is
+   missing.** A rigid blade on a sprung petiole puts all the give in the stalk. In a
+   real leaf the lamina twists along its length, and the member that resists is the
+   midrib — which this project *canalises a width for*. Putting the midrib's torsion in
+   series with the petiole's, using the width the vein hierarchy grew, is the most
+   *interesting* fix by this project's standards: it makes the flap frequency emergent
+   from the vein network. Rough arithmetic says the midrib is some 600x more compliant
+   than the petiole, so it would dominate completely and give about 2° of rock. It is
+   also the most speculative, because a one-DOF rigid blade is a crude stand-in for a
+   lamina that twists progressively.
+3. **Accept it.** These are succulent-stemmed things with short fat stalks and small
+   blades, and such a plant's leaves genuinely do not rock much; the visible response
+   to wind was always going to be the stem (step 3) and the force-balance droop (7b).
+   This is the honest null option and it is not absurd — but it does leave step 2 as a
+   mechanism nobody can see.
+
+### And a weather that was wrong for a stated reason
+
+The field shipped at 1.2 m/s. Measuring the blade at 0.03° prompted the obvious
+question — is 1.2 m/s much wind? — and **the Beaufort scale answers it in terms of
+plants**: force 1 (0.3-1.5 m/s) is "leaves do not move"; force 2 is "leaves rustle";
+force 3 (3.4-5.4) is **"leaves and small twigs in constant motion"**. The piece is about
+leaves in constant motion, so it was standing in the one force where by definition
+nothing happens. It now stands in a force 3 at 4.0 m/s, which is a *cited* choice rather
+than a taste, and being quadratic in speed that is eleven times the pressure.
+
+That change alone took the peak rock from 0.45° to 4.6°. It also costs something worth
+recording: at 1.2 m/s all four gust modes sat in the 0.3-6 Hz band the stems will
+resonate in, and at 4.0 m/s it is 72% — Taylor scaling sweeps the small eddies past
+faster, so their forcing moves out of the range anything structural answers to.
+
+### The seam, measured — and it is not the rock (ROADMAP 7 step 4)
+
+`startFall` now hands the fall the attitude and the angular rate the blade already had
+instead of guessing both from the margin's asymmetry. The attitude is read off the drawn
+chord, which is what the viewer has been looking at; the rate carries over directly,
+reduced by the cosine of the blade's droop, because the fall pitches about the
+*levelled* long axis.
+
+Measured over 24 blades caught in the act of letting go:
+
+| | median | max |
+|---|---|---|
+| chord jump at release | 4.0° | 19.6° |
+| **long-axis jump at release** | **27.1°** | **44.3°** |
+
+The second row is a bug this branch found rather than caused, and it is much larger than
+anything the rock does. `fallFrame` draws a falling blade with its long axis
+**levelled** — `fallAxis` flattens it deliberately, because the 2D plate model requires
+gravity to lie in the pitch plane, which requires a horizontal pitch axis. So a blade
+hanging at 27° straightens out in the frame it detaches on. That is precisely the tell
+step 4 says must not exist: *you should not be able to tell from the motion which frame
+a blade detached on.*
+
+It is left in place rather than half-fixed, because the honest fix is a second rotational
+degree of freedom — the roll about the chord — integrated with the same coefficients in
+the perpendicular plane. Two coupled 2D solvers is a defensible reduction of a 3D
+problem and costs no new constants, and it would let a released blade level *over a
+timescale* instead of instantly, which is what a real one does. That is its own branch:
+it changes the drawn fall, which shipped, so it wants its own before/after.
+
+## The petiole, pre-flighted: one law, and a constant that decides everything (2026-07-26)
+
+Step 2 ended pointing at the petiole's radius, so it was measured across all eight
+species before anyone changed it. **The table is in ROADMAP 5** and the summary is:
+
+- **Blade areas are 25-115 cm², which is real leaf.** The scale the piece claims is
+  fine. Only the stalk is wrong: 6.2-9.5 mm of radius where the pipe model wants
+  0.57-1.21.
+- **The pipe model puts every species' flap frequency at 6.3-9.5 Hz off one constant.**
+  Areas span 4.5x and the frequency barely moves, because stiffness goes as `(kappa·A)²`
+  and the inertia scales with area too, so they nearly cancel. Same shape of result as
+  ROADMAP 7's stem pre-flight, and the strongest argument that this is the right law.
+- **But the twist then saturates** — 42-59° rms against a 69° stop — because a blade
+  hinged on its own midrib is statically *unstable* in twist. The aerodynamic centre
+  sits ahead of a mid-chord pivot, which is why weather vanes are built the other way
+  round. Real leaves do flip about their midribs in a force 3; as a lone degree of
+  freedom against a hard stop it will read as pinned rather than as flutter.
+- **And the whole range of behaviours fits inside `kappa`'s error bar.** Twist goes as
+  `1/kappa²`, and the measured range of petiole-area-per-blade-area across broadleaf
+  species is 2e-4 to 1e-3. At 4e-4 the blade pins; at 1e-3 it twists about 8°, which is
+  exactly right. **A quantity that swings from invisible through perfect to pinned over
+  the error bar of a borrowed constant cannot be the primary motion**, and tuning it
+  until it looks right would be tuning, not measuring.
+
+So the recommendation is recorded as: do #5 **with** 7b. Bending is the column that
+behaves — 4.8-13.2° under the blade's own weight, bounded, no per-species number — and
+it is what `sp.droop`'s eight stated values stand in for. Twist is a detail on top of a
+stable DOF, not a substitute for one.
+
+The way to get `kappa` out of the codebase is also written down there, because it is
+this project's kind of answer: **the conducting cross-section of a petiole is something
+the leaf already canalises.** The trunk of the vein hierarchy — the midrib at the
+petiole, where `50_geom.js` says everything funnels — *is* the measured conducting area
+for that blade. Sizing the stalk off the traffic the midrib carries replaces a borrowed
+literature constant with the engine's own output, and gives a heavier-veined leaf a
+stouter stalk, which is variation nothing in the piece has. It does not remove the
+absolute scale, since drawn vein width is a display mapping — a better law with the same
+one free number.

@@ -384,9 +384,13 @@ sweep. If you find yourself reaching for a dial in this file to change how the f
 
 ### The inputs, and where each one comes from
 
+The first four moved to `WORLD` in `37_wind.js` when the wind field arrived — the
+air has one density, not one per file — and `FALL_DEFAULTS` spreads them, so every
+key name below still works and a harness can still override any of them.
+
 ```
 unitM      0.0625   metres per world unit      already fixed: 16u plant reads as 1m
-ptPerSec   125      plant-time units / second  already fixed: 70_app.js:743
+ptPerSec   125      plant-time units / second  already fixed: 70_app.js:703
 gEarth     9.81     m/s^2                      gravity
 rhoAir     1.2      kg/m^3                     air
 lmaFresh   0.120    kg/m^2   leaf mass per area, turgid  (real trait, 50-150 g/m2)
@@ -452,3 +456,180 @@ screen.** `70_app.js` draws a blade at 0.80 of its organ's length; using the org
 length made every plate 1.4x too big and pushed the whole population toward
 fluttering. One definition, read by both. If you change how long a blade is drawn,
 you are changing the aerodynamics, and that is the correct coupling.
+
+## The air (`37_wind.js`, 2026-07-26)
+
+**Read this section the way you read the fall's, not the way you read the rest of
+the file.** There is one dial here and it is the weather. Everything else is a
+measured constant or is derived from one, and if the wind looks wrong the thing to
+change is the model.
+
+### The one choice
+
+```
+uRef       4.0      m/s at yRefM     how hard it is blowing. Beaufort 3
+bearing    0.0      rad              which way. Ground plane. A scene picks one
+seed       1        -                which realisation of the spectrum is drawn
+```
+
+**`uRef` comes off the Beaufort scale, and that is a better answer than taste,**
+because Beaufort's force descriptions are *defined by what the wind does to plants*:
+force 1 is "leaves do not move", force 2 is "leaves rustle", force 3 is **"leaves and
+small twigs in constant motion"**, force 4 raises dust and moves small branches. This
+piece is about leaves and small twigs in constant motion, so it stands in a force 3
+and 4.0 m/s is the low-middle of that band.
+
+It shipped at 1.2 — force 1 — for exactly as long as it took to measure an attached
+blade, which twisted by 0.03 degrees and was reported as "the mechanics is invisible".
+It was, correctly: at force 1, by definition, leaves do not move. The load is quadratic
+in speed, so force 3 is eleven times the pressure of force 1.
+
+`uRef: 0` is a dead calm and the field is then **identically zero everywhere** —
+asserted in the gate, because a field that trembled at zero wind would be the old
+decorative sway wearing a physical name. A still scene has to cost nothing and do
+nothing.
+
+### Everything else, and where it comes from
+
+```
+yRefM      1.0      m       the height uRef is quoted at. A plant's height
+z0M        0.02     m       roughness length. Standard table: mown grass 0.008-0.03
+kappa      0.40     -       von Karman
+sigmaOverUstar  2.5  -      neutral surface layer. Sets the gust strength from u*
+lambdaM    1.0      m       integral length scale ~ height above ground
+nMode      4        -       octaves of it: 1.0, 0.5, 0.25, 0.125 m
+spectralSlope  -5/3  -      Kolmogorov. Amplitude exponent is (slope+1)/2 = -1/3
+turnover   1.0      -       each eddy decorrelates at its own rate, a_i k_i
+```
+
+The chain is: `u* = kappa·uRef/ln(1+yRef/z0)`, then `sigma_u = 2.5 u*`, then the
+octave amplitudes are Kolmogorov's and normalised so their variances sum to
+`sigma_u²`, then each mode's frequency is Taylor's `k·U` plus its own turnover.
+**So "how gusty is it" is not a second dial.** At the shipped weather:
+
+| | value |
+|---|---|
+| `u*` | 0.407 m/s |
+| `sigma_u` | 1.017 m/s (turbulence intensity 25%) |
+| mean speed at 1 m / at 0.25 m | 4.00 / 2.65 m/s |
+| gust peak seen over 40k samples | 2.31 m/s = 2.27 sigma |
+| mode frequencies | 4.8, 3.9, 13.5, 19.3 Hz |
+| gust variance in 0.3-6 Hz | 72%, 2 of 4 modes |
+
+That last row is the one to check first if a later step produces a plant that does
+not move. The ROADMAP 7 pre-flight put the stems' first cantilever mode at 0.5-4.6 Hz
+on seven of eight species, and 72% of the gust variance is in that band, carried by the
+two largest eddies — so the air contains energy where the stems will resonate.
+
+**The fraction in band falls as the wind rises, and that is real.** At 1.2 m/s all four
+modes are in band; at 4 it is 72%; at 6 it is 44%. Taylor scaling sweeps the small
+eddies past faster, so their forcing moves out of the range anything structural
+answers to. A gale therefore moves the plant less per unit of wind than it looks like
+it should — worth knowing before somebody reads a stiff-looking plant as a solver bug.
+
+### The two invariants worth knowing about
+
+**Divergence-free, exactly.** Each gust mode is polarised perpendicular to its own
+wavevector, and the mean flow is horizontal and varies only with height. The gate
+measures the residual with a central difference and it is truncation error: halving
+the step quarters it (measured ratio 3.8 against the ideal 4). A field with sources
+in it pumps energy into whatever reads it, and once four things read this that would
+be very hard to find.
+
+**The gusts do not taper to nothing at the ground, and that is deliberate.** `sigma_u`
+is very nearly constant with height through the surface layer even though the mean
+speed goes to zero at the roughness height — that is the measured behaviour, and it
+is also the only version that keeps the divergence exactly zero. What quietens the
+bottom of a specimen is that the bottom of a specimen is stiff, which is step 3.
+
+### The time argument is plant time
+
+Not milliseconds. `70_app.js` keeps both clocks — `age` in plant-time steps, `t` in
+real ms — and the old `SWAY` read `t`. A shader driven by wall-clock and a simulation
+driven by plant time would be two airs again, in a form that only shows on the time
+slider: the plant would speed up and the wind would not. Every rate in `37_wind.js`
+is per plant-time unit.
+
+### float32 is the only reason this needs a tolerance
+
+`windGLSL()` emits nine significant figures and the GPU keeps about seven, so the
+shader and the simulation cannot agree exactly. Measured on ANGLE/Metal at 96 sample
+points spanning `t` 0-10000:
+
+| samples | worst | mean |
+|---|---|---|
+| `t` < 3000 | 1.6e-5 of mean wind speed | 2.4e-6 |
+| `t` ~ 9000 | 1.1e-4 | 2.0e-5 |
+
+**The disagreement grows linearly with plant time**, because a mode's phase is `om*t`
+and a float32 holds that to a fixed fraction of its own magnitude. `tools/wind_check.mjs`
+reports the two groups separately for that reason and gates at 1e-3 of mean speed — a
+tenth of a percent, three orders below anything visible and three above the noise. There
+is no useful gap between "the same field" and "not": a dropped mode or a lost sign is
+wrong by tens of percent, not by rounding.
+
+If the growth ever matters — a page left running for hours — the fix is not a looser
+bound but quantising the baked frequencies onto a common fundamental, so the field is
+exactly periodic and the shader can be handed `mod(t, T)`. Shifting them by a fraction
+of a percent is physically meaningless: the spectrum is one random realisation of many.
+
+## The attached blade (`39_fall.js`, ROADMAP 7 step 2, 2026-07-26)
+
+Read this the way you read the fall's section: there is nothing here to sweep for
+appearance. There is, however, a number in it that IS arbitrary and turns out to
+dominate everything, and that is the point of this section.
+
+```
+eModulus   60e6   Pa   Young's modulus. THE pre-flight's one material constant
+poisson    0.5    -    turgid parenchyma is nearly incompressible -> G = E/3
+zeta       0.10   -    structural damping ratio. Measured range 0.05-0.2 in plant stems
+sub        12     -    substeps per period of the FORCING (the response is exact)
+maxFlap    1.2    rad  a stop, not a shape
+```
+
+`zeta` is a **third** material constant, which the pre-flight said should make you
+re-read rather than reach for it. The argument for it is a measurement, not a
+preference: aerodynamic rotational damping (`cRot`) is *quadratic* in the rate, so at
+the microradian amplitudes this geometry produces it does essentially nothing, and a
+blade struck by a gust rings undamped forever. Material damping is linear and is what
+stops a real petiole. At these stiffnesses 0.1 means the ring is gone within a quarter
+of a plant-time unit and the blade simply follows the wind.
+
+### What the petiole works out to, and why it is the whole story
+
+Torsional stiffness goes as **r⁴**, and the petiole's radius is currently `0.5` of the
+STEM's radius at the node — a number nobody derived. Measured on a Cathedral Fern at
+6000 steps:
+
+| | value |
+|---|---|
+| petiole length | 0.82-1.02 world units (5-6 cm) |
+| petiole base radius | 0.118-0.131 (7.4-8.2 mm) |
+| radius as a fraction of the blade's own chord | 0.14-0.27 — **a real leaf is nearer 0.02** |
+| torsional stiffness `k` | 30-108 world torque/rad |
+| first torsional frequency | **374-4040 Hz** |
+| rock at force 3, all 110 blades | 0.28° rms, 4.6° peak |
+| rock at force 2 / force 4-5 | 0.07° / 1.09° rms |
+
+So the mechanism is correct — quadratic in wind speed, zero in still air, larger for a
+bigger blade on the same stalk, all asserted — and it is **quasi-static and nearly
+invisible**, because the blade is hanging off a fat rubber rod. An order of magnitude
+in radius is four orders in stiffness. Do not tune `eModulus` down to compensate: that
+is the compensation the pre-flight already spent once, and doing it twice would make a
+petiole out of jelly. **The number to fix is the radius**, and it is ROADMAP 5.
+
+### The integrator is exact in the linear part, and that is not an optimisation
+
+A 4000 Hz spring is 200 radians per plant-time unit. An explicit integrator needs
+hundreds of substeps per unit not to explode, and the first version — symplectic, 96
+substeps, capped — blew the stiffest blade on the specimen through the cap and pinned
+it against `maxFlap`, where it read as a plausible 68° twist. The damped harmonic
+oscillator is now advanced by its closed-form solution with the aerodynamic torque held
+constant over the substep: unconditionally stable at any stiffness, one substep instead
+of four hundred, and `sub` only has to resolve the *forcing*.
+
+Everything proportional to the rate goes into that solution's damping rather than into
+the constant torque, including a term that can be **negative**: rotational circulation
+acting through a centre of area the margin put off the midrib feeds the rock, which is
+what leaf flutter is. Held constant across a substep instead, it pumped the spring —
+a ringdown in dead air grew from 12° to 27° over eight cycles, with no energy source.

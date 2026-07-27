@@ -10,7 +10,11 @@ import { Meristem } from './20_meristem.js';
 import { Leaf } from './30_leaf.js';
 import { Fruit } from './35_fruit.js';
 import { Vasculature } from './38_shoot.js';
-import { plateOf, fallState, fallStep, fallAxis, drawnBladeLen } from './39_fall.js';
+import { windField, windAt } from './37_wind.js';
+import {
+  plateOf, fallState, fallStep, fallAxis, drawnBladeLen,
+  petioleOf, flapOf, flapState, flapStep,
+} from './39_fall.js';
 import {
   v3, v3set, v3copy, v3add, v3sub, v3scale, v3addScaled, v3dot, v3cross,
   v3norm, v3len, v3lerp, v3rotAxis, TAU, clamp, lerp, smoothstep, mulberry32,
@@ -468,8 +472,11 @@ class Axis {
       if (v3len(_zside) < 0.1) v3set(_zside, 1, 0, 0);
       v3copy(org.frame.z, _zside);
       v3norm(_znrm, v3cross(_znrm, _zside, _zd));
-      // roll the blade about its own petiole
-      const cr = Math.cos(org.roll), sr = Math.sin(org.roll);
+      // Roll the blade about its own petiole. `roll` is the scatter it grew with;
+      // `flap` is how far the wind has twisted it since — one angle, and the same one
+      // the fall integrates, which is what makes abscission continuous (39_fall.js).
+      const rl = org.roll + (org.flap || 0);
+      const cr = Math.cos(rl), sr = Math.sin(rl);
       _zs1[0] = _zside[0] * cr + _znrm[0] * sr;
       _zs1[1] = _zside[1] * cr + _znrm[1] * sr;
       _zs1[2] = _zside[2] * cr + _znrm[2] * sr;
@@ -484,6 +491,7 @@ class Axis {
 }
 
 const _zs0 = v3(), _zs1 = v3(), _zp = v3(), _zax = v3(), _zu = v3(), _zd = v3();
+const _wind = v3(), _fpl = v3();
 const _zdir = v3(), _zside = v3(), _znrm = v3();
 const _zsx = v3(1, 0, 0), _zsy = v3(0, 1, 0);
 
@@ -648,6 +656,12 @@ export class Plant {
     // one transport stream for the whole organism, built before the first shoot
     // taps into it
     this.vasc = new Vasculature(prm, this.sp.shootOpts || {});
+    // THE AIR THE ORGANISM IS STANDING IN. Taken from the caller if it was given
+    // one, because the whole point of `37_wind.js` is that there is one field and
+    // everything reads it — when the shader stops making its own weather (ROADMAP 7
+    // step 5) it will be handed this object, and when a second specimen germinates
+    // (ROADMAP 6) it has to be standing in the same weather as the first.
+    this.wind = (sp && sp.wind) || windField(this.sp.windOpts);
     this.addAxis(v3(0, 0, 0), v3(0, 1, 0), 0);
   }
   // `parentNode` is the stem node of the organ this shoot came out of, so a
@@ -723,7 +737,58 @@ export class Plant {
     // plant as it is this frame. Off by default — see 38_shoot.js.
     if (this.vasc.o.enabled) this.vasc.step(this, dt);
     this.senesceStep(dt);
+    this.stepFlaps(dt);
     this.stepFalls(dt);
+  }
+
+  // EVERY ATTACHED BLADE IS IN THE AIR TOO — ROADMAP 7 step 2.
+  //
+  // Before this, the only thing in the scene that knew there was air in it was a
+  // blade that had already let go. Now a blade on its petiole is the same plate,
+  // loaded by the same field, rocking on the same angle the fall integrates.
+  //
+  // Stepped here rather than in the renderer for the same reason the falls are: this
+  // is simulation, so it runs on plant time and answers to the time slider. The
+  // wind's own clock is plant time too (`37_wind.js`), which is the trap that file
+  // warns about — the old shader sway ran on wall-clock milliseconds, so it did not.
+  //
+  // WHAT THE NUMBERS SAY, because it is not what was expected. On the petiole radii
+  // this plant grows, the rock is quasi-static and TINY: 0.002 degrees rms at the
+  // shipped weather, at natural frequencies of 374-4040 Hz. Torsional stiffness goes
+  // as the fourth power of the radius, and the petiole is drawn at half the STEM's
+  // radius — a fat rubber rod, 8mm through and 6cm long, holding a 20cm2 blade. So
+  // this is a mechanism that is correct, continuous at abscission, and invisible. The
+  // measurement, and the three candidate ways out of it, are in the JOURNAL entry for
+  // 2026-07-26; the short version is that the compliance that ought to dominate is
+  // the blade's own midrib, which the leaf HAS canalised a width for, and that the
+  // visible response to wind was always going to be the stem (step 3) and the
+  // force-balance droop (7b) rather than this.
+  stepFlaps(dt) {
+    const w = this.wind;
+    if (!w || w.o.uRef <= 0) return;      // a dead calm costs nothing at all
+    for (const a of this.axes) {
+      for (const o of a.organs) {
+        if (o.shed || !o.leaf || !o.leaf.margin || !o.leaf.margin.mature) continue;
+        if (!(o.dev > 0.02)) continue;    // still furled in the bud
+        // The plate is rebuilt when the blade's mass or size has moved — it drains
+        // and shrinks as it senesces — but not every step, because `plateOf`
+        // integrates the margin.
+        const sen = o.sen || 0;
+        if (!o.flapSt || Math.abs(sen - o.flapSen) > 0.05) {
+          const f = flapOf(o.leaf, drawnBladeLen(o.len, sen), sen, petioleOf(o),
+                           this.sp.fallOpts);
+          o.flapSt = o.flapSt ? (o.flapSt.f = f, o.flapSt) : flapState(f);
+          o.flapSen = sen;
+        }
+        // The wind where the blade is, resolved on the blade's own chord and normal.
+        // The frame is this step's, one layout old, which is what every other
+        // per-organ quantity here uses.
+        windAt(_wind, w, o.frame.o[0], o.frame.o[1], o.frame.o[2], this.time);
+        flapStep(o.flapSt,
+          v3dot(_wind, o.frame.z), v3dot(_wind, o.frame.y), dt);
+        o.flap = o.flapSt.phi;
+      }
+    }
   }
 
   // A blade lets go: hand it to the aerodynamics in 39_fall.js.
@@ -739,8 +804,26 @@ export class Plant {
     // the DRAWN length, not the organ's — see 39_fall.js
     const plate = plateOf(o.leaf, drawnBladeLen(o.len, o.sen || 1), o.sen || 1,
                           this.sp.fallOpts);
-    o.fall = fallState(plate, Math.max(0.05, o.frame.o[1] - groundY));
     o.fallAxis = fallAxis(o.frame, v3());
+    // THE SEAM — ROADMAP 7 step 4. The fall used to start from a guessed attitude
+    // (half the blade's margin asymmetry) and a guessed rate (the same asymmetry
+    // times `wobble`), which was the honest best available when nothing attached was
+    // moving. Now the blade has been rocking in the same air on the same angle, so
+    // both are MEASURED off it and the fall continues the motion instead of starting
+    // one.
+    //
+    // The attitude comes off the drawn chord rather than out of the flap state,
+    // because the drawn chord is what the viewer has been looking at: it already
+    // carries the roll the organ grew, the tilt, and the wind. `_fpl` is the fall
+    // plane's own horizontal, the same basis `fallFrame` rebuilds.
+    v3set(_fpl, -o.fallAxis[2], 0, o.fallAxis[0]);
+    const th0 = Math.atan2(v3dot(o.frame.z, _zsy), v3dot(o.frame.z, _fpl));
+    // The rate carries over directly — both angles are a rotation about the blade's
+    // long axis, in the same sense — but the fall pitches about the LEVELLED long
+    // axis, so what survives is the component along it. A blade hanging steeply
+    // hands over less of its rock than a level one, which is geometry, not a fudge.
+    const om0 = (o.flapSt ? o.flapSt.om : 0) * v3dot(o.frame.x, o.fallAxis);
+    o.fall = fallState(plate, Math.max(0.05, o.frame.o[1] - groundY), th0, om0);
     // The frame is snapshotted because the axis keeps moving after the blade has
     // gone — it still sways, and a shed organ that kept reading its live frame was
     // hanging off a stem it was no longer attached to.

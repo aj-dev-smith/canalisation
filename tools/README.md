@@ -35,6 +35,17 @@ inside **single** quotes, so it never interpolated.
   puts six hundred cells on one line and looks like an empty stalk, so check the
   `-mid` frame before believing a "nothing is drawn" report
 - `sway.mjs` — pixel-diffs two frames to prove the sway field animates
+- `wind_check.mjs ['{"uRef":3}'] [nSamples]` — **not a capture tool.** The one thing
+  in here that returns a number and an exit code instead of a picture, and the only
+  check in the repo that has to leave Node. Compiles the GLSL `windGLSL()` emits,
+  evaluates it at sample points into an RGBA32F target, reads the floats back and
+  compares them to `windAt()` in Node. That the shader's air and the simulation's air
+  are the same field is ROADMAP 7's whole claim and it cannot be checked by looking,
+  because a wrong wind still looks like wind. Measured agreement on ANGLE/Metal is
+  1.6e-5 of the mean wind speed early in a run and 1.1e-4 late in one — it grows
+  linearly with plant time, which the tool now reports as two groups rather than one
+  number, because the growth is the mechanism. Fails above 1e-3. Its Node half is
+  `test/wind.mjs`, which does the physics
 - `senesce_shot.mjs prefix [species] [seed]` — runs until the specimen dismantles
   itself and captures `-onset`, `-mid`, `-spent`. Picks its GL backend the way
   `flower_shot.mjs` does. The three frames now differ: on Cathedral Fern seed 21

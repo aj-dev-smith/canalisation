@@ -369,6 +369,41 @@ list. Two things to take from it that outlive that one bug: **a green CI gate is
 only evidence about what the gate imports**, and **the artifact is not verified
 until something has parsed it.**
 
+## Numerics and code generation (2026-07-26, ROADMAP 7)
+
+**A sign that lives in an operator cannot be read back out of generated source.**
+`windGLSL()` emitted `sin(dot(k,p) - om*t + ph)`, and the round-trip check that reads
+the constants back out of the emitted GLSL recovered `-om` for a positive frequency and
+`-om` for a negative one — so half the mode table verified as correct while wearing the
+wrong sign. Frequencies are now baked already negated with every term a `+`. **Any
+constant a test has to verify should carry its own sign**, and any generated numeric
+literal should be parenthesised if it can be negative, because `- -1.2*t` is not GLSL.
+
+**An explicit integrator on a spring you did not measure first will pin itself against
+your safety stop and look plausible.** The attached blade's petiole came out at
+374-4040 Hz — 200 radians per plant-time unit — and the first integrator was symplectic
+with a cap of 96 substeps. The stiffest blade on the specimen blew through the cap,
+hit `maxFlap`, and sat there reading as a believable 68° twist that scaled with wind
+speed. Two lessons: **measure the natural frequency before choosing an integrator**,
+and a clamp that keeps a diverging state in range converts a crash into a *result*.
+The linear part is now solved in closed form, so stability does not depend on the step.
+
+**Everything proportional to a rate belongs in the damping, not in the constant
+torque.** Holding a velocity-dependent aerodynamic term constant across a substep
+pumped the oscillator: a ringdown in DEAD AIR grew from 12° to 27° over eight cycles,
+with no energy source anywhere in the problem. If a conserved quantity grows where
+nothing can be feeding it, suspect the split between what you integrate exactly and
+what you hold fixed — and note that the artifact was *hiding* a real instability of the
+same sign underneath it.
+
+**A finite-difference tolerance that is fixed becomes stricter as the model gets
+richer.** The divergence-free check used `h = 0.01` world units and passed at four gust
+modes, then failed at seven with 5e-4 of pure truncation error — an assertion about a
+field whose divergence is analytically zero, failing for a reason that had nothing to do
+with the field. Scale the step off the smallest length in the model, and where you can,
+assert the **convergence order** rather than a magnitude: halving the step must quarter
+the residual, which an approximately-correct field cannot fake.
+
 ## Performance
 
 Leaf and margin simulations dominate. Grow a small **library** and share it —
