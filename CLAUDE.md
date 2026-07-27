@@ -60,6 +60,20 @@ node test/wind.mjs '{"uRef":3}'                    # the wind field: profile, gu
 node test/stem.mjs                                 # the stem as a beam: ringdown vs the pre-flight, sway per species, convergence
 ```
 
+**Three of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`.** The
+rest print and never fail. That split is the project's epistemics in miniature — an
+*emergent* quantity must not be pinned down in a test, because that would convert it
+into an imposed one, while a *physical* claim can be checked against a number worked
+out beforehand and therefore should be. When you add something to the mechanics, work
+the number out first and assert against it; when you add something to the chemistry,
+print it and read it.
+
+`test/stem.mjs` and `test/smoke.mjs` both read the shipped wind speed out of
+`WIND_DEFAULTS` rather than keeping their own copy. `stem.mjs` used to hardcode 4.0 and
+label it "force 3", so when the default changed it went on faithfully reporting a scene
+that no longer existed. **A harness with its own copy of a shipped constant is a harness
+that will eventually test a different program than the one you are running.**
+
 `test/fall.mjs` has a fourth section that is an archived experiment rather than a check:
 `node test/fall.mjs tilt` switches on `FALL_DEFAULTS.tiltPlane` — a second rotational
 plane for the falling blade, which closes the abscission seam exactly and then pumps
@@ -191,8 +205,8 @@ src/39a_stem.js     THE STEM BENDS. Axes as coupled damped cantilevers off EI on
 src/50_geom.js      simulation state -> triangles, ribbons, points; senescence colour
 src/60_render.js    WebGL2: forward pass, bloom, depth of field, grade. No sway — the
                     geometry moves for real now
-src/70_app.js       species presets, camera director, scene assembly
-src/80_main.js      UI wiring
+src/70_app.js       species presets, camera director, scene assembly, App.setWind
+src/80_main.js      UI wiring, including the wind slider
 ```
 
 `stepAuxin()` in `10_auxin.js` is the whole thesis. It runs on **any** topology —
@@ -222,13 +236,17 @@ of its bugs were found, and none would have been visible on screen.
 - **Report negative results honestly.** Two hypotheses about phyllotaxis and four about senescence have been tested and falsified. All six are written up in [docs/JOURNAL.md](docs/JOURNAL.md) with their numbers, and they are more useful than the successes would have been.
 - **Look up the real number before choosing one.** The falling blade was going to keep one hand-picked constant; checking it against real leaf mass per area removed the need for any. The hand-picked version was also measurably *worse* — it put every blade on the same side of a transition the measured values straddle by themselves. Reach for a table before reaching for a dial.
 - **A borrowed model has assumptions, and one of them is its dimensionality.** The plate aerodynamics was solving a cross-section — an infinitely long plate — while a leaf is a stub, which over-predicted lift roughly twofold and read as "flappy". Ask what a borrowed model assumes about the dimension you are *not* solving, and whether two of its coefficients are secretly one.
+- **Pre-flight the number before writing the solver.** The stem's frequencies were worked out analytically for all eight species on paper first. That table then caught three separate bugs in the solver, none of which was visible on screen and all of which produced a plant that swayed pleasantly at the wrong rate. A solver that cannot reproduce a number somebody computed beforehand is not the thing it claims to be.
+- **Green is a statement about what the gate imports, and about internal consistency only.** A name collision once shipped a bundle that did not parse while 47 checks passed. The wind field passed all 24 of its own assertions while every gust mode sat at vibration frequencies. Ask what the suite *cannot* see, then go and look at that.
+- **Get a person to watch it.** Twice now the fastest path to a genuine modelling error was AJ watching for a few seconds. When a report says "feels like a bug", measure it before explaining it — and take more than one measurement, because "too fast" has meant frequency once and amplitude once, in nearly the same words.
 - **Never fake it to make it look better.** The piece's entire claim is that nothing is drawn. A single hardcoded curve would make the whole thing a lie.
 
 ## The honest state of it
 
-*Current as of 2026-07-26. The two most recent landings are the falling blade (#13)
-and the mechanics pre-flight (#14); if the git log has moved a long way past those,
-treat the specifics below as needing a re-read rather than as fact.*
+*Current as of 2026-07-27. The most recent landings are the wind field (#16), the
+falsified second rotational plane (#17), the bending stem (#18) and the weather being
+turned down to force 2 (#19); if the git log has moved a long way past those, treat the
+specifics below as needing a re-read rather than as fact.*
 
 **The life cycle is complete.** A specimen germinates, leafs, flowers, fruits,
 ripens, and then **finishes**: it runs out of growing points, drains each blade
@@ -272,10 +290,20 @@ like it was vibrating, and a person watching said so; twenty-four passing assert
 not. `tools/jitter.mjs` is the check that closes that gap and it is the one to run after
 touching the air.
 
+**The weather is the one number here that the eye decides**, and it took two goes. The
+field shipped at force 1 (invisible), then force 3 (too much for a close study of one
+specimen), and settled at **force 2, `uRef: 2.5` m/s**. Everything downstream of it is
+derived, so a wrong value cannot make the physics wrong — only the scene. It is a slider
+in the UI (`app.setWind`), and `tools/clip.mjs` and `tools/jitter.mjs` both take a `uRef`
+argument. **Do not raise it back without watching it.** And when someone says the motion
+is too fast, measure amplitude as well as frequency: the second complaint moved the peak
+slew by a factor of six and the dominant frequency not at all, because that frequency is
+the stem's own bending mode and the wind only decides how hard it is struck.
+
 **What is still wrong is the petiole**, and it is now the blocking item: it is drawn at
 half the *stem's* radius, torsional stiffness goes as r⁴, so an attached blade rocks by
-a quarter of a degree. Read the 2026-07-26 JOURNAL entries before touching it; they rank
-three ways out and say why softening `eModulus` is not one of them.
+about a tenth of a degree at the shipped wind. Read the 2026-07-26 JOURNAL entries before
+touching it; they rank three ways out and say why softening `eModulus` is not one of them.
 
 ### Where the work goes next
 

@@ -34,8 +34,8 @@ inside **single** quotes, so it never interpolated.
   into line only read if the camera is square to the blade — a leaf seen edge-on
   puts six hundred cells on one line and looks like an empty stalk, so check the
   `-mid` frame before believing a "nothing is drawn" report
-- `clip.mjs OUTDIR SECONDS [species] [seed] [speed] [waitSeconds] [w] [h]` — **records a
-  webm.** The only artifact in the repo that shows the piece MOVING, which everything
+- `clip.mjs OUTDIR SECONDS [species] [seed] [speed] [waitSeconds] [w] [h] [uRef]` —
+  **records a webm.** The only artifact in the repo that shows the piece MOVING, which everything
   else here explicitly cannot judge. Records square by default (1000×1000): the camera
   fits the specimen's height into 66% of the frame, so a tall narrow plant on a 16:10
   viewport is framed correctly and looks lost. Also drops a matching still. `waitSeconds`
@@ -46,7 +46,8 @@ inside **single** quotes, so it never interpolated.
   To compare against an older build, add a git worktree at the earlier commit, symlink
   `node_modules` into it, and run *this* copy of the tool with the worktree as cwd — the
   page URL comes from `process.cwd()` and the playwright import resolves from the script.
-- `jitter.mjs [species] [seed] [waitSeconds]` — **where is the movement's energy?**
+  For a *weather* comparison you do not need any of that: pass `uRef` and record twice.
+- `jitter.mjs [species] [seed] [waitSeconds] [uRef]` — **where is the movement's energy?**
   Samples the drawn state at frame rate — the tip of the main axis and individual blade
   normals — and reports a dominant rate per signal, plus a verdict at about 4 Hz, which
   is where "sway" becomes "jitter" and where a 60 Hz display starts lying to you.
@@ -59,9 +60,27 @@ inside **single** quotes, so it never interpolated.
   share a clock, so `speedMul: 0` stops both — which means during the growing phase some
   of what it measures is organs developing. Point it past the end of growth
   (`waitSeconds` 26+) to isolate the air.
-- `sway.mjs` — **obsolete.** It pixel-diffed two frames to prove the old shader sway field
-  animated, and that field was deleted in ROADMAP 7 step 5. Kept only until something
-  wants its diffing trick; `clip.mjs` is what to reach for now
+
+  **Read the rms and the peak slew, not only the dominant rate.** "Too fast" has meant
+  both things here: once it really was frequency (the length scale), and once it was
+  amplitude at an unchanged frequency (the wind speed — dominant rate 0.53 to 0.60 Hz,
+  peak slew 4.15 to 0.67). The optional `uRef` overrides the shipped wind speed, so that
+  comparison is two runs of one binary rather than two checkouts.
+
+  The tip signal is the tip's **offset from the rest shape**, not its position. It used
+  to be the position, and since growth is a much larger displacement than sway the tool
+  spent a while reporting an rms that barely moved when the wind was cut by a third.
+- `sway.mjs` — **deleted (2026-07-27).** It took two screenshots to show the old shader
+  sway field animating, and that field went in ROADMAP 7 step 5. It was left in place for
+  a day as "obsolete but harmless", which it was not: it froze the scene with
+  `speedMul = 0`, and since growth and the wind now share a clock that stops the air too,
+  so it would have reported *no motion at all* on a plant that moves — a false negative
+  dressed as a measurement. It also asked for swiftshader, which on macOS writes black
+  PNGs while reporting a full triangle count. `clip.mjs` replaces it.
+
+  The general rule, and `test/sweep.mjs` was removed for the same reason: **a harness can
+  outlive the thing it measures, and a stale one is worse than no harness** because it
+  still produces output that looks like evidence.
 - `wind_check.mjs ['{"uRef":3}'] [nSamples]` — **not a capture tool.** The one thing
   in here that returns a number and an exit code instead of a picture, and the only
   check in the repo that has to leave Node. Compiles the GLSL `windGLSL()` emits,

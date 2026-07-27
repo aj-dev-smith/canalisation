@@ -440,6 +440,40 @@ bugs: counting zero crossings into the decayed tail measured float noise, and ki
 with a uniform shape excited every mode the mesh carried so the count read a mixture.
 Kick with the mode you want, and stop counting once the amplitude is into the noise.
 
+## Measuring instruments have bugs too (2026-07-27)
+
+The wind and the stem produced four bugs in the *tools built to check them*, which is a
+category worth naming because a broken instrument reports confidently and there is
+nothing on screen to contradict it.
+
+**A harness with its own copy of a shipped constant will eventually test a different
+program than the one you are running.** `test/stem.mjs` hardcoded `4.0` and labelled the
+column "force 3". When the shipped weather dropped to force 2 the harness went on
+faithfully reporting a scene that no longer existed — and the table it printed was the
+one the docs had been copied from. Read the constant out of the module that defines it
+(`WIND_DEFAULTS.uRef`), and if the harness needs band edges either side of it, compute
+those relative to the shipped value.
+
+**A signal that contains growth is not a measurement of motion.** `tools/jitter.mjs`
+recorded the stem tip's absolute position, which climbs steadily as the axis elongates.
+Growth is a far larger displacement than sway, so the tool reported an rms near 1.0 world
+units that barely responded to cutting the wind by a third: it was measuring the plant
+getting taller. Record the deviation from the rest shape, where growth cancels. Note the
+*frequency* estimate survived this — differencing a slow ramp adds little to the step
+variance — so half the tool was right and half was garbage, which is the worst case.
+
+**A number normalised by a scale that can be zero is a NaN waiting for a still day.**
+Divergence divided by `sigma * k_max` is fine until `uRef: 0`, which is exactly the
+configuration the dead-calm assertion exists to test.
+
+**"It moves too fast" is two different measurements and you must take both.** Perceived
+speed is amplitude times frequency. The first such report here really was frequency — a
+wrong length scale putting every gust mode at 3.9-19.3 Hz. The second, phrased in almost
+the same words a few hours later, was amplitude at an *unchanged* frequency: 0.53 to 0.60
+Hz, peak slew 4.15 to 0.67. The frequency could not have moved, because it was the stem's
+own resonance and only the forcing had changed. Pattern-matching the second report onto
+the first would have sent the search straight back into the spectrum.
+
 ## Performance
 
 Leaf and margin simulations dominate. Grow a small **library** and share it —

@@ -216,10 +216,14 @@ Do not start by writing a solver. In order, each step measurable before the next
    ranks three ways out, and the first is #5's petiole radius, which arrived here from a
    completely different direction and is now blocking rather than cosmetic.
 
-   Also: the weather was wrong for a *stated* reason. The field shipped at 1.2 m/s,
-   which the Beaufort scale defines as the force where "leaves do not move". It is now
-   4.0 — force 3, "leaves and small twigs in constant motion" — which is a cited choice
-   rather than a taste, and eleven times the pressure.
+   Also: the weather was wrong for a *stated* reason, and then wrong again in the other
+   direction. The field shipped at 1.2 m/s, which the Beaufort scale defines as the force
+   where "leaves do not move"; it went to 4.0, force 3, "leaves and small twigs in
+   constant motion"; and it settled at **2.5, upper-middle of force 2**, after a person
+   watched force 3 and said it was too much weather for a close study of one specimen.
+   All three are cited rather than tasted, which is the property worth keeping — but the
+   choice between the bands is composition and the eye is the instrument for it. It is a
+   slider in the UI now, and `tools/clip.mjs` and `tools/jitter.mjs` both take it.
 3. **Done (2026-07-26), and the precomputed check earned its keep three times over.**
    `39a_stem.js`: each axis a chain of damped rotational springs with a coupled mass
    matrix, stiffness `EI/ds` on the radii Murray's law grew, loaded by the canopy's own
@@ -241,10 +245,12 @@ Do not start by writing a solver. In order, each step measurable before the next
    and stopwatch agree to under 1%, and the first mode moves 0.3% across 4 to 24
    stations, so `stations` is a resolution rather than a dial.
 
-   **Force-3 sway is emergent and spans fiftyfold**: Spiral Ossuary 2.12 world units,
-   Ember Creeper 1.41, Abyssal Frond 1.26, Cathedral Fern 0.43, Sun Coral 0.20, and
-   Hoarfrost, Nightglass and Sulphur Rosette essentially nothing. "If a fix makes Sulphur
-   Rosette's stem sway, that fix is wrong" — it does not.
+   **Sway is emergent and spans eightyfold**, at the shipped 2.5 m/s: Spiral Ossuary
+   0.82 world units, Ember Creeper 0.58, Abyssal Frond 0.40, Cathedral Fern 0.17, Sun
+   Coral 0.08, and Hoarfrost, Nightglass and Sulphur Rosette essentially nothing. "If a
+   fix makes Sulphur Rosette's stem sway, that fix is wrong" — it does not. The spread is
+   the same at every wind speed, because it comes from r⁴ and canopy area rather than
+   from the weather.
 
    **Gravity stays in the rest shape, and that is arithmetic rather than convenience.**
    `delta = 1.545 g / omega^2` with nothing free in it, so at 1.26 Hz a Cathedral Fern's
@@ -294,10 +300,12 @@ Do not start by writing a solver. In order, each step measurable before the next
    shader has nothing to pretend about, and `pal.sway` is gone with it.
 
    One number worth keeping: the hand-tuned displacement peaked at about 0.34 world units
-   at the top of a Cathedral Fern, and the physics, asked independently, says 0.43.
-   Whoever tuned that sine had a good eye — amplitude was never what was wrong with it.
-   What was wrong is that it ran on wall-clock time at a frequency no plant has, and the
-   simulation could not see it.
+   at the top of a Cathedral Fern; the physics, asked independently, said 0.43 at force 3
+   and says 0.17 at the force 2 it settled on. Whoever tuned that sine had a good eye and
+   it landed between the two — amplitude was never what was wrong with it. What was wrong
+   is that it ran on wall-clock time at a frequency no plant has, and the simulation could
+   not see it. Note that matching *peaks* between a sine and a gusty wind overshoots
+   badly: the sine sits near its extremes and the gusts sit near the middle.
 
 ### Decide this up front rather than discovering it in the docs
 

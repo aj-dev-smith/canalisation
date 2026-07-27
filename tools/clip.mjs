@@ -1,6 +1,6 @@
 // RECORD THE PIECE MOVING.
 //
-//   node tools/clip.mjs out/dir [seconds] [species] [seed] [speed] [waitSeconds] [w] [h]
+//   node tools/clip.mjs out/dir [seconds] [species] [seed] [speed] [waitSeconds] [w] [h] [uRef]
 //
 // Every other tool here takes a still, and tools/README.md is emphatic that a still
 // cannot judge motion. This one records a webm, which can be: it is the only artifact
@@ -22,7 +22,10 @@ import { platform } from 'os';
 import { readdirSync, renameSync, mkdirSync } from 'fs';
 
 const [, , outDir = 'shots/clip', secs = '8', species, seed, speed = '1', wait = '20',
-  vw = '1000', vh = '1000'] = process.argv;
+  vw = '1000', vh = '1000', uRef] = process.argv;
+// `uRef` overrides the shipped wind speed. The weather is the one composition choice in
+// the mechanics and there is no experiment that settles it, so the way it gets settled
+// is a pair of clips at two speeds and a person watching them.
 // A SQUARE-ISH FRAME, on purpose. The camera fits the specimen's height into 66% of the
 // frame, so on a 16:10 viewport a tall narrow plant is correctly framed vertically and
 // lost horizontally. These are tall narrow plants.
@@ -50,6 +53,7 @@ if (species) {
 }
 // Grow at speed with the panel collapsed, then settle to the recording speed. The wait
 // is in real seconds and is what decides which act of the life cycle gets filmed.
+if (uRef !== undefined) await pg.evaluate(u => window.__app.setWind(+u), uRef);
 await pg.evaluate(() => { window.__app.speedMul = 4; document.body.classList.add('collapsed'); });
 await pg.waitForTimeout(+wait * 1000);
 await pg.evaluate((sp) => { window.__app.speedMul = +sp; }, speed);
