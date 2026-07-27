@@ -181,6 +181,35 @@ node build.js && node test/smoke.mjs
 - Long-lived branches drift badly against a generated artifact. Rebase on `main`
   often, or keep them short.
 
+### Stacked PRs: retarget the whole stack BEFORE merging anything
+
+A long session produces a stack — #16 → #17 → #18 → #19, each based on the one
+below. Two things bite, and both bit on 2026-07-27:
+
+1. **Merging the bottom PR with `--delete-branch` auto-closes the one above it**,
+   and GitHub will not let you reopen a PR whose base branch no longer exists. The
+   commits are safe on their own branch, but the PR — its body, its numbers, its
+   review — is gone, and the only way back is a fresh PR. Recovering #17 cost a
+   round trip that retargeting first would have avoided entirely.
+2. **CI does not fire when you change a PR's base.** The workflow triggers on
+   `pull_request` into `main`, and a base change is not one of the default actions,
+   so the required check never runs and the PR sits at `BLOCKED` with nothing
+   pending. Close and reopen it to fire `reopened`; there are no new commits, so a
+   push will not do it.
+
+So the order that works:
+
+```bash
+gh pr edit 17 --base main && gh pr edit 18 --base main && gh pr edit 19 --base main
+# then, per PR, bottom up: close/reopen to fire CI, wait, merge WITHOUT --delete-branch
+git push origin --delete <branch>       # only once everything has landed
+```
+
+Also worth knowing: **CI only fires on PRs into `main`**, so while a stack is stacked
+the upper PRs show no checks at all. That is not "CI passed", it is "CI never ran" —
+run `node build.js && node test/smoke.mjs && node test/stem.mjs && node test/wind.mjs`
+locally before believing an upper PR is green.
+
 [CONTRIBUTING.md](CONTRIBUTING.md) is the outward-facing version of this for people
 arriving from GitHub, and it leads with the one rule above.
 
