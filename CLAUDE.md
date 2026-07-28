@@ -129,6 +129,12 @@ Two checks cannot be done in Node at all.
 a picture. A wrong wind still looks like wind, so this is not a class of bug the eye can
 catch.
 
+`tools/cull.mjs` asks **whether the scene is hiding leaves the viewer can see**. The
+occlusion cull in `buildScene` is the only thing in the piece that removes a whole
+organ, and it is switched on by the director rather than by anything you can see in a
+still. Run it after touching the camera director, the focus modes or that cull. It
+seeds every specimen so a before and an after look at the same eight plants.
+
 `tools/jitter.mjs` asks **where the movement's energy sits in frequency**, sampling the
 drawn state at frame rate. Run it after anything that touches the air, the stem or the
 petiole. It exists because the wind field passed all twenty-four of its own assertions
@@ -272,10 +278,11 @@ of its bugs were found, and none would have been visible on screen.
 
 ## The honest state of it
 
-*Current as of 2026-07-27. The most recent landings are the wind field (#16), the
-falsified second rotational plane (#17), the bending stem (#18) and the weather being
-turned down to force 2 (#19); if the git log has moved a long way past those, treat the
-specifics below as needing a re-read rather than as fact.*
+*Current as of 2026-07-28. The most recent landings are the wind field (#16), the
+falsified second rotational plane (#17), the bending stem (#18), the weather being
+turned down to force 2 (#19) and the occlusion cull no longer hiding leaves the viewer
+can see (#23); if the git log has moved a long way past those, treat the specifics
+below as needing a re-read rather than as fact.*
 
 **The life cycle is complete.** A specimen germinates, leafs, flowers, fruits,
 ripens, and then **finishes**: it runs out of growing points, drains each blade

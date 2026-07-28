@@ -1503,3 +1503,110 @@ easy "restoration" for a future session to make. A sine of amplitude A spends mo
 time near ±A; a gusty wind that occasionally reaches A spends most of its time near zero.
 Equal peaks therefore read as very unequal business, and the physical version is the
 busier one. Match how it reads, not how far it goes.
+
+## Leaves blinking in and out, and four wrong suspects first (2026-07-27)
+
+AJ, getting ready to post: *"leaves snap in and out of existence… at any given
+point maybe up to 25% of the leaves are hidden until you move, then a new set pop
+up and disappear."*
+
+**Measured, on the shipped build, seeded so the specimens are the same run to
+run:** the default species hides **28.8% of its canopy on average and 50% at the
+peak**, with a blade changing visibility about four times a second. So the report
+was not an impression; it was the number.
+
+### What it was not, and how each was ruled out
+
+Worth writing down, because all four are the obvious guesses and all four are
+wrong, and two of them cost the most time.
+
+- **Vertex buffers saturating.** `Buffers` drops geometry silently when full, and
+  `50_geom.js` already documents that failure. Peak occupancy over a whole life
+  cycle is **28.5% of the triangle buffer and 44.8% of the line buffer, saturated
+  on 0 of 8339 frames.** Not it.
+- **Non-finite geometry.** A NaN vertex is not rasterised, so a leaf can vanish
+  from the picture while every count stays identical — which is exactly the
+  symptom. Scanned every float of both buffers every frame across a full life
+  cycle: **zero non-finite values, and no organ ever more than 0.50 bounding-box
+  spans off centre.** Not it.
+- **Backface culling / one-sided normals.** `CULL_FACE` is never enabled and
+  `MESH_FS` flips `N` toward the eye. Not it.
+- **Depth precision.** `DEPTH_COMPONENT24`, near 0.05, far 400. Not it.
+
+The measurement that killed all four at once: freeze growth, wind and camera on a
+leafy specimen, then orbit. **The triangle count held at 61884 for 1202 consecutive
+frames** and nothing was hidden. Whatever removes leaves is not always on — it is
+switched on by something.
+
+### What it is
+
+The occlusion cull in `buildScene`. It clears the line of sight to whatever the
+director is pointing at, so a leaf does not fill the frame during a close-up, and
+it is the only thing in the piece that removes a whole organ. It engages only when
+the director has a `subject` (flower, fruit, organ) or a `focus` (apex, leaf) —
+which is most of the film's second half.
+
+Two defects, both about *when* rather than *whether*:
+
+**1. It was a cylinder, and it should have been a cone.** The test compared an
+organ's world-space distance from the sight line against the subject's world-space
+clearance, at any depth. But "in the way" is a statement about *angle*: a leaf a
+tenth of the way along the sight line only has to be a tenth as far off it to
+cover the same part of the frame. As a cylinder, a leaf right by the lens got the
+same generous clearance as one touching the subject, so the cull cleared canopy
+that was nowhere near the subject on screen. Scaling the radius by `t / cullDist`
+makes it a cone with the radius at the subject unchanged — so the thing the
+clearance exists for still happens.
+
+**2. The clearance opened on the cut, not on arrival.** This one is embarrassing,
+because the fix was already in the same function. The `leaf` close-up ramps its
+clearance in on apparent blade size, with a comment explaining that engaging at
+full width from the wide shot "made half the plant vanish in one frame, before
+anything had moved". The director's own shots had the identical defect and nobody
+joined it up. Measured across all eight species: every shot type sits above **0.41**
+apparent size once settled, while the apex and fruit cuts start around **0.21** —
+so `smoothstep(0.20, 0.38)` on the same quantity is shut at the cut and fully open
+by the time the shot is. Apex flips in the first 0.4s of a shot went to **zero**.
+
+### And a third, which is a plain bug
+
+`takeOver()` — what a pointerdown on the canvas calls — cleared the director's
+`subject` but not its `focus`. Since the auto-framer is locked out while the
+viewer drives, the *only* remaining effect of that stale focus was to keep the
+occlusion cull running, measuring a sight line to a growing tip nobody was looking
+at any more. Grab the camera during an apex shot and orbit, and the clearance
+sweeps through the plant: **80% of blades hidden at the peak, a blade flipping
+every few frames, and it never ends** because `giveBack()` only fires after the
+viewer goes idle.
+
+The asymmetry is visible in the harness output: `subject after takeOver(): null
+(cleared)` / `focus after takeOver(): apex (survived)`. Focus now records who asked
+for it — `focusByDirector` — and `takeOver()` drops the film's and keeps the
+viewer's, so pressing "into the cells" still works.
+
+After: **0% hidden, 0 flips, over 1324 frames of orbiting.**
+
+### What is still true, and is a directorial question rather than a bug
+
+On the default species the apex close-up still clears about **24%** of the canopy,
+and that is the cull doing its job: the camera sits ~2.2 units off a meristem
+surrounded by leaves 4.3 units long, so those blades genuinely are between the
+lens and the subject. Clearing them is why the clearance exists. Whether an apex
+shot *should* be composed that tightly is a question for whoever is cutting the
+film, not something to solve by weakening the test.
+
+The residue that is still worth someone's time: coming *out* of a culling shot,
+every hidden blade returns in a single frame, because `cullFrom` goes null on the
+cut. The cull cannot be a fade — the forward pass writes depth, so a blade dimmed
+to black still hides what is behind it — so the only route is to let the clearance
+decay over a few hundred ms after the shot ends rather than switch off.
+
+### The lesson
+
+The tell was **the triangle count**. It was constant across every frame where
+leaves were vanishing, which rules out most of the plausible causes in one number
+and points straight at the one mechanism that decides *not to build* geometry. Four
+hypotheses were tested against the wrong instrument first — screen diffs, buffer
+occupancy, NaN scans — and one cheap counter would have gone straight there.
+
+`tools/cull.mjs` is that counter, kept.

@@ -386,6 +386,21 @@ from slow patterning near the wavelength limit, so it takes a geometric conditio
 too. Details in JOURNAL.md and TUNING.md.
 
 ## 5. Smaller things
+- **Leaves still return in one frame when a culling shot ends (2026-07-28).** The
+  occlusion cull was hiding up to half the canopy and blinking as the shot moved;
+  #23 fixed the three defects behind that and `tools/cull.mjs` is the harness. What
+  it did not fix: `cullFrom` goes null on the cut, so every hidden blade reappears
+  on a single frame. **It cannot be a fade** — the forward pass writes depth, so a
+  blade dimmed to black still hides what is behind it, which is the entire job. The
+  route is to let the clearance *decay* over a few hundred ms after the shot ends
+  rather than switch off, which means holding the departing subject for that long.
+  Cheap, and the last visible pop in the piece.
+
+  Also open, and a directorial question rather than a bug: the apex close-up still
+  clears about **24%** of a Cathedral Fern's canopy, because the camera sits ~2.2
+  units off a meristem surrounded by leaves 4.3 units long and those blades really
+  are in front of the subject. If that reads as too aggressive, the fix is how the
+  shot is composed, not a weaker cull.
 - **Organ petioles dominate a flower close-up — and this is no longer cosmetic.**
   At flower scale the stalks are fat opaque tubes and the petals read as blades bolted
   to scaffolding. Reproduce with
