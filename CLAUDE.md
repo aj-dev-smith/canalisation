@@ -278,10 +278,11 @@ of its bugs were found, and none would have been visible on screen.
 
 ## The honest state of it
 
-*Current as of 2026-07-27. The most recent landings are the wind field (#16), the
-falsified second rotational plane (#17), the bending stem (#18) and the weather being
-turned down to force 2 (#19); if the git log has moved a long way past those, treat the
-specifics below as needing a re-read rather than as fact.*
+*Current as of 2026-07-28. The most recent landings are the wind field (#16), the
+falsified second rotational plane (#17), the bending stem (#18), the weather being
+turned down to force 2 (#19) and the occlusion cull no longer hiding leaves the viewer
+can see (#23); if the git log has moved a long way past those, treat the specifics
+below as needing a re-read rather than as fact.*
 
 **The life cycle is complete.** A specimen germinates, leafs, flowers, fruits,
 ripens, and then **finishes**: it runs out of growing points, drains each blade
