@@ -27,20 +27,57 @@ export class Buffers {
     // from rather than a guess, and the headroom above it is deliberate — the
     // close-up modes multiply one blade's cost by a large factor and the garden
     // does not switch them off. Uploads are subarrays, so headroom costs nothing
-    // per frame; only the allocation, which is 32MB apiece.
+    // per frame; only the allocation.
+    //
+    // THE CELL VIEW MOVED TWO OF THESE, and `test/views.mjs` is where the new
+    // numbers come from. Worst reachable case is a garden of eight in `cells`:
+    //
+    //   natural  220k triangles   145k ribbons        221 points
+    //   cells      0              316k ribbons     528k points
+    //   flux       0              318k ribbons     173k points
+    //   field      0                1.5k ribbons   362k points
+    //
+    // so the point buffer went from 1<<19 — where ONE specimen at cell
+    // resolution came to 90-109% of it, which is why nobody had tried this — to
+    // 1<<23, and the line buffer from 1<<23 to 1<<24. Both are set from that
+    // table with the same headroom rule as before.
+    //
+    // Note which way the cost went. A whole plant of cells is not what strains
+    // this; the NEEDLES are, at 42 floats per six-vertex ribbon against a
+    // point's 7. ROADMAP 11 would emit a ribbon as 12 floats and expand it in
+    // the vertex shader, which takes the worst case back under 1<<23 and hands
+    // back most of the CPU cost as well. Until then this is 128MB of buffer.
     this.tri = new Float32Array(1 << 23);   // pos3 nrm3 col3 emis1 = 10
     this.triN = 0;
     // Lines still get the most traffic: every vein and every needle is a
     // six-vertex camera-facing ribbon, so a refined blade full of committed
     // cells is by far the heaviest thing the scene ever builds.
-    this.line = new Float32Array(1 << 23);  // pos3 col3 emis1 = 7
+    this.line = new Float32Array(1 << 24);  // pos3 col3 emis1 = 7
     this.lineN = 0;
-    this.pt = new Float32Array(1 << 19);    // pos3 col3 size1 = 7
+    this.pt = new Float32Array(1 << 23);    // pos3 col3 size1 = 7
     this.ptN = 0;
+    // AND A FULL BUFFER SAYS SO NOW.
+    //
+    // Dropping geometry silently is a documented pitfall here that has cost two
+    // debugging sessions, and the advice for spotting it was to notice
+    // `renderer.nTri` sitting on a round number — which is a thing you have to
+    // already suspect in order to check. Every emitter returns early when there
+    // is no room; each of them ticks a counter instead of returning quietly, so
+    // the HUD and `test/views.mjs` can both say "this picture is missing
+    // things" rather than leaving it to be inferred.
+    this.dropped = { tri: 0, line: 0, pt: 0 };
   }
-  reset() { this.triN = 0; this.lineN = 0; this.ptN = 0; }
+  reset() {
+    this.triN = 0; this.lineN = 0; this.ptN = 0;
+    this.dropped.tri = 0; this.dropped.line = 0; this.dropped.pt = 0;
+  }
+  // did this frame lose anything?
+  saturated() {
+    const d = this.dropped;
+    return d.tri || d.line || d.pt ? { ...d } : null;
+  }
   vert(p, n, c, e) {
-    if (this.triN + 10 > this.tri.length) return;
+    if (this.triN + 10 > this.tri.length) { this.dropped.tri++; return; }
     const t = this.tri, i = this.triN;
     t[i] = p[0]; t[i + 1] = p[1]; t[i + 2] = p[2];
     t[i + 3] = n[0]; t[i + 4] = n[1]; t[i + 5] = n[2];
@@ -57,7 +94,7 @@ export class Buffers {
   }
   // a plain 2-vertex glowing line (needles are thin by nature)
   seg2(a, b, c, e) {
-    if (this.lineN + 42 > this.line.length) return;
+    if (this.lineN + 42 > this.line.length) { this.dropped.line++; return; }
     v3sub(_sa, b, a);
     v3sub(_sb, VIEW, a);
     v3norm(_sc, v3cross(_sc, _sa, _sb));
@@ -68,17 +105,52 @@ export class Buffers {
 
   // A vein drawn as a camera-facing ribbon rather than a hairline, so its
   // order — how much traffic it carries — is legible as thickness.
+  //
+  // WRITTEN STRAIGHT INTO THE BUFFER, and worth knowing how little that bought.
+  // This used to build the four corners as four JS arrays and hand them to
+  // `gv` — 88,000 short-lived arrays a frame at one specimen's vein count,
+  // 316,000 at the needle count a whole plant wants. It looked like the
+  // bottleneck and it was not: 8.38ms to 8.15ms on `natural`, 12.97 to 12.10 on
+  // the cell view. V8 handles short-lived arrays better than the arithmetic
+  // suggested, and the guess cost an hour that a measurement would not have.
+  //
+  // What a ribbon actually costs is the 42 floats it writes. Measured per
+  // primitive on a Cathedral Fern: a ribbon 188ns, a point 37ns — a ratio of
+  // 5.1 against a data ratio of 6, so this is memory traffic and essentially
+  // irreducible in this vertex format. The way out is a format change, not a
+  // micro-optimisation: two vertices and a width attribute expanded in the
+  // vertex shader would be 14 floats instead of 42. That is written up in
+  // ROADMAP 11, because it would speed up every view at once and it is what
+  // stands between the cell view and a whole garden of it.
+  //
+  // Kept anyway. It is not slower, it allocates nothing on the hottest path in
+  // the piece, and the measurement above is the useful part.
   ribbon(a, b, side, w0, w1, c, e) {
-    if (this.lineN + 42 > this.line.length) return;
-    const a0 = [a[0] - side[0] * w0, a[1] - side[1] * w0, a[2] - side[2] * w0];
-    const a1 = [a[0] + side[0] * w0, a[1] + side[1] * w0, a[2] + side[2] * w0];
-    const b0 = [b[0] - side[0] * w1, b[1] - side[1] * w1, b[2] - side[2] * w1];
-    const b1 = [b[0] + side[0] * w1, b[1] + side[1] * w1, b[2] + side[2] * w1];
-    this.gv(a0, c, e); this.gv(a1, c, e); this.gv(b1, c, e);
-    this.gv(a0, c, e); this.gv(b1, c, e); this.gv(b0, c, e);
+    const l = this.line;
+    let i = this.lineN;
+    if (i + 42 > l.length) { this.dropped.line++; return; }
+    const ax0 = a[0] - side[0] * w0, ay0 = a[1] - side[1] * w0, az0 = a[2] - side[2] * w0;
+    const ax1 = a[0] + side[0] * w0, ay1 = a[1] + side[1] * w0, az1 = a[2] + side[2] * w0;
+    const bx0 = b[0] - side[0] * w1, by0 = b[1] - side[1] * w1, bz0 = b[2] - side[2] * w1;
+    const bx1 = b[0] + side[0] * w1, by1 = b[1] + side[1] * w1, bz1 = b[2] + side[2] * w1;
+    const c0 = c[0], c1 = c[1], c2 = c[2];
+    // a0 a1 b1, then a0 b1 b0
+    l[i] = ax0; l[i + 1] = ay0; l[i + 2] = az0;
+    l[i + 3] = c0; l[i + 4] = c1; l[i + 5] = c2; l[i + 6] = e; i += 7;
+    l[i] = ax1; l[i + 1] = ay1; l[i + 2] = az1;
+    l[i + 3] = c0; l[i + 4] = c1; l[i + 5] = c2; l[i + 6] = e; i += 7;
+    l[i] = bx1; l[i + 1] = by1; l[i + 2] = bz1;
+    l[i + 3] = c0; l[i + 4] = c1; l[i + 5] = c2; l[i + 6] = e; i += 7;
+    l[i] = ax0; l[i + 1] = ay0; l[i + 2] = az0;
+    l[i + 3] = c0; l[i + 4] = c1; l[i + 5] = c2; l[i + 6] = e; i += 7;
+    l[i] = bx1; l[i + 1] = by1; l[i + 2] = bz1;
+    l[i + 3] = c0; l[i + 4] = c1; l[i + 5] = c2; l[i + 6] = e; i += 7;
+    l[i] = bx0; l[i + 1] = by0; l[i + 2] = bz0;
+    l[i + 3] = c0; l[i + 4] = c1; l[i + 5] = c2; l[i + 6] = e; i += 7;
+    this.lineN = i;
   }
   point(p, c, s) {
-    if (this.ptN + 7 > this.pt.length) return;
+    if (this.ptN + 7 > this.pt.length) { this.dropped.pt++; return; }
     const t = this.pt, i = this.ptN;
     t[i] = p[0]; t[i + 1] = p[1]; t[i + 2] = p[2];
     t[i + 3] = c[0]; t[i + 4] = c[1]; t[i + 5] = c[2]; t[i + 6] = s;
@@ -164,7 +236,11 @@ const P0 = v3(), P1 = v3(), P2 = v3(), E1 = v3(), E2 = v3(), NN = v3();
 const _pa = v3(), _pb = v3(), _pc = v3(), _e1 = v3(), _e2 = v3(), _nn = v3();
 const _q0 = v3(), _q1 = v3(), _q2 = v3(), _q3 = v3(), _side = v3();
 const _n0 = v3(), _n1 = v3(), _n2 = v3(), _n3 = v3(), _cc = v3(), _fc = v3();
-const _c0 = v3(), _c1 = v3(), _senC = v3(), _senV = v3();
+const _c0 = v3(), _c1 = v3(), _c2 = v3(), _senC = v3(), _senV = v3();
+// One scratch colour for every point emitted. `B.point` copies out of it
+// immediately, so a fresh array per cell bought nothing and cost an allocation
+// on the hottest path in the piece — see the note on `Buffers.ribbon`.
+const _pcol = v3();
 let _gridPos = new Float32Array(0), _gridNrm = new Float32Array(0), _gridCol = new Float32Array(0);
 
 function triNormal(a, b, c) {
@@ -260,8 +336,27 @@ const VEIN_LAG = 0.45;
 // `sen` (0..1) is the organ's senescence. It is deliberately NOT stored on the
 // leaf: blades come from a shared library, so several organs draw the same
 // `leaf` object and one of them dying must not drain the others.
-export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV, dev, fade, sen) {
+// `opts` is how a VIEW asks for part of a blade rather than all of it, and it
+// exists because the two halves of this function are drawn in different passes
+// with different rules. The lamina is opaque triangles that write depth; the
+// vasculature is additive ribbons that do not. So a view that wants to see
+// through the organism cannot get there by fading the surface to black —
+// black tissue still occludes, which is the whole reason the occlusion cull in
+// `buildScene` had to be a skip rather than a fade. It has to not be drawn.
+//
+//   surface  draw the lamina at all
+//   veinMul  scale on the vasculature's emission
+//
+// Absent, both are on and this is exactly the function that shipped.
+export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV, dev, fade, sen, opts) {
   const o = leaf.o;
+  const wantSurface = !opts || opts.surface !== false;
+  const veinMul = opts && opts.veinMul !== undefined ? opts.veinMul : 1;
+  if (veinMul <= 0 && !wantSurface) return;
+  // Hoisted from below the quad loop, where it used to sit. Nothing about a
+  // blade can be drawn before its outline closes, and the grid was being built
+  // and thrown away in that window.
+  if (!leaf.margin || !leaf.margin.mature) return;
   MU = MU || 22; MV = MV || 10;
   dev = dev === undefined ? 1 : dev;
   fade = fade === undefined ? 1 : fade;
@@ -275,6 +370,11 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
     const b = clamp(Math.round((v / o.aspect * 0.5 + 0.5) * (res - 1)), 0, res - 1);
     return vdf[a * res + b];
   };
+
+  // The vasculature does not need the grid, so a view that has asked for veins
+  // alone skips the whole build. That is most of the blade's cost: 22x10 quads
+  // of finite-differenced normals and per-vertex senescence.
+  if (!wantSurface) { bladeVeins(); return; }
 
   // Build the surface once as a grid, with normals from finite differences of
   // the parametrisation. Smooth normals rather than per-facet ones: a frond is
@@ -331,7 +431,6 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
   const gcC = (i, j) => { const k = (i * NV + j) * 4; _cc[0] = col[k]; _cc[1] = col[k + 1]; _cc[2] = col[k + 2]; return _cc; };
   const gcE = (i, j) => col[(i * NV + j) * 4 + 3];
 
-  if (!leaf.margin || !leaf.margin.mature) return;
   for (let i = 0; i < MU; i++) {
     const u0 = i / MU, u1 = (i + 1) / MU;
     for (let j = 0; j < MV; j++) {
@@ -355,7 +454,14 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
     }
   }
 
+  if (veinMul > 0) bladeVeins();
+
   // --- the vasculature, as ribbons whose width is the vein's order ----------
+  //
+  // A function declaration so it can be reached from above as well, without
+  // moving a hundred lines of reasoning around. It closes over everything the
+  // grid build already computed and computes none of it itself.
+  function bladeVeins() {
   const lift = len * 0.010 + 0.005;
   const segs = leaf.veins;
   if (segs) {
@@ -483,8 +589,9 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
       v3norm(_side, v3cross(_side, _e1, _e2));
       if (!isFinite(_side[0])) continue;
       const w = Math.max(wFloor, base * (0.25 + s.w * 1.35));
-      B.ribbon(_q0, _q1, _side, w, w, _senV, vglow * (0.06 + s.w * 0.52) * relight);
+      B.ribbon(_q0, _q1, _side, w, w, _senV, vglow * (0.06 + s.w * 0.52) * relight * veinMul);
     }
+  }
   }
 }
 
@@ -511,10 +618,138 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
 // selects for, and it is the same quantity `bake()` keeps a vein by.
 // `test/lamina.mjs` prints all of these; rerun it before retuning anything here.
 // ---------------------------------------------------------------------------
-export function laminaCells(B, leaf, frame, len, wid, pal, curl, ripple, t, detail, dev) {
+// WHAT A FROZEN LEAF'S TISSUE IS DOING, WORKED OUT ONCE.
+//
+// `Leaf.step()` returns on its first line once `mature` is set, so `F.a`, `F.P`
+// and `F.J` never move again. And a specimen wears a LIBRARY of leaves — five
+// by default — across a hundred-odd organs. So the per-cell neighbour loop
+// below was solving the same problem a hundred times over for five distinct
+// inputs, every frame: six hypots, a division and a normalisation per cell per
+// organ, for an answer that had been fixed since the blade baked.
+//
+// Measured over a Cathedral Fern's 118 organs, drawing every one of them:
+//
+//   cells only        3.70 ms live      0.42 ms baked     8.8x
+//   cells + needles  19.99 ms live      3.86 ms baked     5.2x
+//
+// which is the difference between a whole plant at cell resolution being
+// impossible and it being CHEAPER than the lamina-and-veins view it replaces
+// (11.59 ms over the same organs). The bake itself is 1.66 ms, once.
+//
+// Two things are baked beyond the mechanism, and they are what removes the last
+// per-cell work. `w` is the blade's material half-width at this cell, and `ew`
+// the same at the far end of its needle — both frozen with the margin — so a
+// GROWN organ places a cell with no outline lookup at all. That is exact rather
+// than approximate: `matAt` clamps to 1 everywhere once `dev` reaches 1, which
+// makes `wAt` and `wMat` the same function, cancels the ratio in `toSurface`,
+// and sends `furlAt` to zero. A mature cell's material coordinate IS its
+// surface coordinate. A blade still unfurling has none of that and takes the
+// live path, which is also what the close-up's replay is.
+//
+// Cached on the leaf exactly like `_maxJ` was, and for the same reason. Nothing
+// here is a new spatial prior: every number in the table is read off tissue the
+// solver settled, and `test/views.mjs` asserts the table reproduces the live
+// path cell for cell.
+function cellTable(leaf) {
+  const F = leaf.F, n = F.n;
+  // Normalise traffic against this leaf's own busiest wall — the midrib at the
+  // petiole, where everything funnels. Linear, not log: the hierarchy spans
+  // three orders of magnitude and log-compressing it puts the median at 0.43
+  // of full brightness, which is the whole point of the picture washed out.
+  let maxJ = 1e-6;
+  for (let i = 0; i < n; i++) {
+    const d = F.deg[i], off = i * MAXNB;
+    for (let k = 0; k < d; k++) if (F.J[off + k] > maxJ) maxJ = F.J[off + k];
+  }
+  const T = {
+    n, maxJ,
+    x: new Float32Array(n), y: new Float32Array(n), w: new Float32Array(n),
+    g: new Float32Array(n), h: new Float32Array(n),
+    ux: new Float32Array(n), uy: new Float32Array(n),
+    ex: new Float32Array(n), ey: new Float32Array(n), ew: new Float32Array(n),
+    fn: new Float32Array(n), flux: new Float32Array(n),
+  };
+  // THE ORDER THE TABLE IS STORED IN IS THE LEVEL OF DETAIL.
+  //
+  // `veins` is sorted by traffic so a distant blade keeps a PREFIX and the cull
+  // is a count rather than a search. Cells want the same trick and a different
+  // key: there is no hierarchy among cells to keep the top of, and taking the
+  // busiest ones would degrade a receding blade into its own vasculature, which
+  // is a picture of something else. What a distant blade should lose is
+  // RESOLUTION, evenly.
+  //
+  // So the table is stored in a stable hashed order, which makes any prefix a
+  // spatially uniform sample of the lattice. Striding the lattice directly is
+  // the obvious alternative and it aliases badly — the field is stored row
+  // major, so a stride near `nv` samples a single column and the blade comes
+  // out as stripes. Hashing is immune to that, and being fixed at bake time it
+  // keeps the SAME cells frame to frame, without which a drifting sample
+  // shimmers.
+  //
+  // A second hash, deliberately not `h`. Sharing one would tie a cell's spark
+  // phase to its cull rank, and every cell a distant blade kept would then be
+  // sparking in unison.
+  const order = new Int32Array(n);
+  const rank = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    order[i] = i;
+    rank[i] = (Math.imul(F.id[i] ^ 0x7f4a7c15, 0x85ebca6b) >>> 8) / 16777216;
+  }
+  // Float64Array has no comparator sort, and this runs once per library leaf
+  const idx = Array.from(order).sort((a, b) => rank[a] - rank[b]);
+  const ms = 1 / Math.max(4, leaf.o.nu);
+  for (let s = 0; s < n; s++) {
+    const i = idx[s];
+    const x = F.x[i], y = F.y[i];
+    T.x[s] = x; T.y[s] = y;
+    T.w[s] = leaf.wSide(clamp(x, 0, 1), y < 0 ? -1 : 1);
+    // Measured max ~8-10 per blade, but the median cell sits near 0.8 — the
+    // sources at the teeth are an order of magnitude above the lamina. A 0.7
+    // exponent leaves that median at a fifth of the range and most of the
+    // sheet reads as empty space; 0.55 keeps every cell present as a cell
+    // while the sources still obviously blaze.
+    T.g[s] = Math.pow(clamp(F.a[i] / 8, 0, 1), 0.55);
+    T.h[s] = (Math.imul(F.id[i] ^ 0x2545f491, 0x9e3779b1) >>> 8) / 16777216;
+    const d = F.deg[i], off = i * MAXNB;
+    let px = 0, py = 0, tot = 0, flux = 0;
+    for (let k = 0; k < d; k++) {
+      const e = off + k, j = F.nbr[e];
+      const dx = F.x[j] - x, dy = F.y[j] - y;
+      const el = Math.hypot(dx, dy) || 1;
+      const w = F.P[e];
+      px += w * dx / el; py += w * dy / el; tot += w;
+      if (F.J[e] > flux) flux = F.J[e];
+    }
+    // A cell with no needle still has a point drawn for it — `ux`/`uy` of zero
+    // is how the draw knows to skip only the mechanism. Dropping such cells
+    // from the table instead would quietly delete tissue from the picture.
+    if (tot <= 1e-6) continue;
+    px /= tot; py /= tot;
+    const pol = Math.hypot(px, py);
+    if (pol < 0.02) continue;
+    const ux = px / pol, uy = py / pol;
+    const fn = clamp(flux / maxJ, 0, 1);        // traffic: the vein channel
+    T.ux[s] = ux; T.uy[s] = uy; T.fn[s] = fn; T.flux[s] = flux;
+    // a needle reaches at most a little under two cells, so a committed file
+    // reads as a continuous line without every cell overwriting its neighbour
+    const nl = ms * (0.30 + fn * 1.40);
+    const ex = x + ux * nl, ey = y + uy * nl;
+    T.ex[s] = ex; T.ey[s] = ey;
+    T.ew[s] = leaf.wSide(clamp(ex, 0, 1), ey < 0 ? -1 : 1);
+  }
+  return T;
+}
+
+// `opts.cells` at 0 suppresses the discs and keeps the mechanism, which is the
+// whole of the flux view: what a cell is DOING, without the cell. `detail` is
+// unchanged in meaning — how much of that mechanism is showing — and a view
+// simply sets a floor on it where the close-up sets it by distance.
+export function laminaCells(B, leaf, frame, len, wid, pal, curl, ripple, t, detail, dev, sen, opts) {
   const F = leaf.F;
   if (!F || !F.n || !leaf.margin || !leaf.margin.mature) return;
+  const wantCells = !opts || opts.cells !== 0;
   dev = dev === undefined ? 1 : dev;
+  sen = sen || 0;
   const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
   const lift = len * 0.013 + 0.006;      // clear of the blade, and of the veins
   // Size everything off the lattice the tissue was actually simulated on, not
@@ -525,12 +760,14 @@ export function laminaCells(B, leaf, frame, len, wid, pal, curl, ripple, t, deta
   const ms = 1 / Math.max(4, leaf.o.nu);
   const cw = len * ms;
 
-  // Normalise traffic against this leaf's own busiest wall — the midrib at the
-  // petiole, where everything funnels. Linear, not log: the hierarchy spans
-  // three orders of magnitude and log-compressing it puts the median at 0.43
-  // of full brightness, which is the whole point of the picture washed out.
+  // The table is only correct for tissue that has stopped moving AND for an
+  // organ whose outline is fully open — see `cellTable`. Everything else falls
+  // through to the live path, unchanged.
+  const T = (leaf.mature && dev >= 1)
+    ? (leaf._cells || (leaf._cells = cellTable(leaf)))
+    : null;
   let maxJ = leaf._maxJ || 0;
-  if (!maxJ || !leaf.mature) {
+  if (!T && (!maxJ || !leaf.mature)) {
     maxJ = 1e-6;
     for (let i = 0; i < F.n; i++) {
       const d = F.deg[i], off = i * MAXNB;
@@ -546,62 +783,158 @@ export function laminaCells(B, leaf, frame, len, wid, pal, curl, ripple, t, deta
     return bladePoint(out, frame, u, tt * wAt(u, y), len, wid, curl, ripple,
       lift + furlAt(u));
   };
+  // the same map, with the half-width already known — see `cellTable`
+  const atW = (u, y, w0, out) => {
+    if (w0 < 1e-3) return null;
+    const tt = clamp(y / w0, -1, 1);
+    return bladePoint(out, frame, u, tt * w0, len, wid, curl, ripple, lift);
+  };
 
-  for (let i = 0; i < F.n; i++) {
-    const x = F.x[i], y = F.y[i];
+  // HOW MANY CELLS THIS BLADE CAN RESOLVE.
+  //
+  // The same law as the vein cull in `blade()`, stated for an area instead of a
+  // length: constant cell density per screen pixel, anchored so that a blade at
+  // the hero's framing distance keeps every cell it has. It is needed for the
+  // same reason too — the point shader clamps `gl_PointSize` up to one pixel, so
+  // a sub-pixel cell is not drawn small, it is drawn at full price at a size
+  // that says nothing. Twenty thousand of those per background specimen is what
+  // a whole-plant cell view would otherwise cost to draw a grey smear.
+  //
+  // AND THE LIGHT IS CONSERVED, which is the invariant a receding surface has to
+  // obey. A kept cell stands for `1/shrink` cells, so its drawn AREA is scaled
+  // by that and its radius by the square root — total emitted area, and
+  // therefore surface brightness per pixel, does not move with distance. This is
+  // exactly the `relight` argument in `blade()`, and it is simpler here only
+  // because a point's area is one number rather than two tables.
+  //
+  // The prefix is uniform by construction (see `cellTable`), so no ordering
+  // question arises: `nDraw` cells is a `shrink` sample of the lattice wherever
+  // it is cut. A blade with no table is still unfurling, which means small,
+  // short-lived and near the camera — left alone, exactly as `blade()` leaves a
+  // half-grown network alone.
+  let nDraw = T ? T.n : F.n, cellMul = 1, mech = 1;
+  if (T && PXR > 0) {
+    const dEye = Math.hypot(frame.o[0] - VIEW[0], frame.o[1] - VIEW[1], frame.o[2] - VIEW[2]);
+    const dRef = MINW / (1.5 * PXR);
+    if (dEye > dRef) {
+      const shrink = (dRef / dEye) * (dRef / dEye);
+      nDraw = Math.max(1, Math.round(T.n * shrink));
+      cellMul = Math.sqrt(T.n / nDraw);
+    }
+    // AND THE MECHANISM FADES WITH WHETHER IT CAN BE RESOLVED AT ALL.
+    //
+    // A needle is a line whose whole content is its DIRECTION. Below about a
+    // pixel long it has none — it is a dot that costs 42 floats, and a whole
+    // background specimen's worth of them is what pins the line buffer when a
+    // garden is drawn in the cell view. So it fades out over the pixel or two
+    // where the direction stops being legible.
+    //
+    // This is not a new rule, which is why it is allowed to be a fade where the
+    // vein cull had to conserve light. The close-up has ALWAYS faded the
+    // mechanism up with proximity — `detail` is that ramp — on the argument
+    // that you cannot see a cell's pumps from across the room. A view does not
+    // override that argument, it moves where the ramp starts; this is the same
+    // ramp continuing to apply underneath, per blade, which is the only place
+    // it can be evaluated. And unlike a vein, a needle is not surface: nothing
+    // integrates it at distance, so there is no light to fold anywhere.
+    //
+    // THE THRESHOLD IS PERCEPTUAL AND WAS SET BY LOOKING, which makes it one of
+    // the few numbers in this file that could not have been worked out first.
+    // At the geometric answer — a needle is legible once it is longer than a
+    // pixel or two — a whole specimen's forty-six thousand needles came out at
+    // three pixels each over a plant covering some two hundred thousand, so
+    // every pixel carried two or three of them and the additive pass turned the
+    // entire organism into a white blur. `cells` and `flux` were
+    // indistinguishable at that framing, which is the tell: a channel that
+    // cannot be told apart from another one is not showing anything.
+    //
+    // The right question is not whether ONE needle is longer than a pixel. It
+    // is whether the FIELD of them is sampled well enough to read as
+    // directions, and that needs the cells several pixels apart, not touching.
+    // Hence 2.5 to 10 rather than 0.8 to 2.4. A specimen framed whole now shows
+    // its cells and its veins; walk in and the pumps come up.
+    const nlPx = ms * (0.30 + 1.40) * len / (PXR * dEye);
+    mech = clamp((nlPx - 2.5) / 7.5, 0, 1);
+  }
+  const dim = 1 - detail * 0.42;
+  for (let i = 0; i < nDraw; i++) {
+    const x = T ? T.x[i] : F.x[i], y = T ? T.y[i] : F.y[i];
     // no tissue exists ahead of the wave of maturation, so no cells either
     if (x > dev + 0.04) continue;
-    if (!toSurface(x, y, _c0)) continue;
+    if (!(T ? atW(x, y, T.w[i], _c0) : toSurface(x, y, _c0))) continue;
 
-    // Measured max ~8-10 per blade, but the median cell sits near 0.8 — the
-    // sources at the teeth are an order of magnitude above the lamina. A 0.7
-    // exponent leaves that median at a fifth of the range and most of the
-    // sheet reads as empty space; 0.55 keeps every cell present as a cell
-    // while the sources still obviously blaze.
-    const a = clamp(F.a[i] / 8, 0, 1);
-    const g = Math.pow(a, 0.55);
-    const dim = 1 - detail * 0.42;
-    B.point(_c0, [lerp(pal.cell0[0], pal.cell1[0], g) * dim,
-      lerp(pal.cell0[1], pal.cell1[1], g) * dim,
-      lerp(pal.cell0[2], pal.cell1[2], g) * dim],
-      cw * 0.62 * (1 + g * 0.5));
-
-    if (detail < 0.02) continue;
-
-    // --- which way this cell has aimed its pumps ----------------------------
-    const d = F.deg[i], off = i * MAXNB;
-    let px = 0, py = 0, tot = 0, flux = 0;
-    for (let k = 0; k < d; k++) {
-      const e = off + k, j = F.nbr[e];
-      const ex = F.x[j] - x, ey = F.y[j] - y;
-      const el = Math.hypot(ex, ey) || 1;
-      const w = F.P[e];
-      px += w * ex / el; py += w * ey / el; tot += w;
-      if (F.J[e] > flux) flux = F.J[e];
+    let g, ux, uy, fn, flux, hash;
+    if (T) {
+      g = T.g[i]; ux = T.ux[i]; uy = T.uy[i];
+      fn = T.fn[i]; flux = T.flux[i]; hash = T.h[i];
+    } else {
+      g = Math.pow(clamp(F.a[i] / 8, 0, 1), 0.55);
+      hash = (Math.imul(F.id[i] ^ 0x2545f491, 0x9e3779b1) >>> 8) / 16777216;
+      // --- which way this cell has aimed its pumps --------------------------
+      const d = F.deg[i], off = i * MAXNB;
+      let px = 0, py = 0, tot = 0;
+      flux = 0;
+      for (let k = 0; k < d; k++) {
+        const e = off + k, j = F.nbr[e];
+        const dx = F.x[j] - x, dy = F.y[j] - y;
+        const el = Math.hypot(dx, dy) || 1;
+        const w = F.P[e];
+        px += w * dx / el; py += w * dy / el; tot += w;
+        if (F.J[e] > flux) flux = F.J[e];
+      }
+      ux = 0; uy = 0; fn = 0;
+      if (tot > 1e-6) {
+        px /= tot; py /= tot;
+        const pol = Math.hypot(px, py);
+        if (pol >= 0.02) { ux = px / pol; uy = py / pol; fn = clamp(flux / maxJ, 0, 1); }
+      }
     }
-    if (tot <= 1e-6) continue;
-    px /= tot; py /= tot;
-    const pol = Math.hypot(px, py);
-    if (pol < 0.02) continue;
-    const ux = px / pol, uy = py / pol;
-    const fn = clamp(flux / maxJ, 0, 1);         // traffic: the vein channel
 
-    // a needle reaches at most a little under two cells, so a committed file
-    // reads as a continuous line without every cell overwriting its neighbour
+    // A CELL DRAINS ON ITS OWN TRAFFIC. `blade()` spares the tissue against a
+    // vein using `vdf`, the distance field of the baked network; a cell has the
+    // quantity that field was derived from, so it uses that directly. Same
+    // physical statement — the vein is the route the nitrogen leaves by, so it
+    // and the tissue on it work until the withdrawal is over — off a better
+    // measurement. Squared for the same reason `blade()` squares `dd`: green
+    // islands are tight to the vein, and the raw channel spares half the blade.
+    const sl = sen > 0 ? clamp((sen - fn * fn * VEIN_LAG) / (1 - VEIN_LAG), 0, 1) : 0;
+    const cr = lerp(pal.cell0[0], pal.cell1[0], g);
+    const cg = lerp(pal.cell0[1], pal.cell1[1], g);
+    const cb = lerp(pal.cell0[2], pal.cell1[2], g);
+    if (wantCells) {
+      if (sl > 0) senesceTint(_senC, cr, cg, cb, sl); else v3set(_senC, cr, cg, cb);
+      v3set(_pcol, _senC[0] * dim, _senC[1] * dim, _senC[2] * dim);
+      B.point(_c0, _pcol, cw * 0.62 * (1 + g * 0.5) * cellMul);
+    }
+
+    if (detail * mech < 0.02 || (ux === 0 && uy === 0)) continue;
+    // dead tissue has stopped pumping, so the mechanism goes out with it
+    const live = 1 - sl;
+    if (live < 0.02) continue;
+
     const nl = ms * (0.30 + fn * 1.40);
-    if (!toSurface(x + ux * nl, y + uy * nl, _c1)) continue;
-    B.seg2(_c0, _c1, pal.pin, detail * (0.10 + fn * 2.1));
+    const ex = T ? T.ex[i] : x + ux * nl, ey = T ? T.ey[i] : y + uy * nl;
+    if (!(T ? atW(ex, ey, T.ew[i], _c1) : toSurface(ex, ey, _c1))) continue;
+    B.seg2(_c0, _c1, pal.pin, detail * mech * (0.10 + fn * 2.1) * live);
 
     // --- auxin actually on the move ----------------------------------------
+    //
+    // The spark rides the DRAWN needle rather than the curved surface under it.
+    // It used to be mapped through `toSurface` at an intermediate material
+    // point, which put it on the lamina while the needle it is travelling along
+    // is a straight world-space segment — so on a curled blade the spark drifted
+    // off its own needle. Interpolating the two endpoints is both cheaper and
+    // the more consistent picture.
     if (fn > 0.02) {
-      const h = (Math.imul(F.id[i] ^ 0x2545f491, 0x9e3779b1) >>> 8) / 16777216;
-      const ph = (t * 0.00055 * (0.5 + Math.min(2.5, flux * 0.08)) + h) % 1;
-      if (toSurface(x + ux * nl * (0.15 + ph * 1.25), y + uy * nl * (0.15 + ph * 1.25), _c1)) {
-        const fade = Math.sin(ph * Math.PI);
-        const b2 = detail * fade * clamp(fn * 2.4, 0, 1.6);
-        B.point(_c1, [pal.spark[0] * b2, pal.spark[1] * b2, pal.spark[2] * b2],
-          cw * 0.30 * (0.6 + fade));
-      }
+      const ph = (t * 0.00055 * (0.5 + Math.min(2.5, flux * 0.08)) + hash) % 1;
+      const s = 0.15 + ph * 1.25;
+      _c2[0] = _c0[0] + (_c1[0] - _c0[0]) * s;
+      _c2[1] = _c0[1] + (_c1[1] - _c0[1]) * s;
+      _c2[2] = _c0[2] + (_c1[2] - _c0[2]) * s;
+      const fade = Math.sin(ph * Math.PI);
+      const b2 = detail * mech * fade * clamp(fn * 2.4, 0, 1.6) * live;
+      v3set(_pcol, pal.spark[0] * b2, pal.spark[1] * b2, pal.spark[2] * b2);
+      B.point(_c2, _pcol, cw * 0.30 * (0.6 + fade));
     }
   }
 }
@@ -641,15 +974,13 @@ export function meristemDome(B, m, frame, scale, pal, t, detail) {
     toWorld(sx, sy, sz, p);
     const a = clamp(F.a[i] / 6, 0, 1);
     const g = Math.pow(a, 0.7);
-    const col = [
-      lerp(pal.cell0[0], pal.cell1[0], g),
-      lerp(pal.cell0[1], pal.cell1[1], g),
-      lerp(pal.cell0[2], pal.cell1[2], g),
-    ];
     // at close range the cells must read as separate cells, not as one lamp
     const shrink = 1 - dt * 0.42;
     const dim = 1 - dt * 0.45;
-    B.point(p, [col[0] * dim, col[1] * dim, col[2] * dim],
+    v3set(_pcol, lerp(pal.cell0[0], pal.cell1[0], g) * dim,
+      lerp(pal.cell0[1], pal.cell1[1], g) * dim,
+      lerp(pal.cell0[2], pal.cell1[2], g) * dim);
+    B.point(p, _pcol,
       scale * (0.052 + 0.018 * F.sz[i]) * (1 + g * 0.55) * shrink);
 
     if (dt < 0.02) continue;
@@ -688,8 +1019,8 @@ export function meristemDome(B, m, frame, scale, pal, t, detail) {
       toWorld(fx, fy, domeH(Math.min(1, rr)) * scale, q);
       const fade = Math.sin(ph * Math.PI);
       const b2 = dt * fade * clamp(flux * 0.5, 0, 1.6);
-      B.point(q, [pal.spark[0] * b2, pal.spark[1] * b2, pal.spark[2] * b2],
-        scale * 0.035 * (0.6 + fade));
+      v3set(_pcol, pal.spark[0] * b2, pal.spark[1] * b2, pal.spark[2] * b2);
+      B.point(q, _pcol, scale * 0.035 * (0.6 + fade));
     }
   }
 }
@@ -727,5 +1058,83 @@ export function fruitShell(B, fr, origin, scale, pal) {
     B.vert(a, na, col(f[0]), em(f[0]));
     B.vert(b, nb, col(f[1]), em(f[1]));
     B.vert(c, nc, col(f[2]), em(f[2]));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// THE FRUIT, AT CELL RESOLUTION
+//
+// The ovary wall is not a mesh that happens to have colours on it. It is a
+// `CellField` on an icosphere running the same solver as the meristem and the
+// blade — which is the claim `35_fruit.js` is making and which the shell,
+// drawn as a closed opaque surface, hides. Every vertex of that shell is a
+// cell holding auxin, and `ripe` is a wave that crossed it.
+//
+// So there is nothing to invent here: it is `laminaCells` on the third
+// topology. Auxin is the colour, ripeness warms it, and an ovule glows through
+// from inside because it is a seed and the flesh is no longer in the way.
+// ---------------------------------------------------------------------------
+// `ripeTint` is how much of the ripening wave is allowed to show as HUE. It is
+// a knob because the instrument view has a real objection to it: ripeness and
+// auxin concentration are two different fields, and putting one on the colour
+// ramp that is measuring the other is the sort of thing an instrument must not
+// do. Measured on a garden in `field`, 3,380 of 36,049 points were still
+// carrying a species' ripe red into a view whose whole claim is that the
+// species palette has been discarded. At zero a ripe fruit and a green one look
+// alike in there, which is correct: the quantity being displayed is the same.
+export function fruitCells(B, fr, origin, scale, pal, detail, ripeTint) {
+  const rt = ripeTint === undefined ? 0.75 : ripeTint;
+  const P = fr.pos, R = fr.ripe, F = fr.F;
+  if (!P || !F) return;
+  if (!fr._glow || fr._glow.length !== fr.n) {
+    fr._glow = new Float32Array(fr.n);
+    for (const sd of fr.seeds) fr._glow[sd] = 1;
+  }
+  const G = fr._glow;
+  // one cell of an icosphere subdivided to `n` vertices, in world units
+  const cw = scale * 2.2 / Math.sqrt(Math.max(12, fr.n));
+  const dim = 1 - (detail || 0) * 0.42;
+  let maxA = 1e-6;
+  for (let i = 0; i < fr.n; i++) if (F.a[i] > maxA) maxA = F.a[i];
+  for (let i = 0; i < fr.n; i++) {
+    _c0[0] = origin[0] + P[i * 3] * scale;
+    _c0[1] = origin[1] + P[i * 3 + 1] * scale;
+    _c0[2] = origin[2] + P[i * 3 + 2] * scale;
+    const g = Math.pow(clamp(F.a[i] / maxA, 0, 1), 0.55);
+    const t = clamp(R[i], 0, 1);
+    // auxin picks the cell out of the wall; ripeness carries it to the ripe
+    // colour, which is the same two-ended ramp `fruitShell` reads
+    const r = lerp(lerp(pal.cell0[0], pal.cell1[0], g), pal.fruit1[0], t * rt);
+    const gg = lerp(lerp(pal.cell0[1], pal.cell1[1], g), pal.fruit1[1], t * rt);
+    const b = lerp(lerp(pal.cell0[2], pal.cell1[2], g), pal.fruit1[2], t * rt);
+    const sd = G[i];
+    v3set(_pcol, (r + sd * 0.55) * dim, (gg + sd * 0.45) * dim, (b + sd * 0.30) * dim);
+    B.point(_c0, _pcol, cw * (0.55 + g * 0.45 + sd * 0.5));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// THE STEM, WITHOUT THE STEM IN THE WAY
+//
+// `tube()` is opaque geometry that writes depth, which is right for a plant
+// standing in light and wrong for a view whose whole proposition is that you
+// can see through the organism. The lines and points passes are additive with
+// depth writes off, so an axis emitted as ribbons occludes nothing and the
+// tissue behind it comes through.
+//
+// The radii are unchanged — they are what Murray's law grew, and they are the
+// one thing about a stem this project does derive. Nothing is added: this is
+// the same polyline at the same thickness, in the pass that does not hide
+// things.
+// ---------------------------------------------------------------------------
+export function stemRibbon(B, pts, radii, col, glow) {
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    v3sub(_e1, b, a);
+    v3sub(_e2, VIEW, a);
+    v3norm(_side, v3cross(_side, _e1, _e2));
+    if (!isFinite(_side[0])) continue;
+    B.ribbon(a, b, _side, Math.max(MINW, radii[i - 1]), Math.max(MINW, radii[i]),
+      col, glow);
   }
 }

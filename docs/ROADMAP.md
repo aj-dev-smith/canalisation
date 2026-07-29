@@ -26,8 +26,15 @@ priority.** The list below is the priority.
    machinery, so the two are cheaper together than apart.
 5. **[#4, lamina tensioning its own margin](#4-lamina-pulls-on-its-own-margin)** — meaningful quality jump, meaningful work.
    Cheaper alongside #9, which needs a lamina that deforms for a different reason.
+6. **[#11, a ribbon as twelve floats instead of forty-two](#11-a-ribbon-as-twelve-floats)** — the one
+   piece of pure engineering on this list, and it now has numbers behind it. A ribbon
+   is 188ns and a point 37ns, a ratio of 5.1 against a data ratio of 6, so the line
+   pass is memory traffic and there is nothing to shave inside the current format.
+   Instancing it would speed up **every view at once**, hand back most of the 64MB the
+   line buffer had to grow to, and is what stands between the cell view and a whole
+   garden of it.
 
-#1, #2, #4b, #5, #7, #7b, #8 and #10 are **done**; their entries are kept for what
+#1, #2, #4b, #5, #7, #7b, #8, #10 and #12 are **done**; their entries are kept for what
 they record.
 
 ## 1. Life cycle and senescence — DONE (2026-07-26)
@@ -446,6 +453,79 @@ standing inside the garden. All three in PITFALLS.
 Not on this list, deliberately: **do not widen the vein cull to buy frames.** It is
 anchored so the subject keeps every ribbon it always had, and loosening that anchor
 is how the hero specimen quietly stops looking like itself.
+
+## 12. Render views, and a whole plant at cell resolution — DONE (2026-07-29)
+
+The renderer had been decoupled from the simulation for months and nothing had taken
+advantage of it. **A view now decides which channels of the simulation reach the
+screen**, and there are four: `natural` (what shipped), `cells` (every organ at the
+resolution the solver runs at), `flux` (the transport network with no surfaces at
+all) and `field` (auxin on one ramp, species palette and grade discarded). `VIEWS` in
+`70_app.js` is one table of weights read by one `drawSpecimen`; adding a fifth should
+be an entry, not a file.
+
+**The finding that made it possible.** A whole specimen already IS a cell field —
+9,417 cells on a Nightglass Parasol, 81,930 on an Abyssal Frond — and the point
+buffer held 74,898, so *one plant at cell resolution was 90-109% of it*. That is why
+this had never been tried, and it is a buffer size rather than a research problem.
+
+**The finding that made it affordable.** `Leaf.step()` returns on its first line once
+`mature` is set, so a grown leaf is frozen tissue; and a specimen wears a library of
+eight leaves across 118 organs. The per-cell neighbour loop in `laminaCells` was
+therefore solving the same problem a hundred times a frame for eight distinct inputs.
+Baked once per library leaf, **18.98ms to 6.81ms**. Two extra columns in the table —
+the blade's material half-width at the cell and at the end of its needle — remove the
+outline lookup as well, exactly rather than approximately, because `matAt` clamps to 1
+at full development and the ratio in `toSurface` cancels.
+
+**Two level-of-detail laws, both borrowed from the vein cull.** The table is stored in
+a stable hashed order, so a distant blade keeps a uniform prefix; drawn area is
+conserved to within 0.5% from 6 to 96 units, which is the same invariant `relight`
+obeys, stated for discs. And the needles fade out where the field of them stops being
+resolvable — that threshold is perceptual, was set by looking, and is the one number
+in this work that could not have been computed first.
+
+**What it cost honestly.** The cell view is **dearer** than the lamina it replaces —
+12.3ms against 8.3ms for one specimen — not cheaper, which is what the first version
+of `test/views.mjs` asserted on the strength of a prototype that skipped the
+material-to-world map. The bound that matters is that a whole plant at solver
+resolution is the same *order* as a plant drawn as surfaces. A garden of eight in
+`cells` is 316k ribbons and 528k points, which the buffers now hold, but it is
+CPU-bound long before it is buffer-bound. See #11.
+
+Three things this exposed rather than added, all in PITFALLS: a full buffer that
+dropped geometry silently and now counts it, a blade level of detail inlined in
+`buildScene` where no harness could reach it, and `fruitCells` carrying a species'
+ripe red into a view whose claim is that the palette has been discarded.
+
+## 11. A ribbon as twelve floats
+
+**Not started. Pure engineering, and the numbers are already in.**
+
+Every vein and every needle is a camera-facing ribbon: six vertices of seven floats,
+forty-two floats and one CPU cross-product-and-normalise per primitive. Measured on a
+Cathedral Fern a ribbon costs 188ns against a point's 37ns — a ratio of 5.1 against a
+data ratio of 6 — so the line pass is memory traffic, and rewriting the emitter to
+avoid four JS array allocations moved it by 3%. That was checked, and it is written
+up in JOURNAL because guessing cost an hour.
+
+The way out is a format change. WebGL2 has instanced arrays: emit **one** instance of
+twelve floats per ribbon (two endpoints, two widths, colour, emission), generate the
+six corners from `gl_VertexID`, and do the camera-facing expansion in the vertex
+shader — which also deletes the CPU cross product in `seg2` and in the vein loop.
+
+What it would buy, in order of how much it matters:
+
+1. **Every view gets faster at once**, because both the vasculature and the needles go
+   through it. The vasculature alone is 4.15ms of a Cathedral Fern.
+2. **The line buffer goes back to `1<<23`.** It had to grow to `1<<24` for a garden in
+   the cell view; 316k ribbons is 13.3M floats today and 3.8M instanced.
+3. It removes the one thing standing between `cells` and a whole garden of it.
+
+Risks worth knowing before starting: `tools/` reads `renderer.nLine` as a vertex count
+and several capture scripts print it; the bloom threshold is tuned against the current
+emission; and `test/veinlod.mjs` asserts a light conservation law that is stated in
+drawn width, which instancing does not change but does move the code that applies it.
 
 ## 3. Third phyllotaxis hypothesis
 A second length scale from structure rather than chemistry: two cell layers (L1

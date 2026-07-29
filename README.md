@@ -76,6 +76,31 @@ Where a plant is standing is scene composition rather than chemistry, and it is
 listed here rather than under "what emerges" for that reason. It says where a seed
 landed, not what grows out of it.
 
+## Four ways of looking at it
+
+The renderer is decoupled from the simulation, and a **view** decides which channels
+of it reach the screen. All four are the same plant, the same solver and the same
+frame; what changes is how much of what the simulation knows is allowed through.
+
+| | |
+|---|---|
+| **natural** | The plant standing in light. Opaque tissue, the canalised veins glowing inside it. |
+| **cells** | No lamina at all — every leaf, growing point and ovary wall drawn at the resolution the solver runs at. Each disc is one cell holding the auxin it actually holds; each needle is the wall it has loaded its pumps onto. About 67,000 of them on a Cathedral Fern. |
+| **flux** | The organism as one transport network. Drop the cells and keep what they are doing: veins and pump directions, nothing else. Tip, leaf and fruit end up in the same visual language, because they are the same solver on different geometry. |
+| **field** | An instrument rather than a picture. Auxin concentration on one ramp, the species colours discarded, no bloom or grade. Two species look alike in here — which is the point, since a species is only a parameter set. |
+
+The switch is in the bar along the bottom, or from the console:
+
+```js
+__app.setRenderView('cells')
+```
+
+**None of this adds anything to what is imposed.** Every channel was already being
+computed; a view turns it up or down, and the `cells` and `flux` views draw nothing
+that was not read straight off a cell field. The one thing a view decides that the
+simulation does not is *when a needle is too small to be worth drawing* — a statement
+about screen pixels rather than about a plant.
+
 ## Known limitations
 
 Read this before opening an issue about it:
@@ -132,9 +157,11 @@ src/38_shoot.js     falsified experiment, ships disabled. Whole-plant auxin tran
 src/39_fall.js      a blade in air, attached or shed. Quasi-steady plate aerodynamics
 src/39a_stem.js     the stem bends: axes as coupled damped cantilevers off EI
 src/40_plant.js     the organism: axes, branching, florigen, fruit set, senescence
-src/50_geom.js      simulation state -> triangles, ribbons, points
+src/50_geom.js      simulation state -> triangles, ribbons, points. Level of detail
+                    for veins and for cells lives here
 src/60_render.js    WebGL2: forward pass, bloom, depth of field, grade
-src/70_app.js       species presets, camera director, scene assembly
+src/70_app.js       species presets, camera director, scene assembly, and VIEWS --
+                    which channels of the simulation reach the screen
 src/80_main.js      UI wiring
 ```
 
@@ -151,7 +178,8 @@ print numbers and ASCII renderings in seconds, where a visual check takes minute
 and cannot tell a rendering bug from a simulation bug.
 
 ```bash
-node test/smoke.mjs                                # invariants; the CI gate
+node test/smoke.mjs                                # invariants; a CI gate
+node test/views.mjs                                # render views: cost, and is the cell table honest; a CI gate
 node test/pattern.mjs '{"T":40,"D":6}' '{"G":0}'   # is the tissue patterning at all?
 node test/phyllo.mjs                               # divergence angle statistics
 node test/margin.mjs                               # grow a leaf outline, ASCII silhouette
@@ -162,16 +190,19 @@ node test/wind.mjs                                 # the wind field: profile, gu
 node test/stem.mjs                                 # the stem as a beam: ringdown vs the analytic pre-flight
 ```
 
-**Three of them assert and exit non-zero: `smoke.mjs`, `wind.mjs` and `stem.mjs`.**
-The rest are diagnostic instruments — you read their output, they do not pass or
-fail. The split is deliberate: a *physical* claim can be checked against a number
-worked out beforehand, so it gets a real assertion, while an *emergent* quantity
-cannot be pinned down in a test without quietly turning it into an imposed one.
+**Six of them assert and exit non-zero: `smoke.mjs`, `views.mjs`, `wind.mjs`,
+`stem.mjs`, `petiole.mjs` and `veinlod.mjs`;** of those, `smoke` and `views` are the
+two wired into CI. The rest are diagnostic instruments — you read their output, they
+do not pass or fail. The split is deliberate: a *physical* claim can be checked
+against a number worked out beforehand, so it gets a real assertion, while an
+*emergent* quantity cannot be pinned down in a test without quietly turning it into
+an imposed one.
 
-`CLAUDE.md` lists all eighteen harnesses, plus the archived experiments kept runnable
-so their falsified results stay reproducible. Two checks cannot be done in Node at
-all — whether the emitted shader agrees with the simulation on a real GPU, and what
-frequencies the drawn scene is actually moving at — and live in `tools/`.
+`CLAUDE.md` lists all twenty-one harnesses, plus the archived experiments kept runnable
+so their falsified results stay reproducible. Some checks cannot be done in Node at
+all — whether the emitted shader agrees with the simulation on a real GPU, what
+frequencies the drawn scene is actually moving at, and whether a render view looks
+like anything — and live in `tools/`.
 
 ## Documentation
 

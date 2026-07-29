@@ -43,6 +43,58 @@ jobs:
       - name: Invariants
         run: node test/smoke.mjs
 
+      # The second gate. `smoke.mjs` imports `50_geom.js` and checks that a
+      # senescing blade is drawn differently from a live one; this checks the
+      # things that would be silently wrong EVERYWHERE at once — the ribbon
+      # emitter every vein and needle goes through, and the cell table that
+      # stands in for the live per-cell solve on a mature leaf. A green gate is a
+      # statement about what the gate imports, and this widens what it imports.
+      #
+      # Naming a species skips the garden of eight, which is 34s of the harness's
+      # 39s and is why gating the whole thing here took this job from 123s to 335s.
+      - name: Render views
+        run: node test/views.mjs 'Cathedral Fern'
+
+  # THE HEAVIEST CONFIGURATION THE SCENE CAN REACH, and the only one that can prove
+  # a buffer is not silently dropping geometry — the three buffer sizes in
+  # `50_geom.js` are set from exactly this measurement. A full buffer is a picture
+  # that is merely missing things, so this GATES and is not a diagnostic.
+  #
+  # ITS OWN JOB, so it runs concurrently with the invariants rather than inside
+  # them. That is worth 165s of wall clock: as a step on one matrix entry it took
+  # that job from 105s to 269s, and as a step on both it took it to 335s. Nothing
+  # here needs the build, so there is no reason for it to wait. Measured alongside:
+  # this job 174s, the invariants 160-175s, so the garden is entirely hidden.
+  #
+  # AND IT WAS WATCHED FAILING. A throwaway PR broke an assertion that only fires
+  # with more than one specimen — so the fast form beside the invariants still
+  # passed, this job went red, and the PR went BLOCKED. Do that again if you rewire
+  # any of it: a gate you have not watched fail is not a gate you know about.
+  #
+  # **THE JOB NAME BELOW IS A REQUIRED STATUS CONTEXT on `main`.** Renaming it
+  # silently stops it gating — GitHub matches required checks by name, and a
+  # required context that never reports blocks every PR instead. If you rename it,
+  # update branch protection in the same change:
+  #
+  #   gh api repos/OWNER/REPO/branches/main/protection/required_status_checks/contexts
+  #
+  # This is the mistake that was made once already, in the other direction: it was
+  # briefly a job while only `build + invariants` was required, so it ran, went red
+  # and let the merge through. A check that is not a required context is not a gate.
+  views-garden:
+    name: render views (a garden of eight)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # No build step: this reads `src/` directly, like every harness in `test/`.
+      - name: Every view, a stand of eight
+        run: node test/views.mjs
+
   diagnostics:
     name: diagnostics (informational)
     runs-on: ubuntu-latest

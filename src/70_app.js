@@ -9,7 +9,8 @@ import { Plant, SPECIES_DEFAULTS } from './40_plant.js';
 import { windField, WIND_DEFAULTS } from './37_wind.js';
 import { fallFrame, drawnBladeLen, petioleOf, BLADE_DRAWN } from './39_fall.js';
 import {
-  Buffers, tube, blade, laminaCells, meristemDome, fruitShell, setView, senesceTint,
+  Buffers, tube, blade, laminaCells, meristemDome, fruitShell, fruitCells,
+  stemRibbon, setView, senesceTint,
 } from './50_geom.js';
 import { Renderer } from './60_render.js';
 import {
@@ -264,6 +265,90 @@ const BASE_PAL = {
 };
 
 // ---------------------------------------------------------------------------
+// VIEWS: WHICH CHANNELS OF THE SIMULATION REACH THE SCREEN
+//
+// The renderer was decoupled from the simulation a long way before anything
+// took advantage of it, and what that decoupling actually bought is visible
+// here: the scene is assembled once, and a view decides which of the things the
+// solver knows get drawn. None of these is a different renderer. They are the
+// same `drawSpecimen` reading a different set of weights, which is deliberate —
+// four copies of a two-hundred-line function would drift apart inside a week,
+// and every real difference between these views IS a channel being turned up or
+// down. Adding a fifth should be an entry in this table, not a new file.
+//
+// What each one is FOR:
+//
+//   natural   a plant standing in light. Opaque lamina, canalised vasculature
+//             glowing inside it, occlusion and depth. What has always shipped.
+//
+//   cells     THE ORGANISM AS THE THING THAT WAS SIMULATED. No lamina at all:
+//             every leaf, every growing point and every ovary wall drawn at the
+//             resolution the solver runs at, ~67,000 cells on a Cathedral Fern,
+//             each one holding the auxin it actually holds and aiming the
+//             needle it actually aimed. The close-up treatment, applied to the
+//             whole plant at once instead of to one blade under a microscope.
+//
+//   flux      THE ORGANISM AS ONE TRANSPORT NETWORK. Drop the cells and keep
+//             what they are doing: the canalised veins and the PIN needles,
+//             nothing else. Meristem convergence, leaf venation and the ovary's
+//             ripening wave end up in one visual language, which is the actual
+//             thesis — `stepAuxin` on three topologies — rendered directly
+//             rather than argued for in a doc.
+//
+//   field     AN INSTRUMENT, NOT A PICTURE. Auxin concentration on one ramp,
+//             the species palette discarded, bloom and grade and defocus off.
+//             Nothing here is composed; it is for reading the field off the
+//             screen, and it is the view in which two species look alike —
+//             which is itself the point, since a species is a parameter set.
+//
+// `stemSolid: false` is the one flag that is not a weight, and it earns its
+// place: `tube()` is opaque geometry that writes depth, so in a view whose
+// proposition is that you can see THROUGH the organism the stem has to move to
+// the additive pass or it punches a plant-shaped hole in its own tissue.
+export const VIEWS = {
+  natural: {
+    label: 'natural',
+    lamina: 1, veins: 1, cells: 0, needles: 0, fruitSolid: true,
+    stem: 1, stemSolid: true, meristem: 1, spores: true,
+  },
+  cells: {
+    label: 'cells',
+    // the veins stay, faint. They are what the needles fall into, and without
+    // them a field of needles reads as milling about rather than as canalising
+    lamina: 0, veins: 0.45, cells: 1, needles: 0.85, fruitSolid: false,
+    // THE STEM IS A GHOST, NOT A PANE OF GLASS. A ribbon at the stem's own
+    // radius is its true silhouette, and at 0.55 it read as lit frosted glass
+    // laid across the tissue behind it — the one thing in these views that
+    // looked drawn rather than measured. The width is unchanged; only the
+    // brightness moved.
+    stem: 0.16, stemSolid: false, meristem: 1, spores: true,
+    pal: { bloom: 0.22, exposure: 0.90, dof: 0.55, vignette: 0.5 },
+  },
+  flux: {
+    label: 'flux',
+    lamina: 0, veins: 1.35, cells: 0, needles: 1, fruitSolid: false,
+    stem: 0.14, stemSolid: false, meristem: 1, spores: true,
+    pal: { bloom: 0.30, exposure: 1.06, dof: 0.55, vignette: 0.5 },
+  },
+  field: {
+    label: 'field',
+    lamina: 0, veins: 0, cells: 1, needles: 0, fruitSolid: false,
+    stem: 0.10, stemSolid: false, meristem: 1,
+    // drifting spores are scenery, and on an instrument they are noise that
+    // looks exactly like the signal — both are points of light
+    spores: false,
+    // ONE RAMP FOR EVERY SPECIES. `cell0`/`cell1` are the only palette entries
+    // the cell channel reads, so overriding those two is the whole instrument.
+    // Dark blue to white through the middle of the range: a sequential ramp
+    // that does not pretend to a hue the concentration does not have.
+    cellPal: { cell0: [0.03, 0.05, 0.16], cell1: [1.0, 0.98, 0.90] },
+    // ripeness is a different field from concentration — see `fruitCells`
+    ripeTint: 0,
+    pal: { bloom: 0.0, exposure: 1.0, grain: 0.0, vignette: 0.0, dof: 0.0 },
+  },
+};
+
+// ---------------------------------------------------------------------------
 // A SHED BLADE LETTING GO
 //
 // Abscission separates the organ at the base of its stalk, so what leaves is the
@@ -294,6 +379,7 @@ export class App {
       autoRot: true, idle: 0,
     };
     this.speciesName = 'Cathedral Fern';
+    this.viewName = 'natural';
     this.speedMul = 1;
     this.showMeristem = true;
     this.detail = 0;
@@ -373,6 +459,38 @@ export class App {
 
   // everything drawn this frame: the subject, then whatever else came up
   specimens() { return this.garden.length ? [this.hero, ...this.garden] : [this.hero]; }
+
+  // WHICH CHANNELS REACH THE SCREEN. Read through a method rather than off the
+  // field so an unknown name degrades to the shipped view instead of throwing
+  // in the middle of a frame — `app.viewName = 'cell'` from a console is a
+  // typo, not a reason to lose the scene.
+  // BLADE LEVEL OF DETAIL IS A PROPERTY OF THE SCENE, NOT OF A PLANT. This
+  // counted one specimen's organs, which was the same number while there was
+  // only one specimen; in a garden it would give every plant the mesh density
+  // it would have had alone, and the cost is what the frame has to carry all
+  // together.
+  //
+  // Lifted out of `buildScene` so a harness can drive it. It was inline, and
+  // `test/views.mjs` measuring a stand at the single-specimen density reported
+  // a garden 52% heavier than the one that ships — which is the exact failure
+  // mode of a harness keeping its own copy of a shipped constant, arriving by
+  // omission instead of by duplication.
+  setBladeLOD(specimens) {
+    let nOrg = 0, fen = false;
+    for (const S of specimens) {
+      nOrg += S.plant.organCount();
+      if ((S.sp.leafOpts.fenestrate || 0) > 0) fen = true;
+    }
+    this.bladeMU = nOrg > 42 ? (fen ? 17 : 13) : nOrg > 24 ? 18 : 22;
+    this.bladeMV = nOrg > 42 ? (fen ? 9 : 6) : nOrg > 24 ? 8 : 10;
+  }
+
+  view() { return VIEWS[this.viewName] || VIEWS.natural; }
+  setRenderView(name) {
+    if (!VIEWS[name]) return false;
+    this.viewName = name;
+    return true;
+  }
 
   // WHAT THE CAMERA HAS TO FIT. With one plant this was `plant.bounds()` and the
   // distinction did not exist; with a stand it has to be the clearing, or the
@@ -1175,20 +1293,16 @@ export class App {
     // only one specimen; in a garden it would give every plant the mesh density
     // it would have had alone, and the cost is what the frame has to carry all
     // together.
-    let nOrg = 0, fen = false;
-    for (const S of this.specimens()) {
-      nOrg += S.plant.organCount();
-      if ((S.sp.leafOpts.fenestrate || 0) > 0) fen = true;
-    }
-    this.bladeMU = nOrg > 42 ? (fen ? 17 : 13) : nOrg > 24 ? 18 : 22;
-    this.bladeMV = nOrg > 42 ? (fen ? 9 : 6) : nOrg > 24 ? 8 : 10;
+    this.setBladeLOD(this.specimens());
     // the subject first, with the clearance, then the rest of the clearing
     this.drawSpecimen(B, this.hero, cullFrom ? {
       keep: cullKeep, keepOrg: cullKeepOrg, r: cullR, rad: cullRad,
       dist: cullDist, dx: sdx, dy: sdy, dz: sdz,
     } : null);
     for (const S of this.garden) this.drawSpecimen(B, S, null);
-    for (const s of this.spores) B.point(s.p, pal.spore, s.s * 0.9);
+    if (this.view().spores !== false) {
+      for (const s of this.spores) B.point(s.p, pal.spore, s.s * 0.9);
+    }
     this.renderer.upload(B);
   }
 
@@ -1201,13 +1315,21 @@ export class App {
   // looking AT rather than through.
   drawSpecimen(B, S, cull) {
     const pal = S.pal;
+    const V = this.view();
+    // The cell channel is the only one a view repalettes, and it is read by
+    // three different organs — build it once rather than per blade.
+    const cpal = V.cellPal ? { ...pal, ...V.cellPal } : pal;
     for (const ax of S.plant.axes) {
       const nseg = ax.pts.length;
       if (nseg > 1) {
-        tube(B, ax.pts, ax.radii, 7, (t) => ({
-          c: [lerp(pal.stem0[0], pal.stem1[0], t), lerp(pal.stem0[1], pal.stem1[1], t), lerp(pal.stem0[2], pal.stem1[2], t)],
-          e: t > 0.93 && ax.alive ? (t - 0.93) * 5.0 * pal.glow : 0,
-        }));
+        if (V.stemSolid) {
+          tube(B, ax.pts, ax.radii, 7, (t) => ({
+            c: [lerp(pal.stem0[0], pal.stem1[0], t), lerp(pal.stem0[1], pal.stem1[1], t), lerp(pal.stem0[2], pal.stem1[2], t)],
+            e: t > 0.93 && ax.alive ? (t - 0.93) * 5.0 * pal.glow : 0,
+          }));
+        } else {
+          stemRibbon(B, ax.pts, ax.radii, pal.stem1, V.stem);
+        }
       }
       for (const org of ax.organs) {
         if (org.len < 0.02) continue;
@@ -1285,7 +1407,8 @@ export class App {
         // `39_fall.js`, so the drawn petiole and the sprung one were only equal by
         // coincidence. `petioleOf` is the one definition now, and the pipe model gives a
         // prismatic stalk, so there is one radius rather than two (ROADMAP 5).
-        tube(B, [a, b], [pt.r0, pt.r1], 5, () => ({ c: petC, e: 0 }));
+        if (V.stemSolid) tube(B, [a, b], [pt.r0, pt.r1], 5, () => ({ c: petC, e: 0 }));
+        else stemRibbon(B, [a, b], [pt.r0, pt.r1], petC, V.stem);
         if (!L || !L.margin || !L.margin.mature) continue;
         const fr = { o: b, x: oFr.x, y: oFr.y, z: oFr.z };
         // blades unfurl rather than appearing at full size
@@ -1338,8 +1461,14 @@ export class App {
         const mu = detL > 0 ? Math.round(lerp(this.bladeMU, L.o.nu, detL)) : this.bladeMU;
         const mv = detL > 0 ? Math.round(lerp(this.bladeMV, L.o.nv, detL)) : this.bladeMV;
         blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mu, mv, dev,
-          (1 - 0.82 * detL) * vis, sen);
-        if (detL > 0.004) {
+          (1 - 0.82 * detL) * vis, sen,
+          { surface: V.lamina > 0, veinMul: V.veins * vis });
+        // A VIEW SETS A FLOOR ON THE MICROSCOPE, it does not replace it. Walking
+        // the camera into a blade still fades the mechanism up the same way in
+        // every view — what a cell view changes is where that fade STARTS, which
+        // is everywhere at once instead of on the one watched blade.
+        const detV = Math.max(detL, V.needles);
+        if (V.cells > 0 || detV > 0.004) {
           if (detL > this.detail) this.detail = detL;
           // Cells and needles come from the replay while one is running, but
           // the VEINS above are always the real leaf's. Swapping the whole leaf
@@ -1349,7 +1478,8 @@ export class App {
           // it, rather than merely milling about.
           const rp = this._replay;
           const src = (rp && rp.of === L && rp.leaf.built) ? rp.leaf : L;
-          laminaCells(B, src, fr, bl, bl, pal, curl, ripple, this.t, detL, dev);
+          laminaCells(B, src, fr, bl, bl, cpal, curl, ripple, this.t, detV, dev,
+            sen, { cells: V.cells > 0 ? 1 : 0 });
         }
       }
       // the fruit, if this shoot got that far
@@ -1357,7 +1487,8 @@ export class App {
         const n2 = ax.pts.length;
         const tip = ax.pts[n2 - 1];
         const fs = S.sp.fruitScale * (ax.gen === 0 ? 1 : 0.72);
-        fruitShell(B, ax.fruit, tip, fs, pal);
+        if (V.fruitSolid) fruitShell(B, ax.fruit, tip, fs, pal);
+        else fruitCells(B, ax.fruit, tip, fs, cpal, V.needles, V.ripeTint);
       }
 
       // the growing point itself
@@ -1378,7 +1509,7 @@ export class App {
         const det = smoothstep(0.030, 0.105, mScale / Math.max(0.01, dEye));
         if (det > this.detail) this.detail = det;
         meristemDome(B, ax.meristem, { o: tip, x: dir, y: e2, z: e1 },
-          mScale, pal, this.t, det);
+          mScale, cpal, this.t, Math.max(det, V.needles) * V.meristem);
       }
     }
   }
@@ -1388,7 +1519,23 @@ export class App {
     const p = this.pal;
     const keep = p._bloom === undefined ? (p._bloom = p.bloom) : p._bloom;
     p.bloom = keep * (1 - 0.55 * this.detail);
+    // A VIEW MAY OVERRIDE THE GRADE, and the overrides are restored after the
+    // draw rather than written into the palette. The palette belongs to the
+    // specimen — it is built once in `makeSpecimen` and the species owns it —
+    // so a view that edited it in place would make switching views a
+    // destructive operation and switching back a lossy one. Saving and
+    // restoring around the one call is the same trick the bloom line above has
+    // used since the close-up shipped.
+    const V = this.view();
+    const over = V.pal;
+    let saved = null;
+    if (over) {
+      saved = {};
+      for (const k of Object.keys(over)) { saved[k] = p[k]; p[k] = over[k]; }
+      if (over.bloom !== undefined) p.bloom = over.bloom * (1 - 0.55 * this.detail);
+    }
     this.renderer.draw(this.cam, this.pal, this.t);
+    if (saved) for (const k of Object.keys(saved)) p[k] = saved[k];
     p.bloom = keep;
   }
 }

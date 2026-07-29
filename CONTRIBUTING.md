@@ -52,6 +52,29 @@ a Beaufort band and it is a slider in the page. If you find yourself arguing tha
 second constant deserves the same latitude, that is the point to open an issue instead
 of a PR.
 
+## The third category: a view shows a channel, it does not invent one
+
+The renderer is decoupled from the simulation, and `VIEWS` in `70_app.js` decides
+which channels of it reach the screen — the lamina, the vasculature, the cells, the
+pump directions. **Adding a view adds nothing to the imposed list, provided the
+channel already exists.** That is the whole test, and it is a sharp one: the `cells`
+and `flux` views draw nothing that was not read straight off a `CellField`.
+
+- **Add a view as an entry in the table, not as a second `drawSpecimen`.** Four
+  copies of that function would drift apart inside a week, and every real difference
+  between the existing views is a channel turned up or down.
+- **If you find yourself computing a position to draw, stop.** You have left the
+  third category and entered the first one, where the one rule applies.
+- **A view may decide what is too small to be worth drawing.** That is a statement
+  about screen pixels rather than about a plant, and it is the same category as the
+  vein cull. It still owes an argument: the two level-of-detail laws in `50_geom.js`
+  both conserve the light they would otherwise throw away, and `test/views.mjs`
+  asserts it.
+- **An instrument must not put two quantities on one channel.** The `field` view
+  displays auxin concentration and nothing else; a ripening wave sharing that colour
+  ramp made the picture less informative, not more. See `ripeTint` and the
+  2026-07-29 JOURNAL entry.
+
 ## Licensing of contributions
 
 Inbound is outbound: **contributions you submit are licensed under the
@@ -88,28 +111,43 @@ open canalisation.html
 
 ## Testing
 
-`test/smoke.mjs` is the CI gate. Its checks are deliberately loose — it verifies that
-the chemistry is alive and finite, not that any emergent quantity has a particular
+**Two harnesses gate a merge: `test/smoke.mjs` and `test/views.mjs`** — three required
+checks between them, since `views.mjs` runs both a fast form beside the invariants and
+a full one in its own concurrent job. (Naming a species — `node test/views.mjs 'Sun
+Coral'` — skips the garden of eight, which is almost all of its runtime. Do that while
+iterating.)
+
+`smoke.mjs` checks the simulation, and its checks are deliberately loose — it verifies
+that the chemistry is alive and finite, not that any emergent quantity has a particular
 value. Pinning down divergence angles or petal counts in a test would quietly convert
 an emergent result into an imposed one.
 
-**`test/wind.mjs`, `test/stem.mjs` and `test/petiole.mjs` also assert and exit
-non-zero**, and that is the second category above: a physical claim can be checked
-against a number worked out beforehand, so it gets a real assertion. `test/stem.mjs`
-compares the solver's eigenvalue, a stopwatch on a ringdown, and an analytic pre-flight
-computed before the solver existed. Run it before and after any change to the beam.
-`test/petiole.mjs` does the same for the stalk a leaf hangs off, and keeps its own second
-implementation of the model to check against — **a check whose reference is the thing
-being checked is not a check.**
+`views.mjs` checks the *renderer*, which is a different kind of claim and so gets a
+different kind of check. Nothing in it is emergent: a cached table either reproduces
+the computation it caches or it is a bug, a level of detail either conserves the light
+it claims to or it does not, and a buffer either has room or is silently dropping
+geometry. All of those are asserted.
+
+**`test/wind.mjs`, `test/stem.mjs`, `test/petiole.mjs` and `test/veinlod.mjs` also
+assert and exit non-zero** — nothing runs them for you, so run them yourself if you
+touch what they cover. That is the second category above: a physical claim can be
+checked against a number worked out beforehand, so it gets a real assertion.
+`test/stem.mjs` compares the solver's eigenvalue, a stopwatch on a ringdown, and an
+analytic pre-flight computed before the solver existed. Run it before and after any
+change to the beam. `test/petiole.mjs` does the same for the stalk a leaf hangs off,
+and keeps its own second implementation of the model to check against — **a check
+whose reference is the thing being checked is not a check.** `test/views.mjs` checks
+the ribbon emitter against the formulation it replaced for exactly that reason.
 
 Everything else in `test/` is a **diagnostic instrument**: it prints numbers and
 ASCII renderings and always exits 0. You read the output; it does not pass or fail.
 
-Two things cannot be checked in Node at all and live in `tools/`, which drives a real
+Some things cannot be checked in Node at all and live in `tools/`, which drives a real
 browser: whether the emitted shader agrees with the simulation on a GPU
-(`wind_check.mjs`), and what frequencies the drawn scene is actually moving at
-(`jitter.mjs`). Run the second after anything that touches the air, the stem or the
-petiole — **a green harness is a statement about internal consistency, not about
+(`wind_check.mjs`), what frequencies the drawn scene is actually moving at
+(`jitter.mjs`), and whether a render view looks like anything (`views_shot.mjs` — a
+view that only works at one framing is not finished). Run the second after anything
+that touches the air, the stem or the petiole — **a green harness is a statement about internal consistency, not about
 whether the answer resembles the thing being modelled.** The wind field passed all
 twenty-four of its own assertions while every gust mode sat between 3.9 and 19.3 Hz,
 which is not weather, and the first person to *watch* it said so immediately.
@@ -123,9 +161,10 @@ node test/flower2.mjs                              # full life cycle incl. axill
 node test/species.mjs                              # grow all eight species, print what each does
 node test/senesce.mjs                              # a dying blade, drawn: ASCII map of what still holds colour
 node test/fall.mjs                                 # a shed blade: is the fall a falling plate?
+node test/lamina.mjs                               # a blade at cell resolution: is there contrast to draw?
 ```
 
-`CLAUDE.md` lists the full set — there are nineteen of them, plus archived
+`CLAUDE.md` lists the full set — there are twenty-one of them, plus archived
 experiments kept runnable so their falsified results stay reproducible. **A negative
 result you cannot re-measure is just a story**, which is why `38_shoot.js`,
 `FALL_DEFAULTS.tiltPlane` and `FLAP_DEFAULTS.enabled` are in the tree and switched off

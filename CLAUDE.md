@@ -40,7 +40,7 @@ that cost.
 Tests are headless Node, no browser:
 
 ```bash
-node test/smoke.mjs                                # structural invariants; the CI gate
+node test/smoke.mjs                                # structural invariants; a CI gate
 node test/pattern.mjs '{"T":40,"D":6}' '{"G":0}'   # is the tissue patterning at all?
 node test/phyllo.mjs                               # divergence angle stats
 node test/margin.mjs                               # grow a leaf outline, ASCII silhouette
@@ -60,15 +60,17 @@ node test/wind.mjs '{"uRef":3}'                    # the wind field: profile, gu
 node test/stem.mjs                                 # the stem as a beam: ringdown vs the pre-flight, sway per species, convergence
 node test/petiole.mjs                              # the stalk as a pipe, and the hang as a force balance
 node test/veinlod.mjs                              # vein level of detail: what it saves, and the light it must conserve
+node test/views.mjs                                # render views: cost, cull laws, cell table; the other CI gate
 ```
 
-Four browser tools are about the scene rather than the simulation, and one of them
+Five browser tools are about the scene rather than the simulation, and one of them
 checks something no other harness here can:
 
 ```bash
 node tools/garden_shot.mjs shots 7        # grow a stand, three framings, buffer occupancy
 node tools/garden_hitch.mjs 7             # DOES PLANTING A GARDEN FREEZE THE TAB?
 node tools/veinlod_shot.mjs shots         # before/after for the vein LOD, on the hero
+node tools/views_shot.mjs shots           # every render view, wide and close
 GARDEN=7 node tools/clip.mjs shots/g 10   # record the stand moving
 ```
 
@@ -78,9 +80,31 @@ script in `tools/` passed — they all navigate, wait, and screenshot, so a froz
 tab and a busy one are the same script. It measures the gap between animation
 frames and exits non-zero past 250ms.
 
-**Five of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
-`petiole.mjs`, `veinlod.mjs`.** The
-rest print and never fail. That split is the project's epistemics in miniature — an
+**Six of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+`petiole.mjs`, `veinlod.mjs`, `views.mjs`.** Only **two of the six are wired into
+CI** and therefore gate a merge — `smoke.mjs` and `views.mjs`. The other four assert
+locally and *nothing runs them for you*, which is worth knowing before treating a
+green PR as evidence about the stem or the air. The rest print and never fail.
+
+`views.mjs` runs **twice**, and both runs gate. The invariants job names a species,
+which skips the garden of eight and costs 5s; a separate concurrent job — **`render
+views (a garden of eight)`** — runs the whole thing, so the expensive half costs no
+wall clock. There are now **three required status contexts** on `main`, not two.
+
+Two things about CI worth not relearning, both learned here:
+
+- **A check that is not a required status context is not a gate.** That job existed
+  for one push while only `build + invariants` was required, so it ran, went red and
+  would have let the merge through. GitHub matches required checks by NAME —
+  **renaming that job silently stops it gating**, and requiring a context that never
+  reports blocks every PR instead. The workflow says this where someone would look.
+  It is verified rather than assumed: a throwaway PR broke an assertion that only
+  fires with more than one specimen, the fast form passed, the garden job failed and
+  the PR went `BLOCKED`. **A gate you have not watched fail is not a gate you know
+  about** — which is the same argument as the rest of this file, applied to CI.
+- **The runner is about 4.5x slower than a laptop** on this CPU-bound work, not the
+  1.7x assumed. Estimate CI cost from a measurement, not a ratio: gating the garden
+  as a step took the invariants job from 105s to 269s against a predicted ~195s. That split is the project's epistemics in miniature — an
 *emergent* quantity must not be pinned down in a test, because that would convert it
 into an imposed one, while a *physical* claim can be checked against a number worked
 out beforehand and therefore should be. When you add something to the mechanics, work
@@ -266,13 +290,16 @@ src/39a_stem.js     THE STEM BENDS. Axes as coupled damped cantilevers off EI on
                     numbered, because it must load after the air and before the organism
 src/50_geom.js      simulation state -> triangles, ribbons, points; senescence colour.
                     Vein LEVEL OF DETAIL is here, and it is what lets the scene hold
-                    more than one plant
+                    more than one plant. So is the CELL TABLE, which is what lets a
+                    WHOLE PLANT be drawn at the resolution the solver runs at
 src/60_render.js    WebGL2: forward pass, bloom, depth of field, grade. No sway — the
                     geometry moves for real now
 src/70_app.js       species presets, camera director, scene assembly, App.setWind.
                     A SCENE IS A LIST OF SPECIMENS now, not one plant: makeSpecimen,
-                    drawSpecimen, plantGarden, sceneBounds
-src/80_main.js      UI wiring, including the wind slider
+                    drawSpecimen, plantGarden, sceneBounds. VIEWS lives here too --
+                    WHICH CHANNELS OF THE SIMULATION REACH THE SCREEN
+src/80_main.js      UI wiring: the wind slider, the view rail, and the only place a
+                    dropped-geometry report reaches a person
 ```
 
 `stepAuxin()` in `10_auxin.js` is the whole thesis. It runs on **any** topology —
@@ -313,9 +340,51 @@ of its bugs were found, and none would have been visible on screen.
 falsified second rotational plane (#17), the bending stem (#18), the weather being
 turned down to force 2 (#19), the occlusion cull no longer hiding leaves the viewer can
 see (#23), the petiole becoming a petiole — pipe-model radius and droop as a force
-balance (ROADMAP 5 + 7b) — and **the scene becoming a garden** (#25, ROADMAP 10); if the
-git log has moved a long way past those, treat the specifics below as needing a re-read
-rather than as fact.*
+balance (ROADMAP 5 + 7b) — **the scene becoming a garden** (#25, ROADMAP 10), and
+**the renderer getting views** (ROADMAP 12); if the git log has moved a long way past
+those, treat the specifics below as needing a re-read rather than as fact.*
+
+**THE RENDERER HAS FOUR VIEWS, AND THEY ARE ONE TABLE.** `VIEWS` in `70_app.js` says
+which channels of the simulation reach the screen — `natural` is what always shipped,
+`cells` draws every organ at the resolution the solver runs at with no lamina at all,
+`flux` keeps the veins and the pump directions and drops the surfaces, `field` puts
+auxin on one ramp with the species palette and the whole grade discarded. `app.setRenderView('cells')`
+from the console, or the segmented control in the bottom bar — **not** the controls
+sheet, which is where it started and which covered the plant whose view you were
+changing. **They are one
+`drawSpecimen` reading different weights, deliberately** — four copies of that function
+would drift apart inside a week, and every real difference between these views is a
+channel turned up or down. Adding a fifth should be an entry in the table.
+
+None of it adds a spatial prior and SCIENCE.md says so explicitly: every channel was
+already being computed, and a view turns it up or down.
+
+What made a whole plant at cell resolution possible was two measurements. **A specimen
+already IS a cell field** — 9k cells on a Nightglass Parasol, 82k on an Abyssal Frond —
+and the point buffer held 74,898, so one plant saturated it; that is a buffer size, not
+a research problem. And **a mature leaf is frozen tissue** (`Leaf.step()` returns on its
+first line once `mature`) worn by 118 organs from a library of eight, so the per-cell
+neighbour loop was solving the same problem a hundred times a frame. Baked once per
+library leaf in `cellTable`: 18.98ms → 6.81ms, and `test/views.mjs` asserts the table
+reproduces the live path cell for cell.
+
+**Be honest about what it costs**: `cells` is *dearer* than the lamina it replaces —
+12.3ms against 8.3ms for one specimen — not cheaper. The first version of the harness
+asserted the opposite, off a prototype that had skipped the material-to-world map, and
+failed on its first run. The bound that survives is that a whole plant at solver
+resolution is the same *order* as a plant drawn as surfaces. **A garden of eight in
+`cells` works and is CPU-bound long before it is buffer-bound.**
+
+Two level-of-detail laws came with it, both the vein cull's law restated: cells thin
+with distance keeping drawn area constant to within 0.5% out to sixteen focal lengths,
+and needles fade where the *field* of them stops being resolvable. That second
+threshold is perceptual and was set by looking — the only number in this work that
+could not have been computed first — and **narrowing it to buy frames is the same
+mistake as widening the vein cull**: it makes `cells` and `flux` the same picture.
+
+Also here, and worth knowing separately: **a full buffer is no longer silent.**
+`Buffers` counts what it drops, `saturated()` reports it, the HUD prints it beside the
+fps and `test/views.mjs` asserts on it. That pitfall has cost two sessions.
 
 **THE SCENE IS NO LONGER ONE PLANT.** `App` holds a hero specimen plus a `garden` of
 others, each with its own species, palettes, seed and position, all standing in the same
@@ -437,6 +506,13 @@ short version, in order:
 4. **The third phyllotaxis hypothesis** — the honest headline limitation, below.
    Pure science, and a negative result is as publishable as a positive one here.
 5. **Lamina tensioning its own margin** — real quality jump, real work.
+6. **A ribbon as twelve floats (ROADMAP 11)** — the one piece of pure engineering, and
+   it has numbers now. A ribbon costs 188ns against a point's 37ns, a ratio of 5.1
+   against a data ratio of 6, so the line pass is memory traffic and there is nothing
+   to shave inside the current vertex format — a rewrite that removed 316,000
+   allocations a frame bought 3%, which is in JOURNAL so nobody tries it twice.
+   Instancing it speeds up every view at once and hands back the 64MB the line buffer
+   had to grow to.
 
 ### Four live limitations, all with diagnoses rather than excuses
 

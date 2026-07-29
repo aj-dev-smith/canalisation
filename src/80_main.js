@@ -14,6 +14,9 @@ try {
   throw e;
 }
 window.__app = app;
+// the view table, so a capture script can enumerate them rather than keep its
+// own list and quietly stop covering the one that was added last
+window.__VIEWS = VIEWS;
 
 // --- the specimen label ----------------------------------------------------
 let lastHud = 0;
@@ -34,6 +37,13 @@ function hud(now) {
   for (const el of document.querySelectorAll('#stage span'))
     el.classList.toggle('on', el.dataset.s === st);
   $('fps').textContent = app.fps.toFixed(0);
+  // A FULL BUFFER USED TO BE INVISIBLE. It drops geometry and carries on, so
+  // the symptom is a picture that is merely missing things — twice now that
+  // has been diagnosed the long way round. `Buffers` counts what it threw
+  // away; this is the only place a person would see it.
+  const sat = app.B.saturated();
+  $('sat').textContent = sat
+    ? `dropped ${sat.tri} tri / ${sat.line} line / ${sat.pt} pt` : '';
   document.body.classList.toggle('driving', !!app.userDriving);
 }
 
@@ -80,6 +90,45 @@ for (const name of Object.keys(SPECIES)) {
 // is the only thing that moves it
 chips.querySelector('.chip.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 
+// --- the view rail ---------------------------------------------------------
+// Which channels of the simulation reach the screen.
+//
+// IN THE BAR, NOT IN THE SHEET, and the reason is the whole argument for where
+// any control goes. It started in the controls sheet on the theory that a view
+// is something you choose once and then watch. That was wrong the first time
+// anyone used it: the sheet is 560px wide and up to 70vh tall, so opening it to
+// change the view covers the thing whose view you are changing. **A control that
+// hides its own subject cannot be judged.** Switching views is now one click and
+// nothing moves over the plant.
+//
+// The copy matters more here than on the other controls, so it goes through
+// `showTip` — the same channel the sliders use to say what they just did, and it
+// gets out of the way on its own. Every one of these is the same plant, the same
+// solver and the same frame; what changes is how much of what the simulation
+// knows is allowed through. Somebody who reads "cells" as a stylised filter has
+// been told the opposite of the truth.
+const VIEW_NOTE = {
+  natural: 'The plant standing in light. Opaque tissue, the canalised veins glowing inside it.',
+  cells: 'No lamina at all — every leaf, growing point and ovary wall drawn at the resolution the solver runs at. Each disc is one cell holding the auxin it actually holds; each needle is the wall it has loaded its pumps onto. About 67,000 of them on a Cathedral Fern.',
+  flux: 'The organism as one transport network. Drop the cells and keep what they are doing: veins and pump directions, nothing else. Tip, leaf and fruit end up in the same language, because they are the same solver on different geometry.',
+  field: 'An instrument, not a picture. Auxin concentration on one ramp, the species colours discarded, no bloom or grade. Two species look alike in here — which is the point, since a species is only a parameter set.',
+};
+const viewsEl = $('views');
+for (const name of Object.keys(VIEWS)) {
+  const b = document.createElement('button');
+  if (name === app.viewName) b.className = 'on';
+  b.textContent = VIEWS[name].label || name;
+  b.title = VIEW_NOTE[name] || name;
+  b.onclick = () => {
+    if (app.viewName === name) return;          // no tip for a no-op
+    app.setRenderView(name);
+    for (const x of viewsEl.children) x.classList.remove('on');
+    b.classList.add('on');
+    showTip(VIEW_NOTE[name] || '');
+  };
+  viewsEl.appendChild(b);
+}
+
 // --- controls that show you their own effect -------------------------------
 let tipT = 0;
 function showTip(text) {
@@ -87,7 +136,14 @@ function showTip(text) {
   t.textContent = text;
   t.classList.add('on');
   clearTimeout(tipT);
-  tipT = setTimeout(() => t.classList.remove('on'), 3800);
+  // HOW LONG IT STAYS UP IS A FUNCTION OF HOW MUCH THERE IS TO READ. This was a
+  // flat 3800ms, which suits the shortest slider tip and no other: the view
+  // notes run to 260 characters, and 3.8 seconds of that is 68 characters a
+  // second, roughly three times a reading pace. 38ms a character is about 315
+  // words a minute — brisk, but the tip is a nudge rather than a document, and
+  // the floor keeps a short one from flashing past.
+  tipT = setTimeout(() => t.classList.remove('on'),
+    Math.min(10000, Math.max(3800, text.length * 38)));
 }
 
 const SLIDERS = [
