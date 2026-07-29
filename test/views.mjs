@@ -8,16 +8,20 @@
 // therefore the only one that can prove a buffer is not silently dropping geometry.
 // **Naming a species skips it**, which is what you want while iterating.
 //
-// CI runs this harness TWICE for that reason. Both matrix entries name a species
-// and pay 5s; the node 22 entry then runs the whole thing including the garden.
-// Splitting it across the two entries rather than doubling both is what keeps the
-// wall clock down, since they run concurrently — as a single step on both, gating
-// this took the job from 123s to 401s, and to 335s after the memoisation below.
+// CI runs this harness TWICE, and both runs gate. The invariants job names a species
+// and pays 5s; a separate `render views (a garden of eight)` job runs the whole
+// thing, concurrently, so the garden costs no wall clock at all. Measured on the way
+// to that arrangement, because it took three goes:
 //
-// It nearly became its own job, which is cleaner and free. It cannot be, yet: only
-// `build + invariants (20)` and `(22)` are required contexts, so a separate job
-// would have run, gone red, and let the merge through regardless. **A check that
-// is not a required context is not a gate**, however it is described.
+//   as one step, both matrix entries        123s -> 401s   (then 335s, memoised)
+//   as one step, node 22 only               105s / 269s
+//   as its own concurrent job               105s / 135s, garden alongside
+//
+// Two things learned the hard way and worth not relearning. **A check that is not a
+// required status context is not a gate** — this was briefly its own job while only
+// `build + invariants` was required, so it ran, went red and let the merge through.
+// And **the runner is ~4.5x slower than a laptop here**, not the ~1.7x assumed, so
+// estimate CI cost from a measurement rather than from a ratio.
 //
 // This one ASSERTS and exits non-zero, which puts it with `smoke`, `wind`,
 // `stem`, `petiole` and `veinlod` rather than with the printing harnesses. The

@@ -55,21 +55,38 @@ jobs:
       - name: Render views
         run: node test/views.mjs 'Cathedral Fern'
 
-      # THE HEAVIEST CONFIGURATION THE SCENE CAN REACH, and the only one that can
-      # prove a buffer is not silently dropping geometry — the three buffer sizes
-      # in `50_geom.js` are set from exactly this measurement. A full buffer is a
-      # picture that is merely missing things, so this is a gate and not a
-      # diagnostic.
-      #
-      # ON ONE MATRIX ENTRY ONLY, and that is the whole trick. The two entries run
-      # concurrently, so paying ~60s here costs ~60s of wall clock rather than
-      # 2x60s, while staying inside a job branch protection already requires. It
-      # was briefly its own job, which is cleaner and costs nothing — but only
-      # `build + invariants (20)` and `(22)` are required contexts, so a separate
-      # job would have run, gone red, and let the merge through anyway. If that
-      # context is ever added to branch protection, lift this back out.
-      - name: Render views, a stand of eight
-        if: matrix.node == '22'
+  # THE HEAVIEST CONFIGURATION THE SCENE CAN REACH, and the only one that can prove
+  # a buffer is not silently dropping geometry — the three buffer sizes in
+  # `50_geom.js` are set from exactly this measurement. A full buffer is a picture
+  # that is merely missing things, so this GATES and is not a diagnostic.
+  #
+  # ITS OWN JOB, so it runs concurrently with the invariants rather than inside
+  # them. That is worth 165s of wall clock: as a step on one matrix entry it took
+  # that job from 105s to 269s, and as a step on both it took it to 335s. Nothing
+  # here needs the build, so there is no reason for it to wait.
+  #
+  # **THE JOB NAME BELOW IS A REQUIRED STATUS CONTEXT on `main`.** Renaming it
+  # silently stops it gating — GitHub matches required checks by name, and a
+  # required context that never reports blocks every PR instead. If you rename it,
+  # update branch protection in the same change:
+  #
+  #   gh api repos/OWNER/REPO/branches/main/protection/required_status_checks/contexts
+  #
+  # This is the mistake that was made once already, in the other direction: it was
+  # briefly a job while only `build + invariants` was required, so it ran, went red
+  # and let the merge through. A check that is not a required context is not a gate.
+  views-garden:
+    name: render views (a garden of eight)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # No build step: this reads `src/` directly, like every harness in `test/`.
+      - name: Every view, a stand of eight
         run: node test/views.mjs
 
   diagnostics:

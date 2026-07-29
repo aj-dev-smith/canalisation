@@ -86,17 +86,21 @@ CI** and therefore gate a merge — `smoke.mjs` and `views.mjs`. The other four 
 locally and *nothing runs them for you*, which is worth knowing before treating a
 green PR as evidence about the stem or the air. The rest print and never fail.
 
-`views.mjs` runs **twice** inside the invariants job. Both matrix entries name a
-species, which skips the garden of eight and costs 5s; the node 22 entry then runs
-the whole thing. Splitting the expensive half across concurrent matrix entries
-rather than doubling both is what keeps the wall clock down — as one step on both it
-took the job from 123s to 335s.
+`views.mjs` runs **twice**, and both runs gate. The invariants job names a species,
+which skips the garden of eight and costs 5s; a separate concurrent job — **`render
+views (a garden of eight)`** — runs the whole thing, so the expensive half costs no
+wall clock. There are now **three required status contexts** on `main`, not two.
 
-It would be cleaner and free as its own job. It cannot be yet, and the reason is
-worth knowing before adding any CI: **only `build + invariants (20)` and `(22)` are
-required contexts on `main`**, so a separate job would run, go red, and let the merge
-through anyway. A check that is not a required context is not a gate, however the
-workflow describes it. Adding the context is a repo-settings change, not a code one. That split is the project's epistemics in miniature — an
+Two things about CI worth not relearning, both learned here:
+
+- **A check that is not a required status context is not a gate.** That job existed
+  for one push while only `build + invariants` was required, so it ran, went red and
+  would have let the merge through. GitHub matches required checks by NAME —
+  **renaming that job silently stops it gating**, and requiring a context that never
+  reports blocks every PR instead. The workflow says this where someone would look.
+- **The runner is about 4.5x slower than a laptop** on this CPU-bound work, not the
+  1.7x assumed. Estimate CI cost from a measurement, not a ratio: gating the garden
+  as a step took the invariants job from 105s to 269s against a predicted ~195s. That split is the project's epistemics in miniature — an
 *emergent* quantity must not be pinned down in a test, because that would convert it
 into an imposed one, while a *physical* claim can be checked against a number worked
 out beforehand and therefore should be. When you add something to the mechanics, work
