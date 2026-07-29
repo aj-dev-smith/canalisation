@@ -298,6 +298,7 @@ function report(title, specimens) {
     ok(r.triF < 0.95 && r.lineF < 0.95 && r.ptF < 0.95, `${name}: buffers have headroom`,
       `${(r.triF * 100).toFixed(0)}/${(r.lineF * 100).toFixed(0)}/${(r.ptF * 100).toFixed(0)}%`);
     ok(r.tri + r.line + r.pt > 100, `${name}: draws something`);
+    ok(!specimens || specimens.length < 2, 'DELIBERATE FAILURE — proving the garden gate blocks');
   }
   return rows;
 }
