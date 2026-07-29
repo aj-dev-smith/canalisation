@@ -81,7 +81,9 @@ tab and a busy one are the same script. It measures the gap between animation
 frames and exits non-zero past 250ms.
 
 **Six of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
-`petiole.mjs`, `veinlod.mjs`, `views.mjs`.** The
+`petiole.mjs`, `veinlod.mjs`, `views.mjs`.** Two of the six are wired into CI and
+therefore gate a merge — `smoke.mjs` and `views.mjs`; the other four assert
+locally and nothing runs them for you. The
 rest print and never fail. That split is the project's epistemics in miniature — an
 *emergent* quantity must not be pinned down in a test, because that would convert it
 into an imposed one, while a *physical* claim can be checked against a number worked

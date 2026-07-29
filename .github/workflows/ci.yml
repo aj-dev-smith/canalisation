@@ -43,6 +43,16 @@ jobs:
       - name: Invariants
         run: node test/smoke.mjs
 
+      # The second gate. `smoke.mjs` imports `50_geom.js` and checks that a
+      # senescing blade is drawn differently from a live one; this checks the
+      # things that would be silently wrong EVERYWHERE at once — the ribbon
+      # emitter every vein and needle goes through, the cell table that stands in
+      # for the live per-cell solve on a mature leaf, and whether any buffer is
+      # dropping geometry in any view. A green gate is a statement about what the
+      # gate imports, and this widens what it imports.
+      - name: Render views
+        run: node test/views.mjs
+
   diagnostics:
     name: diagnostics (informational)
     runs-on: ubuntu-latest
