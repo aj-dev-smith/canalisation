@@ -36,12 +36,22 @@ const info = await pg.evaluate(([nn, sd, rr]) => {
   // the subject is a different plant every run and no two captures compare.
   a.newSpecimen(a.speciesName, +sd);
   const k = a.plantGarden(+nn, { seed: +sd, radius: +rr });
+  // Headless has no smoothness to protect, so let the warm-up take big bites.
+  // The shipped budget is 8ms a frame, which is right for a live tab and would
+  // make a capture wait the better part of a minute.
+  a.warmBudgetMs = 250;
   return { planted: k, hero: a.specimenNo, species: a.garden.map(s => s.name),
     warm: a.garden.map(s => s.warm) };
 }, [n, seed, radius]);
 console.log('planted', info.planted, 'around hero', info.hero, '|', info.species.join(', '));
 console.log('head starts', info.warm.join(', '));
 
+// The stand grows into its head start a slice at a time now, so wait for it to
+// arrive rather than assuming it is there. Blocking on it in one `evaluate` was
+// what the first version did and it is 19 SECONDS of frozen main thread.
+await pg.waitForFunction(() => !window.__app.gardenWarming(), null,
+  { timeout: 180000, polling: 250 });
+await pg.evaluate(() => { window.__app.warmBudgetMs = undefined; });
 await pg.waitForTimeout(+waitMs);
 
 // Several framings in one session, because the interesting question is what the

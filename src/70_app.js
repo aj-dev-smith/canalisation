@@ -365,6 +365,8 @@ export class App {
     };
     if (origin) sp.origin = origin;
     if (wind) sp.wind = wind;
+    // a specimen planted while the last act is held joins it held
+    if (this.senesceHeld) sp.senesceHold = true;
     return { name, seed, prm, mo, sp, pal, petalPal, innerPals,
       plant: new Plant(prm, mo, sp, seed) };
   }
@@ -415,22 +417,93 @@ export class App {
     const rad = opts.radius === undefined ? 9 : opts.radius;
     const wind = this.plant.wind;      // ONE air over the whole clearing
     this.garden = [];
+    // Only the PLAN is drawn up here. Constructing a specimen is not cheap
+    // either — every `Axis` runs its meristem forward 220 steps in its own
+    // constructor, so it is born from a settled sheet rather than a burst of
+    // organs — and seven of those back to back is a 501ms hitch on its own,
+    // measured with `tools/garden_hitch.mjs`. Budgeting the head start while
+    // building all seven plants up front fixes the long freeze and leaves the
+    // sharp one.
+    this._plan = [];
     for (let i = 0; i < n; i++) {
       // a ring, jittered, so nothing reads as a planted row
       const a = (i + 0.5) / n * TAU + (r() - 0.5) * 0.9;
       const d = rad * (0.55 + 0.75 * r());
-      const nm = opts.species || names[(r() * names.length) | 0];
-      const S = this.makeSpecimen(nm, (seed + i * 7919) >>> 0,
-        [Math.cos(a) * d, 0, Math.sin(a) * d], wind);
-      // stagger: from just-germinated to well past flowering
-      const warm = Math.floor(lerp(opts.minAge === undefined ? 120 : opts.minAge,
-        opts.maxAge === undefined ? 2600 : opts.maxAge, r()));
-      for (let k = 0; k < warm; k++) S.plant.step(1);
-      S.warm = warm;
-      this.garden.push(S);
+      this._plan.push({
+        name: opts.species || names[(r() * names.length) | 0],
+        seed: (seed + i * 7919) >>> 0,
+        origin: [Math.cos(a) * d, 0, Math.sin(a) * d],
+        wind,
+        // stagger: from just-germinated to well past flowering
+        warm: Math.floor(lerp(opts.minAge === undefined ? 120 : opts.minAge,
+          opts.maxAge === undefined ? 2600 : opts.maxAge, r())),
+      });
     }
     this.bbS = null;
+    // A HEAD START IS NOT FREE, AND IT MUST NOT BE PAID ALL AT ONCE.
+    //
+    // This used to run every specimen's warm-up in one synchronous loop right
+    // here, which is 11,400 steps for a stand of seven — and a step during
+    // GROWTH is not the ~300us a grown plant costs, it is about 1.7ms, because
+    // that is when the leaf pool is canalising its library. Measured at 19
+    // SECONDS of blocked main thread. The tab simply stops, and the headless
+    // capture tools never noticed because sitting and waiting is all they do.
+    //
+    // So it is paid off a slice at a time, round-robin, which also happens to be
+    // the better thing to watch: every plant comes up as a seedling at once and
+    // the clearing fills in together, rather than specimens popping into
+    // existence fully grown one after another.
+    if (opts.instant) this.warmGarden(Infinity);
     return this.garden.length;
+  }
+
+  // is the stand still being planted, or still growing into its head start?
+  gardenWarming() {
+    return (this._plan && this._plan.length > 0) || this.garden.some(S => S.debt > 0);
+  }
+
+  // HOLD THE LAST ACT, across the whole clearing.
+  //
+  //   __app.holdSenescence()        stop leaves ageing and dropping
+  //   __app.holdSenescence(false)   let them carry on from where they stopped
+  //
+  // Set on `plant.sp` rather than on the specimen's own `sp`: `Plant` copies its
+  // options at construction, so the two are different objects and setting the
+  // outer one looks like it works and does nothing.
+  holdSenescence(on = true) {
+    for (const S of this.specimens()) S.plant.sp.senesceHold = !!on;
+    this.senesceHeld = !!on;
+    return !!on;
+  }
+
+  // Pay down the head start, round-robin, inside a time budget. Returns true
+  // when the whole stand has arrived.
+  warmGarden(budgetMs) {
+    if (!this.gardenWarming()) return true;
+    const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const t0 = now();
+    const spent = () => budgetMs !== Infinity && now() - t0 >= budgetMs;
+    for (;;) {
+      // plant at most one per round — a `Plant` costs about 70ms to construct
+      if (this._plan && this._plan.length) {
+        const p = this._plan.shift();
+        const S = this.makeSpecimen(p.name, p.seed, p.origin, p.wind);
+        S.warm = p.warm; S.debt = p.warm;
+        this.garden.push(S);
+        if (spent()) return false;
+      }
+      let any = false;
+      for (const S of this.garden) {
+        if (S.debt <= 0) continue;
+        S.plant.step(1); S.debt--;
+        any = true;
+      }
+      if (!any && !(this._plan && this._plan.length)) return true;
+      // checked once per round rather than per step: a round is seven steps and
+      // the budget is in whole milliseconds, so per-step timing would cost more
+      // than it saves
+      if (spent()) return false;
+    }
   }
 
   newSpecimen(name = this.speciesName, seed = (Math.random() * 1e6) | 0) {
@@ -822,7 +895,14 @@ export class App {
     const steps = clamp(Math.floor(this._acc), 0, 6);
     this._acc -= steps;
     for (let i = 0; i < steps; i++) this.plant.step(1);
-    for (const S of this.garden) for (let i = 0; i < steps; i++) S.plant.step(1);
+    // A specimen still growing into its head start is stepped by the warm-up and
+    // not here as well, so it arrives at the age it was given rather than at
+    // that age plus however long the stand took to establish.
+    this.warmGarden(this.warmBudgetMs === undefined ? 8 : this.warmBudgetMs);
+    for (const S of this.garden) {
+      if (S.debt > 0) continue;
+      for (let i = 0; i < steps; i++) S.plant.step(1);
+    }
     this.age += steps;
     this.t += dtms;
 

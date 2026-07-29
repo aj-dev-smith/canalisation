@@ -745,6 +745,7 @@ export const SPECIES_DEFAULTS = {
   // How long the slowest blade on a finished specimen takes to let go. Only the
   // rate is set here — whether it happens at all is `Plant.spent()`.
   senesceFor: 2200,
+  senesceHold: 0,  // viewer control: pause the last act. See `senesceStep`
   shootOpts: {},     // per-species overrides on the transport stream (38_shoot)
   // per-species multipliers on the leaf margin's own chemistry (see LeafPool).
   // ay slenderness, g1/gExp how hard a convergence point pushes, D how far
@@ -1094,6 +1095,18 @@ export class Plant {
     // exactly one mechanism may own `sen`, or the falsified path cannot be
     // measured against this one — they simply add, and both look like they work
     if (this.vasc.o.enabled && this.vasc.o.senesceFromStream) return;
+    // HOLD THE LAST ACT. A viewer control, in the same category as the wind
+    // slider and the time slider: it pauses a stage rather than inventing one,
+    // and a specimen released from it carries on from exactly where it stopped.
+    // Nothing downstream reads it, so it cannot leak into the chemistry — what
+    // it does is stop `sen` advancing, and `sen` is the only thing that shedding,
+    // the drained colour and the fall all key off.
+    //
+    // It exists because a garden is mostly BACKGROUND, and the piece's timing was
+    // built around one specimen being watched all the way through. Left alone a
+    // stand planted with staggered ages has half its members dismantling
+    // themselves before anyone has looked at them.
+    if (this.sp.senesceHold) return;
     if (!this.spent()) return;
     const sp = this.sp;
     let oldest = 0;

@@ -47,6 +47,28 @@ inside **single** quotes, so it never interpolated.
   `node_modules` into it, and run *this* copy of the tool with the worktree as cwd — the
   page URL comes from `process.cwd()` and the playwright import resolves from the script.
   For a *weather* comparison you do not need any of that: pass `uRef` and record twice.
+- `garden_shot.mjs OUTDIR [n] [seed] [dist] [waitMs] [radius]` — grows a stand and takes
+  **three framings in one session**, because the interesting question is what the garden
+  looks like FROM WHERE and regrowing it per guess is slow. Reports buffer occupancy per
+  framing, which is the number that fails quietly: a full buffer drops geometry silently.
+
+  It re-asserts the camera immediately before every shutter. The framer damps `cam.dist`
+  toward the scene's bounding sphere every frame, so anything set once is pulled
+  somewhere else before the picture is taken — three captures in a row came back looking
+  at the inside of one plant that way. `radius` wants to stay well clear of the blade
+  length: these plants carry 4-unit fronds, so a ring of 9 puts them through each other.
+
+- `garden_hitch.mjs [n] [seed] [radius] [budgetMs]` — **does planting a garden freeze the
+  tab?** Records the gap between animation frames while the stand establishes and exits
+  non-zero past 250ms. Nothing else in `tools/` can see this, because every other tool
+  here sits and waits: `plantGarden` originally ran all seven head starts in one
+  synchronous loop — 19 seconds of blocked main thread — and every capture script passed.
+
+  A step during GROWTH costs about 1.7ms rather than the ~300us a grown plant costs,
+  because that is when the leaf pool canalises its library, and a `Plant` costs ~70ms to
+  construct before it takes a single step. Both are now paid off a slice per frame.
+  501ms worst gap → 149ms.
+
 - `veinlod_shot.mjs OUTDIR [species] [seed] [waitMs]` — **before/after for the vein
   level of detail**, on the hero specimen at the shipped camera, which is the frame that
   change puts at risk. Flips `app.veinLOD`, which is the whole switch: `false` restores
