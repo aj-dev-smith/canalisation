@@ -770,7 +770,15 @@ export class Plant {
     // step 5) it will be handed this object, and when a second specimen germinates
     // (ROADMAP 6) it has to be standing in the same weather as the first.
     this.wind = (sp && sp.wind) || windField(this.sp.windOpts);
-    this.addAxis(v3(0, 0, 0), v3(0, 1, 0), 0);
+    // WHERE IN THE CLEARING THIS ONE CAME UP. Until there was a garden every
+    // specimen germinated at the origin and nothing had to say so. A position is
+    // not a shape — it says nothing about what the plant becomes — but it has to
+    // be real rather than applied at draw time, because the axes are solved as
+    // cantilevers in a wind field that varies across the ground: two plants three
+    // metres apart are genuinely in different air, and Taylor advection means a
+    // gust crosses the stand rather than arriving everywhere at once.
+    this.origin = (this.sp.origin || [0, 0, 0]).slice();
+    this.addAxis(v3(this.origin[0], this.origin[1], this.origin[2]), v3(0, 1, 0), 0);
   }
   // `parentNode` is the stem node of the organ this shoot came out of, so a
   // branch joins the transport stream where it physically joins the plant.

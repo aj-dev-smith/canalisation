@@ -11,23 +11,29 @@ import {
 
 export class Buffers {
   constructor() {
-    // Sized for a dense specimen with one blade refined to cell resolution.
-    // These were half this and it was not obviously wrong: a full buffer drops
-    // geometry silently, so the failure is a picture that is merely missing
-    // things. Measured on Sun Coral, 104 organs — the plant alone reaches 86%
-    // of the old triangle buffer, and going into a blade pinned both the
-    // triangle and the line buffers at exactly their caps, which is where the
-    // needles were being thrown away. `renderer.nTri`/`nLine` sitting on a
-    // round number equal to `B.tri.length/10` or `B.line.length/7` means
-    // saturated, not busy. Uploads are subarrays, so headroom costs nothing
-    // per frame — only the allocation.
-    this.tri = new Float32Array(1 << 21);   // pos3 nrm3 col3 emis1 = 10
+    // SIZED FOR A CLEARING, NOT FOR A SPECIMEN.
+    //
+    // A full buffer drops geometry silently, so the failure is a picture that is
+    // merely missing things — `renderer.nTri`/`nLine` sitting on a round number
+    // equal to `B.tri.length/10` or `B.line.length/7` means saturated, not busy.
+    // That is worth knowing twice over, because it has now happened twice. At
+    // 1<<21 one dense specimen reached 86% of the triangle buffer on its own and
+    // going into a blade at cell resolution pinned BOTH at exactly their caps,
+    // which is where the needles were being thrown away. At 1<<22 a garden of
+    // eight pinned both again on the very first frame it was asked for.
+    //
+    // Eight specimens, 525 organs, framed as a stand: 551k triangles and 664k
+    // lines, which is 66% and 55% of these. That is the measurement they are set
+    // from rather than a guess, and the headroom above it is deliberate — the
+    // close-up modes multiply one blade's cost by a large factor and the garden
+    // does not switch them off. Uploads are subarrays, so headroom costs nothing
+    // per frame; only the allocation, which is 32MB apiece.
+    this.tri = new Float32Array(1 << 23);   // pos3 nrm3 col3 emis1 = 10
     this.triN = 0;
-    // Lines get the most headroom: every vein and every needle is a six-vertex
-    // camera-facing ribbon, so a refined blade full of committed cells is by
-    // far the heaviest thing the scene ever builds. One notch up from the
-    // triangle buffer measured 98.5% full on Sun Coral, which is not headroom.
-    this.line = new Float32Array(1 << 21);  // pos3 col3 emis1 = 7
+    // Lines still get the most traffic: every vein and every needle is a
+    // six-vertex camera-facing ribbon, so a refined blade full of committed
+    // cells is by far the heaviest thing the scene ever builds.
+    this.line = new Float32Array(1 << 23);  // pos3 col3 emis1 = 7
     this.lineN = 0;
     this.pt = new Float32Array(1 << 19);    // pos3 col3 size1 = 7
     this.ptN = 0;
