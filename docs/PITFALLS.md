@@ -544,6 +544,59 @@ flap state. The flap shipped off, `pre` stayed empty, and the section reported z
 have nothing to do with the flap. It failed loudly here only because one assertion checked
 the sample size. Assert your sample size.
 
+## A scene that stopped being one plant (2026-07-29)
+
+**A harness that waits cannot see a freeze.** `plantGarden` ran every specimen's
+head start in one synchronous loop — 11,400 steps for a stand of seven — and
+blocked the main thread for **19 seconds**. Every capture script in `tools/`
+passed, and none of them could have failed: they navigate, `waitForTimeout`, and
+screenshot, so a frozen tab and a busy one are the same script. It was found by a
+person opening the console and saying "it seems to just freeze, then resume".
+`tools/garden_hitch.mjs` is the check that closes the gap — it records the gap
+between animation frames and exits non-zero past 250ms.
+
+**Cost during growth is not cost at rest, and the ratio is not small.** A
+`plant.step(1)` costs ~300us on a grown specimen and about **1.7ms** while it is
+growing, because that is when the leaf pool canalises its library. Any budget
+sized on a steady-state measurement will be wrong by 5x exactly when it matters.
+
+**Construction is a cost too.** A `Plant` takes ~70ms before its first step:
+every `Axis` runs its meristem forward 220 steps in its own constructor, so the
+axis is born from a settled sheet rather than a burst of organs. Budgeting the
+head start but building all seven plants up front fixed the 19-second freeze and
+left a 501ms one, which the harness then caught.
+
+**`Plant` copies its options at construction.** `this.sp = { ...SPECIES_DEFAULTS,
+...sp }` — so the specimen's `sp` and the plant's `sp` are *different objects*,
+and setting the outer one looks like it works and does nothing. `senesceHold` has
+to be set on `plant.sp`. This is the same shape of trap as the three inlined
+copies of the petiole length that ROADMAP 5 found.
+
+**A per-plant LOD rule silently becomes wrong when there are two plants.** Blade
+mesh density keyed on `P.organCount()`, which was the scene's organ count while
+there was one specimen. In a garden it gives every plant the density it would
+have had *alone*, when what the frame has to carry is the total.
+
+**`bounds()` framed the subject, and the framer believed it.** With a stand, the
+camera damped in on the hero and ended up standing *inside* the garden looking at
+the underside of somebody's canopy. Three captures in a row came back that way
+and it reads as a bug in the scene rather than in the framing. Note the
+exception that has to survive: when a shot *has* a subject, the subject is still
+the right answer, because a close-up is a statement that the rest is not what we
+are looking at.
+
+**Sampling with replacement reads as a smaller catalogue.** Species are picked
+at random per plant, so a stand of seven from a catalogue of eight came out as
+four distinct species with one appearing three times. Fine as a default; wrong
+if the point of the shot is the catalogue. Deal without replacement if so.
+
+**A capture tool that sets the camera once has not set the camera.** The framer
+damps `cam.dist` toward the scene's bounding sphere every frame, so anything set
+at the top of a run is quietly pulled somewhere else before the shutter.
+Re-assert immediately before the screenshot. Related: left to itself the director
+picks a close-up, and the first run of `veinlod_shot.mjs` produced two frames of
+the inside of a single petal.
+
 ## Performance
 
 Leaf and margin simulations dominate. Grow a small **library** and share it —

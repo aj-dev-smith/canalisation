@@ -62,6 +62,22 @@ node test/petiole.mjs                              # the stalk as a pipe, and th
 node test/veinlod.mjs                              # vein level of detail: what it saves, and the light it must conserve
 ```
 
+Four browser tools are about the scene rather than the simulation, and one of them
+checks something no other harness here can:
+
+```bash
+node tools/garden_shot.mjs shots 7        # grow a stand, three framings, buffer occupancy
+node tools/garden_hitch.mjs 7             # DOES PLANTING A GARDEN FREEZE THE TAB?
+node tools/veinlod_shot.mjs shots         # before/after for the vein LOD, on the hero
+GARDEN=7 node tools/clip.mjs shots/g 10   # record the stand moving
+```
+
+`garden_hitch.mjs` exists because **a harness that waits cannot see a freeze.**
+`plantGarden` once blocked the main thread for nineteen seconds and every capture
+script in `tools/` passed — they all navigate, wait, and screenshot, so a frozen
+tab and a busy one are the same script. It measures the gap between animation
+frames and exits non-zero past 250ms.
+
 **Five of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
 `petiole.mjs`, `veinlod.mjs`.** The
 rest print and never fail. That split is the project's epistemics in miniature — an
@@ -248,10 +264,14 @@ src/40_plant.js     the organism: axes, elongation, branching, florigen, fruit s
 src/39a_stem.js     THE STEM BENDS. Axes as coupled damped cantilevers off EI on the
                     radii Murray's law grew, loaded by the canopy. Lettered, not
                     numbered, because it must load after the air and before the organism
-src/50_geom.js      simulation state -> triangles, ribbons, points; senescence colour
+src/50_geom.js      simulation state -> triangles, ribbons, points; senescence colour.
+                    Vein LEVEL OF DETAIL is here, and it is what lets the scene hold
+                    more than one plant
 src/60_render.js    WebGL2: forward pass, bloom, depth of field, grade. No sway — the
                     geometry moves for real now
-src/70_app.js       species presets, camera director, scene assembly, App.setWind
+src/70_app.js       species presets, camera director, scene assembly, App.setWind.
+                    A SCENE IS A LIST OF SPECIMENS now, not one plant: makeSpecimen,
+                    drawSpecimen, plantGarden, sceneBounds
 src/80_main.js      UI wiring, including the wind slider
 ```
 
@@ -289,12 +309,34 @@ of its bugs were found, and none would have been visible on screen.
 
 ## The honest state of it
 
-*Current as of 2026-07-28. The most recent landings are the wind field (#16), the
+*Current as of 2026-07-29. The most recent landings are the wind field (#16), the
 falsified second rotational plane (#17), the bending stem (#18), the weather being
 turned down to force 2 (#19), the occlusion cull no longer hiding leaves the viewer can
-see (#23), and the petiole becoming a petiole — pipe-model radius and droop as a force
-balance (ROADMAP 5 + 7b); if the git log has moved a long way past those, treat the
-specifics below as needing a re-read rather than as fact.*
+see (#23), the petiole becoming a petiole — pipe-model radius and droop as a force
+balance (ROADMAP 5 + 7b) — and **the scene becoming a garden** (#25, ROADMAP 10); if the
+git log has moved a long way past those, treat the specifics below as needing a re-read
+rather than as fact.*
+
+**THE SCENE IS NO LONGER ONE PLANT.** `App` holds a hero specimen plus a `garden` of
+others, each with its own species, palettes, seed and position, all standing in the same
+wind field. `app.plantGarden(7, { radius: 20 })` from the console. The hero is still
+mirrored onto the App as `app.plant`/`app.pal`/`app.sp`, which is deliberate and is what
+kept the HUD, the director, the close-up modes and every tool in `tools/` working
+without knowing a garden exists — **do not "clean that up" without checking all of
+them.**
+
+What made it possible was finding that **the vein ribbons, not the triangles, are what
+a specimen costs to draw**, and that they had no level of detail at all: 26,200
+six-vertex ribbons per Cathedral Fern emitted at every distance. One plant ate 53-94% of
+a 16.7ms frame. The cull law is anchored to the camera's framing distance so the subject
+keeps every ribbon it always had — **and the law that was rejected is the more useful
+half of that story**, because it turned up the fact that about ninety percent of the
+hero's veins are already sub-pixel and already drawn at one uniform width. TUNING and
+JOURNAL both cover it. `app.veinLOD = false` is the pre-LOD renderer, exactly.
+
+Geometry is comfortable now — eight specimens is 551k triangles and 664k lines against
+buffers about 60% full. **Simulation is the ceiling**, and it has not been watched in a
+real browser yet.
 
 **The life cycle is complete.** A specimen germinates, leafs, flowers, fruits,
 ripens, and then **finishes**: it runs out of growing points, drains each blade
@@ -376,20 +418,36 @@ what would have to change instead.
 [docs/ROADMAP.md](docs/ROADMAP.md) is the ranked list and has the reasoning; the
 short version, in order:
 
-1. **The handover** — a new specimen germinating as the old one fades. The last
-   piece of the cycle, and now the blocking item. `Plant.dead()` is the trigger and the
+1. **What the garden owes (ROADMAP 10b)** — the cheapest interesting work here, and
+   none of it is research. The simulation cost of stepping eight specimens is the real
+   one: a grown background plant pays full `stepAuxin` cost to pattern tissue that will
+   never change again. Also a species picker that samples *with* replacement (a stand of
+   seven from a catalogue of eight came out as four distinct species), and a director
+   whose entire shot list assumes one subject.
+2. **The handover** — a new specimen germinating as the old one fades. The garden has
+   reframed rather than replaced this: the question is now "a stand gains and loses
+   members", and the scene already holds a list. `Plant.dead()` is the trigger and the
    camera director already exists. It also owns an open question: the final frame is a
    dim, small silhouette and the end of the film is not composed yet.
-2. **A lamina that gives (ROADMAP 9)** — the debt the petiole left behind, and the
+3. **A lamina that gives (ROADMAP 9)** — the debt the petiole left behind, and the
    reason the attached blade's twist ships off. The most interesting route is to put
    the midrib's compliance in series with the petiole's, using the width the vein
    hierarchy grew, which would make the flap frequency emergent from the vein network.
    That is also #4's machinery, so the two are much cheaper together.
-3. **The third phyllotaxis hypothesis** — the honest headline limitation, below.
+4. **The third phyllotaxis hypothesis** — the honest headline limitation, below.
    Pure science, and a negative result is as publishable as a positive one here.
-4. **Lamina tensioning its own margin** — real quality jump, real work.
+5. **Lamina tensioning its own margin** — real quality jump, real work.
 
-### Three live limitations, all with diagnoses rather than excuses
+### Four live limitations, all with diagnoses rather than excuses
+
+**The garden has not been watched at framerate in a real browser.** Geometry is
+comfortable; the simulation is not obviously so, because eight specimens each take up to
+six `plant.step(1)` per frame. Headless fps is explicitly not worth reading here and the
+tools do not claim otherwise. Establishing a stand also takes ~38s at the shipped
+budget — interactive throughout, and it reads as the clearing filling in, but nearly all
+of that is leaf-library canalisation. **Measure before optimising, and do not buy frames
+by widening the vein cull** — it is anchored so the subject keeps every ribbon it always
+had, and loosening the anchor is how the hero quietly stops looking like itself.
 
 **Phyllotaxis is ordered but does not lock to the golden angle** — it wanders
 90–160°. Do not add a fudge factor to force 137.5°. Displaying the real measured
@@ -401,7 +459,8 @@ defect.** The petiole is physical, and at a physical stiffness the one-degree-of
 rigid blade snaps between face-on attitudes instead of rocking, so it ships disabled with
 its three measurements written down (ROADMAP 9). What a viewer reads is the stem, which
 bends for real at 0.56-0.64 Hz, and the hang, which is now a force balance. **If you are
-picking up work with no other instruction, pick up the handover (ROADMAP 6).** Also still
+picking up work with no other instruction, pick up what the garden owes (ROADMAP 10b),
+then the handover (ROADMAP 6).** Also still
 open is the other half of step 4: a falling blade's long axis snaps level on the frame it
 detaches on — by a median 15° now, down from 27°, because a derived droop hands the fall
 a smaller tilt exactly as ROADMAP 7b predicted — and the obvious fix was built and

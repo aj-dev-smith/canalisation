@@ -57,6 +57,25 @@ One number in all of that is a choice — how hard it is blowing — and it is a
 in the page. Everything downstream of it is derived from it, so it cannot make the
 physics wrong, only the weather.
 
+## A garden
+
+The scene holds a **stand of plants**, not one specimen: several species, each with
+its own seed, position and head start, so a seedling can stand beside a flowering
+adult beside a standing seed head. From the browser console:
+
+```js
+__app.plantGarden(7, { radius: 20 })    // a clearing
+__app.holdSenescence()                  // pause the last act while you look at it
+```
+
+They are all in the **same** wind field, at real positions — so a gust *crosses* the
+stand rather than arriving everywhere at once. That falls out of the field already
+being right and costs nothing.
+
+Where a plant is standing is scene composition rather than chemistry, and it is
+listed here rather than under "what emerges" for that reason. It says where a seed
+landed, not what grows out of it.
+
 ## Known limitations
 
 Read this before opening an issue about it:
