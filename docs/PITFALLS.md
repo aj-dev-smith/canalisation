@@ -408,7 +408,9 @@ literal should be parenthesised if it can be negative, because `- -1.2*t` is not
 
 **An explicit integrator on a spring you did not measure first will pin itself against
 your safety stop and look plausible.** The attached blade's petiole came out at
-374-4040 Hz — 200 radians per plant-time unit — and the first integrator was symplectic
+374-4040 Hz at the time — 200 radians per plant-time unit; it is 7-25 Hz now that the
+stalk has a derived radius, and the lesson survived the change — and the first
+integrator was symplectic
 with a cap of 96 substeps. The stiffest blade on the specimen blew through the cap,
 hit `maxFlap`, and sat there reading as a believable 68° twist that scaled with wind
 speed. Two lessons: **measure the natural frequency before choosing an integrator**,

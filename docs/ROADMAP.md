@@ -211,6 +211,14 @@ Do not start by writing a solver. In order, each step measurable before the next
    ranks three ways out, and the first is #5's petiole radius, which arrived here from a
    completely different direction and is now blocking rather than cosmetic.
 
+   **RESOLVED, AND NOT THE WAY THIS ENTRY EXPECTED (2026-07-28).** #5 gave the stalk a
+   derived radius, and the rock did not become visible — it became wrong. Blades snap
+   between face-on attitudes at 10-25 Hz, `tools/jitter.mjs` says READS AS JITTER, and
+   the cause is that a plate hinged along its own midrib is statically unstable in
+   twist. **Step 2 ships disabled** (`FLAP_DEFAULTS.enabled`) and is now #9. The
+   numbers above describe the petiole of 2026-07-26 and no longer describe anything in
+   the tree.
+
    Also: the weather was wrong for a *stated* reason, and then wrong again in the other
    direction. The field shipped at 1.2 m/s, which the Beaufort scale defines as the force
    where "leaves do not move"; it went to 4.0, force 3, "leaves and small twigs in

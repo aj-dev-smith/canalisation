@@ -72,13 +72,22 @@ look. Displaying the honestly measured number, spread and all, is the point of t
 piece. A structural mechanism that tightens the angle on its own is very welcome —
 see idea #3 in [docs/ROADMAP.md](docs/ROADMAP.md).
 
-**An attached leaf barely moves on its own stalk.** The stem sways properly, but the
-petiole is drawn at half the *stem's* radius, and torsional stiffness goes as the
-fourth power of radius — so a blade rocks by about a tenth of a degree where it
-should flutter. The diagnosis is complete and the fix is ranked first in
-[docs/ROADMAP.md](docs/ROADMAP.md); it deletes a stated constant rather than adding
-one. Softening the material stiffness to compensate is the wrong fix and the roadmap
-says why.
+**An attached leaf does not rock on its own stalk, and that is now a decision.** The
+stem sways for real and a leaf hangs by a force balance, but the blade's own twist about
+its midrib ships **switched off**. It was built, and then the petiole stopped being
+guesswork — it used to be drawn at half the *stem's* radius, and stiffness goes as the
+fourth power of it — and at a physical stiffness the model does not become visible, it
+becomes wrong: a plate hinged along its own midrib is statically unstable in twist, so
+blades snap between face-on attitudes at 10–25 Hz when the wind's own fastest gust is
+1.78 Hz. Three causes were measured and ruled out first; the write-up is in
+[docs/JOURNAL.md](docs/JOURNAL.md).
+
+It is disabled and re-measurable rather than deleted. **Pull requests that switch it back
+on by widening the petiole's `kappa` will be declined** — that constant has two
+independent measurements behind it, and the twist swings from invisible to pinned across
+its published error bar, so tuning it until the motion looks right is tuning rather than
+measuring. What would have to change is the model, and idea #9 in
+[docs/ROADMAP.md](docs/ROADMAP.md) says what.
 
 **Senescence is half emergent.** *When* a specimen dies is a physical condition with
 nothing scheduling it. *The order* it dies in is imposed — oldest first, up the
