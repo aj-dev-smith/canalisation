@@ -78,6 +78,41 @@ function frame(bb, app) {
 }
 
 // ---------------------------------------------------------------------------
+section('the ribbon emitter is unchanged');
+// ---------------------------------------------------------------------------
+// `Buffers.ribbon` was rewritten to write straight into the buffer instead of
+// building four corner arrays. Every vein and every needle in every view goes
+// through it, so a transposed component or a flipped winding would be a subtle
+// wrongness everywhere at once and nothing else here would notice.
+//
+// The reference below is the code it replaced, written out. That is the point:
+// a check whose reference is the thing being checked is not a check — the same
+// reason `test/petiole.mjs` keeps a second pipe model and `39a_stem.js` keeps
+// `cantileverHz`.
+{
+  const B = new Buffers();
+  const a = [1.5, -2.25, 0.75], b = [-0.5, 3.0, 2.25], side = [0.6, 0.0, -0.8];
+  const w0 = 0.037, w1 = 0.019, col = [0.2, 0.55, 0.9], e = 1.75;
+  B.ribbon(a, b, side, w0, w1, col, e);
+
+  const ref = [];
+  const gv = (p) => ref.push(p[0], p[1], p[2], col[0], col[1], col[2], e);
+  const a0 = [a[0] - side[0] * w0, a[1] - side[1] * w0, a[2] - side[2] * w0];
+  const a1 = [a[0] + side[0] * w0, a[1] + side[1] * w0, a[2] + side[2] * w0];
+  const b0 = [b[0] - side[0] * w1, b[1] - side[1] * w1, b[2] - side[2] * w1];
+  const b1 = [b[0] + side[0] * w1, b[1] + side[1] * w1, b[2] + side[2] * w1];
+  gv(a0); gv(a1); gv(b1); gv(a0); gv(b1); gv(b0);
+
+  ok(B.lineN === 42, 'a ribbon is six vertices of seven floats', B.lineN);
+  // `Math.fround`, because the buffer is a Float32Array and the reference above
+  // is computed in float64. Without it this reports a 1e-7 mismatch that is the
+  // store rounding and nothing else — which it did, on the first run.
+  let worst = 0;
+  for (let i = 0; i < 42; i++) worst = Math.max(worst, Math.abs(B.line[i] - Math.fround(ref[i])));
+  ok(worst === 0, 'and every float matches the formulation it replaced', worst);
+}
+
+// ---------------------------------------------------------------------------
 section('the cell table reproduces the live path');
 // ---------------------------------------------------------------------------
 // A cache whose reference is itself is not a check. This forces both branches
