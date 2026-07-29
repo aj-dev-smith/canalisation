@@ -220,11 +220,21 @@ axes never arrest (see PITFALLS) reads as a runaway rather than a slow drift.
 
 ```
 bloom 0.38  bloomThresh 1.15  exposure 1.04  laminaMul 0.86
-sway 1.0    dof 0.80    grain 0.024  vignette 0.60
+dof 0.80    grain 0.024       vignette 0.60
 ```
 `laminaMul` pulls the leaf body down so the **vasculature carries the light**.
 A leaf should read as light held inside tissue. Vein emissive and lamina
 brightness are a balance — raise one and lower the other.
+
+`sway 1.0` used to be listed here and is gone with the vertex-shader sway it fed
+(ROADMAP 7 step 5). The geometry moves for real; nothing in the palette displaces
+anything any more.
+
+**These are the `natural` view's values.** A render view may override any of them
+for the duration of one `draw` call — see "Render views" at the foot of this file
+for the table of what each one changes and why. The overrides are saved and
+restored around the call rather than written in, because the palette belongs to the
+specimen and switching views must not be destructive.
 
 ### The blade at cell resolution (`50_geom.js` `laminaCells()`)
 
@@ -281,6 +291,27 @@ bug — see PITFALLS.md. Purely distance-driven, every blade near the lens refin
 and grew needles at once, and they all then sat a hair from both this threshold
 and the occlusion cull. Traced at a dead-still camera: 13k triangles to 40k and
 back, frame to frame.
+
+**A render view sets a FLOOR on that ramp rather than replacing it**, so a view
+that wants cells everywhere still fades the mechanism up as you approach one
+blade. `cells` uses 0.85 and `flux` 1. The floor does not defeat the per-blade
+visibility ramp underneath it — see "Render views" for that one, which is the only
+number in this file set by looking at a picture.
+
+**Three things in here changed when the whole plant got cells** (ROADMAP 12), and
+all three are visible at microscope range in `natural` too:
+
+- The mechanism now comes from a **table baked once per library leaf**, because a
+  mature leaf is frozen tissue. `test/views.mjs` asserts it reproduces the live
+  path cell for cell. A blade still unfurling has no table and takes the live path
+  — which is exactly what the close-up's replay is.
+- **A cell drains on its own traffic.** `blade()` spares the tissue against a vein
+  using `vdf`, the distance field of the baked network; a cell has the quantity
+  that field was derived from, so it uses `fn*fn` directly against the same
+  `VEIN_LAG`. Same physical statement, better measurement.
+- **The spark rides the drawn needle**, interpolating its two endpoints, instead
+  of being re-mapped onto the curved lamina at an intermediate material point. On
+  a curled blade it used to drift off the needle it was travelling along.
 
 **Smoothing constants that exist only to stop things snapping:**
 
@@ -990,17 +1021,32 @@ baked over the whole network while the draw loop skips veins ahead of the
 development wave, so on a half-grown blade the relight over-brightens — by 69%
 across a growing canopy, which is how the guard was found.
 
-### Buffer sizes — set from a measurement, twice
+### Buffer sizes — set from a measurement, four times now
 
-`1 << 23` floats each for `tri` and `line`, 32MB apiece. Eight specimens and 525
-organs framed as a stand is 551k triangles and 664k lines, which is 66% and 55%.
+| buffer | size | floats/primitive | worst reachable case |
+|---|---|---|---|
+| `tri` | `1 << 23` (32MB) | 30 | 220k triangles, a garden of eight in `natural` — 79% |
+| `line` | `1 << 24` (64MB) | 42 | 316k ribbons, a garden of eight in `cells` — 79% |
+| `pt` | `1 << 23` (32MB) | 7 | 528k points, the same — 44% |
 
-Both previous sizes were exceeded by the thing that came next: `1 << 21` was
-pinned by one dense specimen with a blade at cell resolution, and `1 << 22` was
-pinned by a garden of eight **on the very first frame it was asked for**. A full
-buffer drops geometry silently, so the failure is a picture that is merely
-missing things — `renderer.nTri`/`nLine` on a round number equal to
-`B.tri.length/10` or `B.line.length/7` means saturated, not busy.
+Every previous size was exceeded by the thing that came next, which is the pattern
+to expect rather than a run of bad luck: `1 << 21` was pinned by one dense specimen
+with a blade at cell resolution, `1 << 22` by a garden of eight on the very first
+frame it was asked for, and the point buffer's `1 << 19` by **one specimen** in the
+`cells` view — 90-109% across the species, which is why a whole plant at cell
+resolution had never been drawn. The line buffer grew for the same view at garden
+scale.
+
+`test/views.mjs` prints the table above and asserts on it, so the next size change
+should be a measurement too. **ROADMAP 11 takes `line` back to `1 << 23`** by
+emitting a ribbon as twelve floats and expanding it in the vertex shader.
+
+A full buffer used to drop geometry silently, and the failure was a picture that is
+merely missing things. It is not silent any more: `Buffers` counts what it dropped,
+`saturated()` reports it, the HUD prints it beside the fps and the harness asserts
+no drops. The old detection advice — `renderer.nTri`/`nLine` sitting on a round
+number equal to `B.tri.length/10` or `B.line.length/7` — still works, but you should
+not need it.
 
 ### The garden
 

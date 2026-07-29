@@ -1,7 +1,16 @@
 // RENDER VIEWS: what each one costs, and whether the cell table is honest.
 //
 //   node test/views.mjs            # one specimen and a garden of eight
-//   node test/views.mjs 'Sun Coral'
+//   node test/views.mjs 'Sun Coral'   # named species, and NO garden — much faster
+//
+// The garden of eight is most of the runtime (~35s of ~41s) and it is there for one
+// reason: it is the heaviest configuration the scene can reach, and therefore the
+// only one that can prove a buffer is not silently dropping geometry. Naming a
+// species skips it, which is what you want while iterating. CI does not name one.
+//
+// This gates, and gating it roughly doubled CI — 123s to 401s at first, before the
+// memoisation below. That is a real cost and it was taken deliberately: what this
+// covers is the class of thing that would be silently wrong in every view at once.
 //
 // This one ASSERTS and exits non-zero, which puts it with `smoke`, `wind`,
 // `stem`, `petiole` and `veinlod` rather than with the printing harnesses. The
@@ -58,10 +67,18 @@ function standIn(over) {
   };
 }
 
+// GROWING A SPECIMEN IS THE ENTIRE COST OF THIS HARNESS — 4,200 steps apiece, and
+// the draws being measured are milliseconds. Four of the sections below want the
+// same Cathedral Fern, and growing it four times took CI from 123s to 401s when
+// this became a gate. Memoised by everything that determines the plant.
+const _grown = new Map();
 function grow(name, seed, origin, wind) {
+  const key = `${name}|${seed}|${origin ? origin.join(',') : ''}|${wind ? 'w' : ''}`;
+  if (_grown.has(key)) return _grown.get(key);
   const app = standIn();
   const S = App.prototype.makeSpecimen.call(app, name, seed, origin, wind);
   for (let s = 1; s <= STEPS; s++) S.plant.step(1);
+  _grown.set(key, S);
   return S;
 }
 

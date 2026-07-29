@@ -40,7 +40,7 @@ that cost.
 Tests are headless Node, no browser:
 
 ```bash
-node test/smoke.mjs                                # structural invariants; the CI gate
+node test/smoke.mjs                                # structural invariants; a CI gate
 node test/pattern.mjs '{"T":40,"D":6}' '{"G":0}'   # is the tissue patterning at all?
 node test/phyllo.mjs                               # divergence angle stats
 node test/margin.mjs                               # grow a leaf outline, ASCII silhouette
@@ -60,7 +60,7 @@ node test/wind.mjs '{"uRef":3}'                    # the wind field: profile, gu
 node test/stem.mjs                                 # the stem as a beam: ringdown vs the pre-flight, sway per species, convergence
 node test/petiole.mjs                              # the stalk as a pipe, and the hang as a force balance
 node test/veinlod.mjs                              # vein level of detail: what it saves, and the light it must conserve
-node test/views.mjs                                # render views: what each costs, and is the cell table honest
+node test/views.mjs                                # render views: cost, cull laws, cell table; the other CI gate
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -81,10 +81,10 @@ tab and a busy one are the same script. It measures the gap between animation
 frames and exits non-zero past 250ms.
 
 **Six of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
-`petiole.mjs`, `veinlod.mjs`, `views.mjs`.** Two of the six are wired into CI and
-therefore gate a merge — `smoke.mjs` and `views.mjs`; the other four assert
-locally and nothing runs them for you. The
-rest print and never fail. That split is the project's epistemics in miniature — an
+`petiole.mjs`, `veinlod.mjs`, `views.mjs`.** Only **two of the six are wired into
+CI** and therefore gate a merge — `smoke.mjs` and `views.mjs`. The other four assert
+locally and *nothing runs them for you*, which is worth knowing before treating a
+green PR as evidence about the stem or the air. The rest print and never fail. That split is the project's epistemics in miniature — an
 *emergent* quantity must not be pinned down in a test, because that would convert it
 into an imposed one, while a *physical* claim can be checked against a number worked
 out beforehand and therefore should be. When you add something to the mechanics, work
