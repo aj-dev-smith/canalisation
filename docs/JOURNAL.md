@@ -1610,3 +1610,146 @@ hypotheses were tested against the wrong instrument first — screen diffs, buff
 occupancy, NaN scans — and one cheap counter would have gone straight there.
 
 `tools/cull.mjs` is that counter, kept.
+
+## The petiole, and a mechanism that did not survive being given a real one (2026-07-28)
+
+ROADMAP 5 + 7b, landed together because the pre-flight said they had to be. Three
+results, and the third is the one worth reading.
+
+### 1. The pipe model, and a pre-flight that was right without a solver
+
+The petiole's radius came off the STEM's radius at the node — half of it, underived,
+and irrelevant until ROADMAP 7 step 2 hung a sprung blade off it. Both bending and
+torsional stiffness go as r⁴. It is the pipe model now: conducting area proportional to
+the blade area supplied, `A_pet = kappa·A_blade`, which is the same reasoning the stem's
+own Murray taper runs on and needs no new mechanism.
+
+The ROADMAP 5 pre-flight predicted 0.57-1.21 mm across the eight species with pen and
+paper. The solver gives **0.59-1.24**. It also predicted the flap would land at 6.3-9.5
+Hz off one constant; the solver gives 6.8-11.3. Nothing was tuned to reach either.
+
+`kappa` is the geometric centre of the published broadleaf range (2e-4 to 1e-3), and it
+has an independent confirmation that matters more than the range does: an ordinary
+broadleaf runs about 1 mm of petiole diameter on a 4 cm blade, 1.5 on 6, 2.5 on 10 —
+r/chord ≈ 0.0125 in all three, which is `kappa` ≈ 4.6e-4. The shipped stalks measure
+0.010-0.013 and `test/wind.mjs` asserts it. **The old comment in that harness said a real
+leaf was "nearer 0.02"; that was an estimate and it was high**, which is worth recording
+because it was the only number standing between the old fat stalk and this one.
+
+The taper went too. A stem tapers because organs join it along its length; nothing joins
+a petiole between node and blade, so the pipe model says it is prismatic. Two stated
+constants replaced by one.
+
+### 2. The stem's modulus is not the petiole's, and 60 MPa was a claim
+
+`FLAP_DEFAULTS.eModulus` was the stem's 60 MPa, which was cheap and defensible while
+only the twist read it. Then 7b made the same number decide how far every leaf hangs and
+it stopped being a default: at 60 MPa a horizontally-held Cathedral Fern blade bends its
+stalk **83°**, which is a rag. Every species saturated against the geometry — and the
+saturation briefly faked a scaling result, see below.
+
+60 MPa is right for the *stem* for a reason `39a_stem.js` states: fleshy, parenchyma-rich,
+stout axes, and a column in compression can be built that way. A petiole cannot. It is a
+cantilever whose whole job is holding a blade out sideways, and real ones are reinforced
+for exactly that with peripheral collenchyma. Herbaceous petiole flexural moduli measure
+0.1-1 GPa; 300 MPa is the geometric centre. The check that it is not a dial is that at
+300 MPa the solver independently reproduces *both* bands the pre-flight published —
+4.8-13.2° of hang, 6.3-9.5 Hz of flap — and neither was used to pick it.
+
+**A saturated nonlinearity can impersonate a scaling law.** At 60 MPa the fixed point
+`theta = theta_h·cos(elev - theta)` is pinned against the geometry, so the answer depends
+on the organ's elevation and not on its load at all — and the first run of
+`test/petiole.mjs` duly reported that bigger blades hang lower, passed, and was wrong. At
+any modulus where the beam is actually linear the ordering reverses. The assertion was
+measuring the saturation.
+
+### 3. Falsified: an attached blade rocking on its own petiole
+
+This is the real result. ROADMAP 7 step 2 built it, measured 0.28° rms, called it
+"correct, continuous at abscission, and invisible", and diagnosed the petiole. The
+diagnosis was right about the cause and wrong about the cure: **given a physical stalk
+the mechanism does not become visible, it becomes wrong.**
+
+| | old stalk | pipe-model stalk |
+|---|---|---|
+| twist at the shipped weather | 0.10° rms | **69° rms** |
+| time within a whisker of the stop | 0% | **31%** |
+| `tools/jitter.mjs` | reads as sway | blades at 10-25 Hz, **READS AS JITTER** |
+
+Three things were ruled out before concluding, and the order matters because two of them
+looked like the answer:
+
+- **Not the stop.** `maxFlap` was 1.2 rad = 69°, and the added-mass torque turns a plate
+  face-on at 90°, so the stop sat *inside* the model's own stable equilibrium and every
+  blade parked against it. That is a genuine bug and it is fixed (1.75 rad) — it took the
+  pinned fraction from 12% to 1.3% on the sample where it was first measured — but it did
+  not change the verdict.
+- **Not the damping.** Measured: the effective ratio sits at its structural 0.12 and goes
+  negative only 6% of the time, so this is not the `cCirc` galloping term running away.
+  A missing term *was* found while looking (see below) and it moved the ratio 0.10 → 0.12,
+  which is real and not nearly enough.
+- **Not resonance.** The wind's highest gust mode is **1.78 Hz**. Nothing in the scene is
+  driving 25 Hz. The blade is not being shaken, it is *snapping* between the two face-on
+  attitudes as the wind wanders across it.
+
+Which is what the pre-flight said would happen, in advance: a plate hinged along its own
+midrib is statically unstable in twist, because the aerodynamic centre sits ahead of a
+mid-chord pivot — the reason weather vanes are built the other way round. One rigid
+degree of freedom is standing in for a lamina that in reality twists progressively,
+gives, and reconfigures.
+
+**It ships disabled and re-measurable**, in the same category as `rhoI: 0` and
+`38_shoot.js`. Nothing visible was lost: the motion it replaces was 0.28°, and what a
+viewer reads is the stem (0.56-0.64 Hz, unchanged) and now the hang. `tools/jitter.mjs`
+goes back to READS AS SWAY with everything at 0.38-0.64 Hz.
+
+**The thing not to do is widen `kappa` until it behaves.** It would work — at 1e-3 the
+twist is 8° and the stop is never touched — and it is precisely the move the pre-flight
+forbids, because the twist spans invisible-to-pinned across `kappa`'s published error bar
+and `kappa` has an independent confirmation where it sits. Tuning it would be tuning.
+
+### A term the attached blade was missing, found by asking what the fall gets for free
+
+Worth its own paragraph because it is a clean example of the borrowed-model trap this
+project keeps hitting. A falling plate's `vPar`/`vPerp` are its *own* velocity, so when it
+rotates the flow it sees rotates with it and the coupling damps it. An attached blade's
+are the *wind*, which knows nothing about how fast the blade is turning — so the only
+thing resisting rotation was a form drag quadratic in the rate, documented as
+contributing "essentially nothing" at the amplitudes the old stiff petiole produced. True,
+and true for the wrong reason: `zeta` was silently carrying all of it.
+
+The missing term is the strip integral the model already implies. Rotating at `om`, the
+station at chordwise offset x sees an extra normal velocity `x·om`, so the circulatory
+force varies along the chord; its moment about the pivot is
+
+    M = -integral x·(1/2 rho cT |vPar| (vPerp + x om)) dx  =  -(rho cT |vPar| c^3 / 24)·om
+
+The `vPerp` half integrates to zero about a mid-chord pivot, which is why it is invisible
+until you ask about the *rate*. Linear in rate and speed, always dissipative, no new
+constant — `cT` is the plate's own lift slope. It vanishes at face-on, where there is no
+chordwise flow to make circulation from, and that is where the form-drag term is large;
+the two are complementary and always were. **The fall is deliberately not given it**: its
+rotational damping is the published model's, `test/fall.mjs` validates it against the
+published flutter/tumble ordering, and adding a term to a validated model to fix a
+different model's problem is how you end up with neither.
+
+### And two harnesses that were testing the program of a year ago
+
+Both are the failure CLAUDE.md warns about — a harness holding its own copy of a shipped
+scale — and both passed for years before this branch made them wrong.
+
+- `test/wind.mjs` proved the added-mass torque's sign by making the spring negligible at
+  an absolute `eModulus: 1e2`, which was four orders below the modulus of the day. ROADMAP
+  5 thinned every stalk, `k` goes as r⁴, and the same absolute number became *numerically
+  degenerate* rather than merely small: `flapStep` solves the oscillator in closed form and
+  its equilibrium term is `torque/k`, so as k falls it evaluates a finite angle as an
+  enormous number times a tiny one. The answer wandered — 53°, 132°, 65° — and read
+  exactly like a sign error. Above k ≈ 1e-6 it is clean and monotone (94.5, 89.9, 86.7,
+  79.7, 77.2 as the spring stiffens), which is face-on approached from the stiff side. The
+  fix is to make "negligible" relative to what ships.
+- The same file's abscission-seam section snapshotted only organs carrying a flap state,
+  so when the flap shipped off the section silently measured **zero blades** — while the
+  two things it actually measures, how far the drawn chord and the long axis jump at
+  release, are properties of the frame and have nothing to do with the flap. Worth noting
+  that the seam got *better* through all of this: the chord jump is 2.3° median, against
+  6.4° before the branch and 14.9° with the flap on.

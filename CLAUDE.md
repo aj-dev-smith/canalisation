@@ -58,15 +58,24 @@ node test/senesce.mjs                              # senescence, drawn: does a d
 node test/fall.mjs                                 # a shed blade: is the fall a falling plate, and do real blades differ
 node test/wind.mjs '{"uRef":3}'                    # the wind field: profile, gusts, spectrum, divergence, GLSL round trip
 node test/stem.mjs                                 # the stem as a beam: ringdown vs the pre-flight, sway per species, convergence
+node test/petiole.mjs                              # the stalk as a pipe, and the hang as a force balance
 ```
 
-**Three of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`.** The
+**Four of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+`petiole.mjs`.** The
 rest print and never fail. That split is the project's epistemics in miniature — an
 *emergent* quantity must not be pinned down in a test, because that would convert it
 into an imposed one, while a *physical* claim can be checked against a number worked
 out beforehand and therefore should be. When you add something to the mechanics, work
 the number out first and assert against it; when you add something to the chemistry,
 print it and read it.
+
+`test/petiole.mjs` keeps a *second* implementation of the pipe model and the cantilever
+tip slope, deliberately, for the same reason `cantileverHz` lives in `39a_stem.js`: a
+check whose reference is the thing being checked is not a check. It also carries the one
+test ROADMAP 7b asked for by name — a bigger blade **on the same stalk** has to hang
+lower — which is a controlled experiment and not a correlation, and the difference
+matters: across a whole specimen the pipe model predicts the opposite sign.
 
 `test/stem.mjs` and `test/smoke.mjs` both read the shipped wind speed out of
 `WIND_DEFAULTS` rather than keeping their own copy. `stem.mjs` used to hardcode 4.0 and
@@ -232,7 +241,8 @@ src/37_wind.js      THE AIR. One wind field, plus the world's scales and the two
                     physical constants of air. JS and GLSL from one baked mode table
 src/38_shoot.js     FALSIFIED EXPERIMENT, ships disabled. Whole-plant auxin transport
 src/39_fall.js      A BLADE IN AIR, attached or shed. Quasi-steady plate
-                    aerodynamics; the petiole as a damped torsional spring
+                    aerodynamics; the petiole, sized by the pipe model, as the
+                    cantilever a leaf hangs off. Its TORSIONAL half ships disabled
 src/40_plant.js     the organism: axes, elongation, branching, florigen, fruit set, senescence
 src/39a_stem.js     THE STEM BENDS. Axes as coupled damped cantilevers off EI on the
                     radii Murray's law grew, loaded by the canopy. Lettered, not
@@ -280,9 +290,10 @@ of its bugs were found, and none would have been visible on screen.
 
 *Current as of 2026-07-28. The most recent landings are the wind field (#16), the
 falsified second rotational plane (#17), the bending stem (#18), the weather being
-turned down to force 2 (#19) and the occlusion cull no longer hiding leaves the viewer
-can see (#23); if the git log has moved a long way past those, treat the specifics
-below as needing a re-read rather than as fact.*
+turned down to force 2 (#19), the occlusion cull no longer hiding leaves the viewer can
+see (#23), and the petiole becoming a petiole — pipe-model radius and droop as a force
+balance (ROADMAP 5 + 7b); if the git log has moved a long way past those, treat the
+specifics below as needing a re-read rather than as fact.*
 
 **The life cycle is complete.** A specimen germinates, leafs, flowers, fruits,
 ripens, and then **finishes**: it runs out of growing points, drains each blade
@@ -309,9 +320,10 @@ before.
 divergence-free — evaluated by the simulation and (in the emitted GLSL) by the shader
 from **one baked table of modes**, so it cannot be two functions that resemble each
 other. Attached blades are loaded through the same plate model the fall uses and hand
-their attitude and rate to the fall at abscission. The axes are damped cantilevers off
+their attitude to the fall at abscission. The axes are damped cantilevers off
 `EI` on the radii Murray's law grew (`39a_stem.js`), and **`SWAY` is deleted** — the
-geometry moves for real. ROADMAP 7 steps 1, 2, 3, 5 and half of 4.
+geometry moves for real. ROADMAP 7 steps 1, 3, 5, 7b and half of 4; step 2 was built,
+measured and falsified, and ships off.
 
 The stem's first mode lands within 0.90-1.21 of the pre-flight's analytic value on
 seven of eight species, its eigenvalue and its ringdown agree to under 1%, and the
@@ -336,32 +348,45 @@ is too fast, measure amplitude as well as frequency: the second complaint moved 
 slew by a factor of six and the dominant frequency not at all, because that frequency is
 the stem's own bending mode and the wind only decides how hard it is struck.
 
-**What is still wrong is the petiole**, and it is now the blocking item: it is drawn at
-half the *stem's* radius, torsional stiffness goes as r⁴, so an attached blade rocks by
-about a tenth of a degree at the shipped wind. Read the 2026-07-26 JOURNAL entries before
-touching it; they rank three ways out and say why softening `eModulus` is not one of them.
+**The petiole is a petiole now, and `droop` is deleted.** The stalk's radius used to be
+half the *stem's* radius at the node — underived, and load-bearing at r⁴ once anything
+hung off it. It comes off the blade by the pipe model: 6.2-9.5 mm became 0.59-1.24 across
+the eight species, which is what the ROADMAP 5 pre-flight predicted on paper to within
+3%. `sp.droop` — one constant and eight species values — is gone with it, replaced by the
+tip slope of that stalk under the weight of its own blade, resolved against the angle the
+organ grew at. Leaves hang at 8.6-21.3° off no per-species number. Flower close-ups no
+longer read as petals bolted to scaffolding, which was the same defect arriving from the
+composition side.
+
+**And it falsified the attached blade's rock, which now ships off.** This is the part to
+read before touching any of it. That mechanism was built for ROADMAP 7 step 2, measured
+at a quarter of a degree, and blamed on the petiole. The blame was right and the cure was
+not: given a physical stalk it does not become visible, it becomes wrong — 69° rms twist,
+a third of the time against its stop, and `tools/jitter.mjs` reporting blades at 10-25 Hz
+when the wind's own fastest gust is 1.78 Hz. Not resonance, not damping, not the
+integrator; all three measured and ruled out. A plate hinged along its own midrib is
+statically unstable in twist, which the pre-flight predicted in advance. It is disabled
+and re-measurable, like `rhoI: 0` and `38_shoot.js`, and **the thing not to do is widen
+`kappa` until it behaves** — that is the one move the pre-flight forbids. ROADMAP 9 says
+what would have to change instead.
 
 ### Where the work goes next
 
 [docs/ROADMAP.md](docs/ROADMAP.md) is the ranked list and has the reasoning; the
 short version, in order:
 
-1. **The petiole's radius, with droop as a force balance (ROADMAP 5 + 7b)** — the
-   blocking item. Two independent routes arrived at the same defect, the pre-flight in
-   ROADMAP 5 has the numbers for all eight species, and it deletes a stated constant
-   from SCIENCE.md's imposed list.
-   ROADMAP 7 has the staged order and the pre-flight table: `EI ∝ r⁴` on the radii
-   the plant already grows gives plant-like sway (0.5–4.6 Hz on seven of eight
-   species) off **one** material constant, `E ≈ 60 MPa`. `droop` is deliberately held
-   back to 7b.
-2. **The handover** — a new specimen germinating as the old one fades. The last
-   piece of the cycle. `Plant.dead()` is the trigger and the camera director
-   already exists. It also owns an open question: the final frame is a dim, small
-   silhouette and the end of the film is not composed yet.
-3. **Petiole radius at flower scale** — an afternoon, with a clean repro shot.
-4. **The third phyllotaxis hypothesis** — the honest headline limitation, below.
+1. **The handover** — a new specimen germinating as the old one fades. The last
+   piece of the cycle, and now the blocking item. `Plant.dead()` is the trigger and the
+   camera director already exists. It also owns an open question: the final frame is a
+   dim, small silhouette and the end of the film is not composed yet.
+2. **A lamina that gives (ROADMAP 9)** — the debt the petiole left behind, and the
+   reason the attached blade's twist ships off. The most interesting route is to put
+   the midrib's compliance in series with the petiole's, using the width the vein
+   hierarchy grew, which would make the flap frequency emergent from the vein network.
+   That is also #4's machinery, so the two are much cheaper together.
+3. **The third phyllotaxis hypothesis** — the honest headline limitation, below.
    Pure science, and a negative result is as publishable as a positive one here.
-5. **Lamina tensioning its own margin** — real quality jump, real work.
+4. **Lamina tensioning its own margin** — real quality jump, real work.
 
 ### Three live limitations, all with diagnoses rather than excuses
 
@@ -370,13 +395,16 @@ short version, in order:
 number, spread and all, is the point. Two hypotheses have been tested and
 falsified; the third is ROADMAP 3.
 
-**The attached blade barely moves, and the petiole is why.** The stem bends for real
-and `SWAY` is gone, so the air is one model now — but the blade's own rock on its stalk
-is a quarter of a degree, because the petiole is drawn at half the stem's radius and
-torsional stiffness goes as r⁴. **If you are picking up work with no other instruction,
-pick up ROADMAP 5 + 7b.** What is also still open is the other half of step 4: a falling
-blade's long axis snaps level on the frame it detaches on, by a median 27°, and the
-obvious fix was built and falsified — see `FALL_DEFAULTS.tiltPlane`.
+**The attached blade does not rock at all, and that is now a decision rather than a
+defect.** The petiole is physical, and at a physical stiffness the one-degree-of-freedom
+rigid blade snaps between face-on attitudes instead of rocking, so it ships disabled with
+its three measurements written down (ROADMAP 9). What a viewer reads is the stem, which
+bends for real at 0.56-0.64 Hz, and the hang, which is now a force balance. **If you are
+picking up work with no other instruction, pick up the handover (ROADMAP 6).** Also still
+open is the other half of step 4: a falling blade's long axis snaps level on the frame it
+detaches on — by a median 15° now, down from 27°, because a derived droop hands the fall
+a smaller tilt exactly as ROADMAP 7b predicted — and the obvious fix was built and
+falsified, see `FALL_DEFAULTS.tiltPlane`.
 
 **Senescence is built and drawn, but it is split down the middle.** *When* a
 specimen senesces is emergent — `Plant.spent()`, a physical condition with nothing

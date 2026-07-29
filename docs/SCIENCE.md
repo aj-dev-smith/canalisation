@@ -175,16 +175,42 @@ Rosette's nothing, because a 31 cm plant on an 18 mm base is a cushion and cushi
 not sway. The spread does not depend on the weather — it comes from `r⁴` and canopy
 area — so turning the wind down quietens every species without flattening the catalogue.
 
-**`SWAY` is gone**, and with it the last authored motion in the piece. Blades still on
-the plant also rock on their petioles through the same plate model the fall uses — that
-part is a fraction of a degree, because the petiole is drawn at half the stem's radius
-and torsional stiffness goes as the fourth power of it. See ROADMAP 5.
+**`SWAY` is gone**, and with it the last authored motion in the piece.
 
-Note which direction that debt runs. Wind and gravity are *environment*, not shape,
-so responding to them is not an imposition in the sense this list means — and the
-force balance that would make an attached blade hang correctly under its own weight
-is the one thing that could delete `droop`, which is currently eight stated numbers
-in the species table.
+**And `droop` is gone too** (2026-07-28). It was eight stated numbers in the species
+table plus a constant, and it was the answer to "how far down does a leaf point". It is
+now a force balance: the tip slope of the petiole under the weight of the blade it
+carries, resolved against the angle the organ grew at, because only the component of
+weight *across* a stalk bends it. Every input is physics or something the plant already
+made — the blade's area and the position of its centroid are both read off the silhouette
+the margin grew, so a leaf that carries its area near the tip pulls its own stalk down
+further and nothing anywhere says it should. Blades hang at 8.6-21.3° across the eight
+species off no per-species value.
+
+That was only payable because **the petiole's radius stopped being arbitrary** in the
+same change. It used to be half the stem's radius at the node, which nobody derived and
+which nothing depended on until a blade was hung off it; bending and torsional stiffness
+both go as r⁴, so it was four orders of magnitude of load-bearing guesswork. It comes off
+the blade now, by the pipe model — conducting area proportional to the leaf area
+supplied, the same reasoning the stem's own taper runs on. One dimensionless constant,
+confirmed independently by the petiole-to-chord ratio of a real broadleaf, and it deleted
+a second constant on the way: nothing joins a petiole between the node and the blade, so
+it carries the same traffic end to end and does not taper.
+
+Note which direction that debt runs. Wind and gravity are *environment*, not shape, so
+responding to them is not an imposition in the sense this list means — and so far the
+mechanics has only ever *removed* stated constants. `SWAY`, then the fall's four, and now
+`droop`'s nine.
+
+**What the same change falsified**, because it belongs here rather than in a footnote:
+an attached blade also rocking on its own petiole. That mechanism was built for ROADMAP 7
+step 2, measured at a quarter of a degree, and diagnosed as the petiole's fault. On a
+petiole with a physical radius it does not become visible, it becomes wrong — 69° rms,
+a third of the time against its stop, blades snapping between face-on attitudes at
+10-25 Hz when the wind's own fastest gust is 1.78 Hz. A plate hinged along its own midrib
+is statically unstable in twist. It ships disabled and re-measurable, like the second
+inhibitor and the whole-plant transport stream, and what would have to change is the
+model rather than a number: see ROADMAP 5.
 
 Light is the other interesting absence. It is the resource leaves actually compete
 for, and shading is what orders senescence in a real canopy — the one honest route

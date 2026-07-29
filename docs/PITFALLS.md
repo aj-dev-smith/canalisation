@@ -408,7 +408,9 @@ literal should be parenthesised if it can be negative, because `- -1.2*t` is not
 
 **An explicit integrator on a spring you did not measure first will pin itself against
 your safety stop and look plausible.** The attached blade's petiole came out at
-374-4040 Hz — 200 radians per plant-time unit — and the first integrator was symplectic
+374-4040 Hz at the time — 200 radians per plant-time unit; it is 7-25 Hz now that the
+stalk has a derived radius, and the lesson survived the change — and the first
+integrator was symplectic
 with a cap of 96 substeps. The stiffest blade on the specimen blew through the cap,
 hit `maxFlap`, and sat there reading as a believable 68° twist that scaled with wind
 speed. Two lessons: **measure the natural frequency before choosing an integrator**,
@@ -500,6 +502,47 @@ the same words a few hours later, was amplitude at an *unchanged* frequency: 0.5
 Hz, peak slew 4.15 to 0.67. The frequency could not have moved, because it was the stem's
 own resonance and only the forcing had changed. Pattern-matching the second report onto
 the first would have sent the search straight back into the spectrum.
+
+## Stops, scales and saturations (2026-07-28, ROADMAP 5 + 7b)
+
+Four traps from one branch, and they share a shape: **a number that was harmless while
+something else was wrong becomes load-bearing the moment you fix that something.** The
+petiole was drawn at half the stem's radius, stiffness goes as r⁴, and everything
+downstream of it had quietly been living in a regime nobody chose.
+
+**A stop placed inside the model's own equilibrium does not bound the model, it replaces
+it.** `maxFlap` was 1.2 rad = 69°. The added-mass torque turns a plate face-on, and
+face-on is 90° from edge-on — so the stop sat *inside* the stable equilibrium. On the old
+fat petiole the blade rocked a quarter of a degree and nothing ever reached it; on a real
+stalk every blade parked against the clip, and the harness dutifully reported the stop's
+value back as the physics. The tell is a "measurement" that comes back equal to a
+constant. Ask, for every clamp, whether the thing being clamped has an equilibrium on the
+far side of it.
+
+**A saturated nonlinearity can impersonate a scaling law, and it will pass your test.**
+The droop balance solves `theta = theta_h·cos(elev - theta)`. At the wrong modulus
+`theta_h` is enormous, the fixed point pins against the geometry, and the answer stops
+depending on the load at all. `test/petiole.mjs`'s first run asserted that bigger blades
+hang lower, passed, and was measuring the saturation — at any modulus where the beam is
+linear the ordering reverses. If an assertion passes in a regime you have not checked is
+the intended one, it is not evidence.
+
+**"Negligible" stated as an absolute number rots when the scale it was negligible
+against moves.** `test/wind.mjs` proved the added-mass torque's sign by setting
+`eModulus: 1e2`, four orders below the modulus of the day. Thin the stalk and the same
+absolute value is not small, it is *degenerate*: the closed-form oscillator's equilibrium
+term is `torque/k`, so as k falls it computes a finite angle as an enormous number times a
+tiny one and loses every digit. The answer wandered — 53°, 132°, 65° — and read exactly
+like a sign error in the physics. **Make "negligible" relative to what ships**, and if you
+suspect degeneracy, sweep the parameter and look for a plateau: above k ≈ 1e-6 the answer
+was clean and monotone across three decades.
+
+**A harness that gates on an optional field silently measures nothing when that field
+goes away.** The same file's abscission-seam section snapshotted only organs carrying a
+flap state. The flap shipped off, `pre` stayed empty, and the section reported zero blades
+— while the two quantities it actually measures are properties of the organ's *frame* and
+have nothing to do with the flap. It failed loudly here only because one assertion checked
+the sample size. Assert your sample size.
 
 ## Performance
 

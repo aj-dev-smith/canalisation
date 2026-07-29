@@ -6,27 +6,22 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
-1. **[#5, the petiole's radius](#5-smaller-things), together with
-   [#7b](#7b-droop-as-a-force-balance)** — was an afternoon's cosmetic fix and is now the
-   blocking item. An attached blade rocks by a quarter of a degree because the petiole is
-   drawn at half the *stem's* radius and torsional stiffness goes as r⁴; two independent
-   routes arrived at the same defect, which usually means it is the real one.
-   **Pre-flighted (#5 below):** the pipe model puts every species' flap at 6.3-9.5 Hz off
-   one constant, but the twist then saturates against its stop, and the degree of freedom
-   that behaves is *bending* — which is 7b. Do them together, or the radius change trades
-   one stated constant for a leaf pinned at a stop. It also **deletes an entry from
-   SCIENCE.md's imposed list**, which almost nothing else here does.
-3. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
+1. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
    of the life cycle, and the only part of senescence still unbuilt. `dead()` is
    the trigger and the camera director already exists. It carries the ending as a
    *shot* too: a run currently tails off rather than finishing.
-4. **[#3, the third phyllotaxis hypothesis](#3-third-phyllotaxis-hypothesis)** — the honest headline limitation.
+2. **[#9, a blade that gives](#9-a-lamina-that-gives-and-a-blade-that-reconfigures)** — NEW, and it
+   is the debt #5 left behind. The attached blade's twist ships **off**, because on a
+   petiole with a physical radius one rigid degree of freedom hinged at mid-chord snaps
+   between face-on attitudes instead of rocking. It is also the same machinery #4 wants.
+3. **[#3, the third phyllotaxis hypothesis](#3-third-phyllotaxis-hypothesis)** — the honest headline limitation.
    Pure science; a negative result is as publishable as a positive one here. **Read
    #7 first**: its second candidate route is a mechanical-stress term, which is #7's
    machinery, so the two are cheaper together than apart.
-5. **[#4, lamina tensioning its own margin](#4-lamina-pulls-on-its-own-margin)** — meaningful quality jump, meaningful work.
+4. **[#4, lamina tensioning its own margin](#4-lamina-pulls-on-its-own-margin)** — meaningful quality jump, meaningful work.
+   Cheaper alongside #9, which needs a lamina that deforms for a different reason.
 
-#1, #2, #4b, #7 (bar 7b) and #8 are **done**; their entries are kept for what they
+#1, #2, #4b, #5, #7, #7b and #8 are **done**; their entries are kept for what they
 record.
 
 ## 1. Life cycle and senescence — DONE (2026-07-26)
@@ -216,6 +211,14 @@ Do not start by writing a solver. In order, each step measurable before the next
    ranks three ways out, and the first is #5's petiole radius, which arrived here from a
    completely different direction and is now blocking rather than cosmetic.
 
+   **RESOLVED, AND NOT THE WAY THIS ENTRY EXPECTED (2026-07-28).** #5 gave the stalk a
+   derived radius, and the rock did not become visible — it became wrong. Blades snap
+   between face-on attitudes at 10-25 Hz, `tools/jitter.mjs` says READS AS JITTER, and
+   the cause is that a plate hinged along its own midrib is statically unstable in
+   twist. **Step 2 ships disabled** (`FLAP_DEFAULTS.enabled`) and is now #9. The
+   numbers above describe the petiole of 2026-07-26 and no longer describe anything in
+   the tree.
+
    Also: the weather was wrong for a *stated* reason, and then wrong again in the other
    direction. The field shipped at 1.2 m/s, which the Beaufort scale defines as the force
    where "leaves do not move"; it went to 4.0, force 3, "leaves and small twigs in
@@ -320,7 +323,26 @@ mechanics *removes* imposed constants (`SWAY`, and then `droop`) rather than add
 any. So the one rule survives intact; what changes is that the piece now also has
 weather. Say that plainly in README rather than quietly growing a second engine.
 
-## 7b. Droop as a force balance
+## 7b. Droop as a force balance — DONE (2026-07-28)
+
+Landed with #5, which the pre-flight below said it had to be. `sp.droop` — one constant
+and eight species values — is **deleted**. A leaf hangs at the tip slope of its own
+petiole under the weight of its own blade, resolved against the elevation it grew at,
+and comes out at 8.6-21.3° across the eight species off no per-species number. The
+blade's area and the position of its centroid are both read off the silhouette the margin
+grew, so a leaf carrying its area near the tip pulls its stalk down further and nothing
+said it should. Constants, reasoning and the shipped table are in TUNING.md; the two
+negative results it produced are in JOURNAL.md.
+
+Two things it turned up that the entry below did not predict. **The stem's 60 MPa is not
+the petiole's modulus** — at 60 MPa a horizontally-held blade bends its stalk 83°, and a
+petiole is a cantilever built of collenchyma rather than a fleshy column, so it is 300 MPa
+now with a citation. And **across a specimen the scaling runs the other way**: the pipe
+model grows a thicker stalk for a bigger blade and r⁴ beats the extra weight, so a bigger
+leaf hangs *less*. That is a known over-compensation of the pipe model and it is the
+strongest argument for the successor law in #5.
+
+The original entry follows, kept for the reasoning.
 
 Deferred out of 7 on purpose. `sp.droop` is one stated constant in
 `40_plant.js:615` and eight values in the species table, and it is currently the
@@ -401,21 +423,22 @@ too. Details in JOURNAL.md and TUNING.md.
   units off a meristem surrounded by leaves 4.3 units long and those blades really
   are in front of the subject. If that reads as too aggressive, the fix is how the
   shot is composed, not a weaker cull.
-- **Organ petioles dominate a flower close-up — and this is no longer cosmetic.**
-  At flower scale the stalks are fat opaque tubes and the petals read as blades bolted
-  to scaffolding. Reproduce with
-  `node tools/flower_shot.mjs shots/f.png 'Sulphur Rosette' 424242`.
+- **Organ petioles dominate a flower close-up — DONE (2026-07-28).** The stalks were
+  fat opaque tubes and the petals read as blades bolted to scaffolding, at flower scale
+  and everywhere else. The radius comes off the blade now, by the pipe model, and it went
+  from 6.2-9.5 mm to 0.59-1.24 across the eight species — which is what the pre-flight
+  below predicted, to within 3%, with no solver. `droopScale`, which existed only to hold
+  floral organs up against a leaf's droop, is gone too: a petal is a short stalk carrying
+  a small light blade and the force balance already gives it almost nothing to hang by.
 
-  **ROADMAP 7 step 2 arrived at the same defect from the mechanics side and it is now
-  the blocking item there.** The radius is `0.5` of the stem's radius at the node, which
-  nobody derived, and torsional stiffness goes as r⁴ — so an attached blade sits on a
-  spring four orders of magnitude too stiff and rocks by a quarter of a degree. The fix
-  this entry already proposed is the right one: petiole radius from the organ it
-  carries, via the pipe model (conducting area proportional to the leaf area supplied),
-  which is the same Murray's-law reasoning the stem taper already uses. At a plausible
-  proportionality it gives a 0.4-0.5 mm petiole and about 2.5 Hz, which is plant-like.
-  It thins every stalk in the piece, so it wants its own branch and its own
-  before/after across all eight species.
+  Two constants replaced by one. The petiole does not taper — nothing joins it between the
+  node and the blade, so the pipe model says it is prismatic — and `kappa` is confirmed
+  twice over, by the published broadleaf range and by the petiole-to-chord ratio of a real
+  leaf. The renderer and the mechanics read `petioleOf`, which they did not before: three
+  copies of the stalk's length and one of its radius were inlined in `70_app.js` while a
+  comment in `39_fall.js` claimed there was one definition.
+
+  **What it did not fix, and what that cost, is #9.**
 ### Pre-flight for the petiole: measured, and it decides more than it looks like (2026-07-26)
 
 Same treatment as ROADMAP 7's stiffness pre-flight, and the same conclusion shape: one
@@ -481,6 +504,50 @@ better law with the same one free number.
 - Fenestrated species get blocky holes at low blade LOD
 - Director's later shots (flower, fruit, ripening) are built but lightly tested — I never watched a full seed-to-ripe run at framerate
 - First-run tip fires once; a viewer arriving mid-scroll misses it
+
+## 9. A lamina that gives, and a blade that reconfigures
+
+The debt #5 left behind, and the reason `FLAP_DEFAULTS.enabled` is `false`.
+
+An attached blade rocking on its own petiole was built for #7 step 2, measured at 0.28°,
+and diagnosed as the petiole's fault. Given a petiole with a physical radius the
+mechanism does not become visible — it becomes wrong. 69° rms twist at the shipped
+weather, a third of the time against its stop, blades snapping between the two face-on
+attitudes at 10-25 Hz when the wind's own fastest gust mode is 1.78 Hz. It is not
+resonance, not the damping and not the integrator; all three were measured and ruled out
+(JOURNAL.md). It is that a plate hinged along its own midrib is statically **unstable**
+in twist, because the aerodynamic centre sits ahead of a mid-chord pivot — which the #5
+pre-flight predicted before any of it was built.
+
+**Do not reopen this by widening `kappa`.** It would work, and it is the one move the
+pre-flight explicitly forbids: the twist spans invisible-to-pinned across `kappa`'s own
+error bar, and `kappa` has an independent confirmation where it sits. What has to change
+is the model.
+
+What would have to be true, in rough order of how much each buys:
+
+1. **The lamina is not rigid.** One degree of freedom is standing in for a blade that in
+   reality twists progressively along its span and cups under load. The member that
+   resists is the midrib — which this project *canalises a width for* — so putting the
+   midrib's compliance in series with the petiole's would make the flap frequency
+   emergent from the vein network. That is the most interesting fix by this project's
+   standards and it is also #4's machinery, so the two are much cheaper together.
+2. **Real leaves reconfigure.** A blade under load rolls toward the flow and sheds it;
+   that is why drag on a real canopy grows slower than the square of wind speed. Nothing
+   here does it, so the load never falls off and the blade has no way out but the stop.
+3. **The pivot may be wrong.** A leaf's elastic axis and its centre of pressure are not
+   the same line, and a mid-chord hinge is the worst case for static stability. Whether
+   the drawn midrib is the right elastic axis is a question nobody has asked.
+
+One term already went in while looking, and it is kept: the attached blade had no
+quasi-steady pitch damping at all, because its relative wind is the *field* and does not
+know how fast the blade is turning, where a falling plate's is its own velocity and gets
+the coupling for free. The strip integral is in `flapTerms` as `cPitch`, it costs no new
+constant, and it is worth about 0.02 of damping ratio — real, and nowhere near enough.
+
+**A cheap first experiment**, before any of the above: `test/petiole.mjs` section 5
+already sweeps the whole regime, and `tools/jitter.mjs` gives a one-word verdict. Anything
+proposed here can be measured in two commands.
 
 ## 6. Handover, and the end of the film
 A new specimen germinating as the old one fades — the last piece of the life

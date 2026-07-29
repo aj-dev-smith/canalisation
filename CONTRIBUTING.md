@@ -93,11 +93,14 @@ the chemistry is alive and finite, not that any emergent quantity has a particul
 value. Pinning down divergence angles or petal counts in a test would quietly convert
 an emergent result into an imposed one.
 
-**`test/wind.mjs` and `test/stem.mjs` also assert and exit non-zero**, and that is the
-second category above: a physical claim can be checked against a number worked out
-beforehand, so it gets a real assertion. `test/stem.mjs` compares the solver's
-eigenvalue, a stopwatch on a ringdown, and an analytic pre-flight computed before the
-solver existed. Run it before and after any change to the beam.
+**`test/wind.mjs`, `test/stem.mjs` and `test/petiole.mjs` also assert and exit
+non-zero**, and that is the second category above: a physical claim can be checked
+against a number worked out beforehand, so it gets a real assertion. `test/stem.mjs`
+compares the solver's eigenvalue, a stopwatch on a ringdown, and an analytic pre-flight
+computed before the solver existed. Run it before and after any change to the beam.
+`test/petiole.mjs` does the same for the stalk a leaf hangs off, and keeps its own second
+implementation of the model to check against — **a check whose reference is the thing
+being checked is not a check.**
 
 Everything else in `test/` is a **diagnostic instrument**: it prints numbers and
 ASCII renderings and always exits 0. You read the output; it does not pass or fail.
@@ -122,11 +125,11 @@ node test/senesce.mjs                              # a dying blade, drawn: ASCII
 node test/fall.mjs                                 # a shed blade: is the fall a falling plate?
 ```
 
-`CLAUDE.md` lists the full set — there are eighteen of them, plus archived
+`CLAUDE.md` lists the full set — there are nineteen of them, plus archived
 experiments kept runnable so their falsified results stay reproducible. **A negative
-result you cannot re-measure is just a story**, which is why `38_shoot.js` and
-`FALL_DEFAULTS.tiltPlane` are in the tree and switched off rather than deleted. Do
-not mistake either for live code.
+result you cannot re-measure is just a story**, which is why `38_shoot.js`,
+`FALL_DEFAULTS.tiltPlane` and `FLAP_DEFAULTS.enabled` are in the tree and switched off
+rather than deleted. Do not mistake any of them for live code.
 
 If your change touches the simulation, **paste the relevant before/after numbers in
 the PR.** That is the review currency here, far more than a screenshot.
