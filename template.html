@@ -73,12 +73,23 @@
   .chip i{width:7px;height:7px;border-radius:50%;flex:0 0 auto;opacity:.65;transition:.15s}
   .chip.on{background:rgba(111,240,220,.16);color:var(--ink);border-color:rgba(111,240,220,.45)}
   .chip.on i{opacity:1;box-shadow:0 0 7px currentColor}
-  /* the view rail: which channels of the simulation reach the screen */
-  #views{display:flex;gap:6px;align-items:center;flex-wrap:wrap;
-    padding-bottom:11px;border-bottom:1px solid var(--line)}
-  #views .lbl{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
-    color:var(--dim);margin-right:2px}
-  #viewNote{font-size:10.5px;color:var(--dim);line-height:1.45;margin-top:7px}
+  /* THE VIEW RAIL LIVES IN THE BAR, NOT IN THE SHEET.
+     It started in the controls sheet, which was wrong for one reason that only
+     shows up when you use it: the sheet is 560px wide and up to 70vh tall, so
+     opening it to change view covers the thing you are changing the view OF.
+     A segmented control rather than four separate chips, because the bar is
+     already carrying eight species and four buttons and 180px is the whole
+     budget. Sharing one pill also says what is true: these are four ways of
+     looking at one plant, not four independent toggles. */
+  #views{display:flex;align-items:center;border:1px solid var(--line);
+    border-radius:999px;background:rgba(3,7,10,.5);overflow:hidden;flex:0 0 auto}
+  #views button{font:inherit;font-size:11px;padding:5px 9px;border:0;cursor:pointer;
+    background:transparent;color:var(--dim);transition:.15s;white-space:nowrap}
+  #views button+button{border-left:1px solid var(--line)}
+  #views button:hover{color:var(--ink)}
+  #views button.on{background:rgba(111,240,220,.16);color:var(--ink)}
+  /* a hairline between the views and the actions, so the bar reads as two groups */
+  #barActions .sep{width:1px;height:18px;background:var(--line);flex:0 0 auto}
   #sliders{margin-top:8px;display:grid;grid-template-columns:1fr;gap:7px}
   @media(min-width:520px){#sliders{grid-template-columns:1fr 1fr;gap:7px 16px}}
   .row label{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);
@@ -95,8 +106,13 @@
   #stats b{color:var(--ink)}
   .btn.urge{border-color:rgba(111,240,220,.6);background:rgba(111,240,220,.16)}
   @media(max-width:560px){#card{right:10px}#card table{font-size:10px}
+    /* the views group pushes #barActions onto two rows here, and everything
+       positioned off --bar has to come up with it */
+    :root{--bar:124px}
     #bar{gap:6px;padding-left:8px;padding-right:8px}
     #barActions{gap:6px}
+    #views button{padding:5px 7px}
+    #barActions .sep{display:none}
     .btn{padding:6px 10px;font-size:11px}}
   #about{position:fixed;inset:0;z-index:20;background:rgba(3,7,10,.93);
     backdrop-filter:blur(12px);padding:28px 22px;overflow:auto;display:none}
@@ -206,6 +222,8 @@
 <div id="bar">
   <div id="species"></div>
   <div id="barActions">
+    <div id="views"></div>
+    <span class="sep"></span>
     <button class="btn" id="sheetBtn">controls</button>
     <button class="btn" id="cellsBtn">into the cells</button>
     <button class="btn" id="newBtn">new specimen</button>
@@ -214,8 +232,6 @@
 </div>
 
 <div id="sheet">
-  <div id="views"><span class="lbl">view</span></div>
-  <div id="viewNote"></div>
   <div id="sliders"></div>
   <div id="actions">
     <button class="btn" id="regrowBtn">regrow with these</button>

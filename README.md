@@ -89,7 +89,7 @@ frame; what changes is how much of what the simulation knows is allowed through.
 | **flux** | The organism as one transport network. Drop the cells and keep what they are doing: veins and pump directions, nothing else. Tip, leaf and fruit end up in the same visual language, because they are the same solver on different geometry. |
 | **field** | An instrument rather than a picture. Auxin concentration on one ramp, the species colours discarded, no bloom or grade. Two species look alike in here — which is the point, since a species is only a parameter set. |
 
-The rail is at the top of the **controls** sheet, or from the console:
+The switch is in the bar along the bottom, or from the console:
 
 ```js
 __app.setRenderView('cells')

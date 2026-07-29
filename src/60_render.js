@@ -4,8 +4,35 @@
 
 import { m4, m4perspective, m4lookAt, m4mul, m4identity, v3, clamp } from './00_math.js';
 
+// WHY THIS CHECKS FOR NULL BEFORE IT CHECKS FOR A COMPILE ERROR.
+//
+// `createShader` returns null rather than throwing when the context cannot make
+// one — a lost context is the usual reason. The old code passed that null
+// straight to `shaderSource`, and what reached the user was the browser's own
+// argument-type complaint:
+//
+//   Could not start: Argument 1 ('shader') to
+//   WebGL2RenderingContext.shaderSource must be an instance of WebGLShader
+//
+// which says nothing about the actual fault and sends you looking at the shader
+// source, where there is nothing wrong. It is worth being precise about what
+// went wrong here because this is the FIRST thing the piece does with WebGL, so
+// this message is the only thing a viewer on an unsupported browser ever sees.
 function sh(gl, type, src) {
   const s = gl.createShader(type);
+  if (!s) {
+    // Everything the browser will tell us about why, gathered while we still can
+    const lost = gl.isContextLost ? gl.isContextLost() : 'unknown';
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'undisclosed';
+    throw new Error(
+      'this browser gave us a WebGL2 context that cannot create shaders '
+      + `(contextLost=${lost}, renderer=${renderer}, version=${gl.getParameter(gl.VERSION)}). `
+      + 'Chrome and Firefox are known to work. On Safari, check '
+      + 'Develop › Experimental Features for a disabled WebGL 2.0, and note that '
+      + 'some builds refuse WebGL over file:// — try serving the directory '
+      + '(python3 -m http.server) instead of opening the file directly.');
+  }
   gl.shaderSource(s, src); gl.compileShader(s);
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
     throw new Error('shader: ' + gl.getShaderInfoLog(s) + '\n' + src.split('\n').map((l, i) => (i + 1) + ': ' + l).join('\n'));

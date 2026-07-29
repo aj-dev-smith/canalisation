@@ -349,7 +349,9 @@ which channels of the simulation reach the screen — `natural` is what always s
 `cells` draws every organ at the resolution the solver runs at with no lamina at all,
 `flux` keeps the veins and the pump directions and drops the surfaces, `field` puts
 auxin on one ramp with the species palette and the whole grade discarded. `app.setRenderView('cells')`
-from the console, or the rail at the top of the controls sheet. **They are one
+from the console, or the segmented control in the bottom bar — **not** the controls
+sheet, which is where it started and which covered the plant whose view you were
+changing. **They are one
 `drawSpecimen` reading different weights, deliberately** — four copies of that function
 would drift apart inside a week, and every real difference between these views is a
 channel turned up or down. Adding a fifth should be an entry in the table.

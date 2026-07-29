@@ -631,6 +631,32 @@ brightness, costing full price for nothing — 22,439 invisible ribbons per
 specimen in the lamina-only probe. A weight of zero has to be a skip, not a
 multiply, anywhere the multiply happens after the work.
 
+**`createShader` returns null instead of throwing**, so passing it straight to
+`shaderSource` gets you the browser's argument-type complaint —
+
+    Argument 1 ('shader') to WebGL2RenderingContext.shaderSource
+    must be an instance of WebGLShader
+
+— which sends you reading the shader source, where there is nothing wrong. The
+fault is a context that cannot make shaders, usually a lost one. `sh()` in
+`60_render.js` checks for it and reports `isContextLost()`, the renderer name and
+the GL version instead. Worth the lines because it is the **first** thing the piece
+does with WebGL, so that message is the only thing a viewer on an unsupported
+browser ever sees. Seen once on Safari over `file://` and not reproducible in
+Playwright's WebKit, which starts the piece fine on an Apple GPU.
+
+**A control in the sheet cannot be judged while you use it.** The view rail shipped
+at the top of the controls sheet, which is 560px wide and up to 70vh tall — so
+opening it to change the view covered the plant whose view was being changed. It is
+a segmented control in the bottom bar now. Anything whose effect is *the whole
+frame* belongs in the bar; the sheet is for things you set and forget.
+
+Related, and the reason the fix was not just moving the element: the explanatory
+copy went with it, into `showTip`. That exposed a second thing — the tip had a flat
+3800ms timeout, which suits the shortest slider tip and nothing else. The longest
+view note is 260 characters, or 68 characters a second, about three times a reading
+pace. It scales with length now.
+
 ## Performance
 
 Leaf and margin simulations dominate. Grow a small **library** and share it —

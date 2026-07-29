@@ -73,12 +73,23 @@
   .chip i{width:7px;height:7px;border-radius:50%;flex:0 0 auto;opacity:.65;transition:.15s}
   .chip.on{background:rgba(111,240,220,.16);color:var(--ink);border-color:rgba(111,240,220,.45)}
   .chip.on i{opacity:1;box-shadow:0 0 7px currentColor}
-  /* the view rail: which channels of the simulation reach the screen */
-  #views{display:flex;gap:6px;align-items:center;flex-wrap:wrap;
-    padding-bottom:11px;border-bottom:1px solid var(--line)}
-  #views .lbl{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
-    color:var(--dim);margin-right:2px}
-  #viewNote{font-size:10.5px;color:var(--dim);line-height:1.45;margin-top:7px}
+  /* THE VIEW RAIL LIVES IN THE BAR, NOT IN THE SHEET.
+     It started in the controls sheet, which was wrong for one reason that only
+     shows up when you use it: the sheet is 560px wide and up to 70vh tall, so
+     opening it to change view covers the thing you are changing the view OF.
+     A segmented control rather than four separate chips, because the bar is
+     already carrying eight species and four buttons and 180px is the whole
+     budget. Sharing one pill also says what is true: these are four ways of
+     looking at one plant, not four independent toggles. */
+  #views{display:flex;align-items:center;border:1px solid var(--line);
+    border-radius:999px;background:rgba(3,7,10,.5);overflow:hidden;flex:0 0 auto}
+  #views button{font:inherit;font-size:11px;padding:5px 9px;border:0;cursor:pointer;
+    background:transparent;color:var(--dim);transition:.15s;white-space:nowrap}
+  #views button+button{border-left:1px solid var(--line)}
+  #views button:hover{color:var(--ink)}
+  #views button.on{background:rgba(111,240,220,.16);color:var(--ink)}
+  /* a hairline between the views and the actions, so the bar reads as two groups */
+  #barActions .sep{width:1px;height:18px;background:var(--line);flex:0 0 auto}
   #sliders{margin-top:8px;display:grid;grid-template-columns:1fr;gap:7px}
   @media(min-width:520px){#sliders{grid-template-columns:1fr 1fr;gap:7px 16px}}
   .row label{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);
@@ -95,8 +106,13 @@
   #stats b{color:var(--ink)}
   .btn.urge{border-color:rgba(111,240,220,.6);background:rgba(111,240,220,.16)}
   @media(max-width:560px){#card{right:10px}#card table{font-size:10px}
+    /* the views group pushes #barActions onto two rows here, and everything
+       positioned off --bar has to come up with it */
+    :root{--bar:124px}
     #bar{gap:6px;padding-left:8px;padding-right:8px}
     #barActions{gap:6px}
+    #views button{padding:5px 7px}
+    #barActions .sep{display:none}
     .btn{padding:6px 10px;font-size:11px}}
   #about{position:fixed;inset:0;z-index:20;background:rgba(3,7,10,.93);
     backdrop-filter:blur(12px);padding:28px 22px;overflow:auto;display:none}
@@ -206,6 +222,8 @@
 <div id="bar">
   <div id="species"></div>
   <div id="barActions">
+    <div id="views"></div>
+    <span class="sep"></span>
     <button class="btn" id="sheetBtn">controls</button>
     <button class="btn" id="cellsBtn">into the cells</button>
     <button class="btn" id="newBtn">new specimen</button>
@@ -214,8 +232,6 @@
 </div>
 
 <div id="sheet">
-  <div id="views"><span class="lbl">view</span></div>
-  <div id="viewNote"></div>
   <div id="sliders"></div>
   <div id="actions">
     <button class="btn" id="regrowBtn">regrow with these</button>
@@ -6653,8 +6669,35 @@ function stemRibbon(B, pts, radii, col, glow) {
 // ---------------------------------------------------------------------------
 
 
+// WHY THIS CHECKS FOR NULL BEFORE IT CHECKS FOR A COMPILE ERROR.
+//
+// `createShader` returns null rather than throwing when the context cannot make
+// one — a lost context is the usual reason. The old code passed that null
+// straight to `shaderSource`, and what reached the user was the browser's own
+// argument-type complaint:
+//
+//   Could not start: Argument 1 ('shader') to
+//   WebGL2RenderingContext.shaderSource must be an instance of WebGLShader
+//
+// which says nothing about the actual fault and sends you looking at the shader
+// source, where there is nothing wrong. It is worth being precise about what
+// went wrong here because this is the FIRST thing the piece does with WebGL, so
+// this message is the only thing a viewer on an unsupported browser ever sees.
 function sh(gl, type, src) {
   const s = gl.createShader(type);
+  if (!s) {
+    // Everything the browser will tell us about why, gathered while we still can
+    const lost = gl.isContextLost ? gl.isContextLost() : 'unknown';
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'undisclosed';
+    throw new Error(
+      'this browser gave us a WebGL2 context that cannot create shaders '
+      + `(contextLost=${lost}, renderer=${renderer}, version=${gl.getParameter(gl.VERSION)}). `
+      + 'Chrome and Firefox are known to work. On Safari, check '
+      + 'Develop › Experimental Features for a disabled WebGL 2.0, and note that '
+      + 'some builds refuse WebGL over file:// — try serving the directory '
+      + '(python3 -m http.server) instead of opening the file directly.');
+  }
   gl.shaderSource(s, src); gl.compileShader(s);
   if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
     throw new Error('shader: ' + gl.getShaderInfoLog(s) + '\n' + src.split('\n').map((l, i) => (i + 1) + ': ' + l).join('\n'));
@@ -8741,15 +8784,22 @@ for (const name of Object.keys(SPECIES)) {
 chips.querySelector('.chip.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 
 // --- the view rail ---------------------------------------------------------
-// Which channels of the simulation reach the screen. This lives in the sheet
-// rather than the bar because the bar is the CATALOGUE — species first, since
-// that is the thing worth trying before anything else — and because a view is
-// something you choose once and then watch, not something you flick between.
+// Which channels of the simulation reach the screen.
 //
-// The copy matters more here than on the other controls. Every one of these is
-// the same plant, the same solver and the same frame; what changes is how much
-// of what the simulation knows is allowed through. Somebody who reads "cells"
-// as a stylised filter has been told the opposite of the truth.
+// IN THE BAR, NOT IN THE SHEET, and the reason is the whole argument for where
+// any control goes. It started in the controls sheet on the theory that a view
+// is something you choose once and then watch. That was wrong the first time
+// anyone used it: the sheet is 560px wide and up to 70vh tall, so opening it to
+// change the view covers the thing whose view you are changing. **A control that
+// hides its own subject cannot be judged.** Switching views is now one click and
+// nothing moves over the plant.
+//
+// The copy matters more here than on the other controls, so it goes through
+// `showTip` — the same channel the sliders use to say what they just did, and it
+// gets out of the way on its own. Every one of these is the same plant, the same
+// solver and the same frame; what changes is how much of what the simulation
+// knows is allowed through. Somebody who reads "cells" as a stylised filter has
+// been told the opposite of the truth.
 const VIEW_NOTE = {
   natural: 'The plant standing in light. Opaque tissue, the canalised veins glowing inside it.',
   cells: 'No lamina at all — every leaf, growing point and ovary wall drawn at the resolution the solver runs at. Each disc is one cell holding the auxin it actually holds; each needle is the wall it has loaded its pumps onto. About 67,000 of them on a Cathedral Fern.',
@@ -8757,20 +8807,20 @@ const VIEW_NOTE = {
   field: 'An instrument, not a picture. Auxin concentration on one ramp, the species colours discarded, no bloom or grade. Two species look alike in here — which is the point, since a species is only a parameter set.',
 };
 const viewsEl = $('views');
-const viewNote = $('viewNote');
 for (const name of Object.keys(VIEWS)) {
   const b = document.createElement('button');
-  b.className = 'chip' + (name === app.viewName ? ' on' : '');
+  if (name === app.viewName) b.className = 'on';
   b.textContent = VIEWS[name].label || name;
+  b.title = VIEW_NOTE[name] || name;
   b.onclick = () => {
+    if (app.viewName === name) return;          // no tip for a no-op
     app.setRenderView(name);
-    [...viewsEl.querySelectorAll('.chip')].forEach(x => x.classList.remove('on'));
+    for (const x of viewsEl.children) x.classList.remove('on');
     b.classList.add('on');
-    viewNote.textContent = VIEW_NOTE[name] || '';
+    showTip(VIEW_NOTE[name] || '');
   };
   viewsEl.appendChild(b);
 }
-viewNote.textContent = VIEW_NOTE[app.viewName] || '';
 
 // --- controls that show you their own effect -------------------------------
 let tipT = 0;
@@ -8779,7 +8829,14 @@ function showTip(text) {
   t.textContent = text;
   t.classList.add('on');
   clearTimeout(tipT);
-  tipT = setTimeout(() => t.classList.remove('on'), 3800);
+  // HOW LONG IT STAYS UP IS A FUNCTION OF HOW MUCH THERE IS TO READ. This was a
+  // flat 3800ms, which suits the shortest slider tip and no other: the view
+  // notes run to 260 characters, and 3.8 seconds of that is 68 characters a
+  // second, roughly three times a reading pace. 38ms a character is about 315
+  // words a minute — brisk, but the tip is a nudge rather than a document, and
+  // the floor keeps a short one from flashing past.
+  tipT = setTimeout(() => t.classList.remove('on'),
+    Math.min(10000, Math.max(3800, text.length * 38)));
 }
 
 const SLIDERS = [
