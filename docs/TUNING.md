@@ -1040,3 +1040,76 @@ It exists because a garden is mostly *background*, and the piece's timing was
 built around one specimen being watched all the way through — left alone, a stand
 with staggered ages has half its members dismantling themselves before anyone has
 looked at them. `app.holdSenescence()` sets it across the clearing.
+
+## Render views (`70_app.js` VIEWS, ROADMAP 12, 2026-07-29)
+
+**This section is halfway between the two kinds of tuning in this file.** The
+weights below are composition — how much of a channel is showing — and they were
+set by looking, like `BASE_PAL` above. The two *laws* at the end are not, and
+both are anchored to a number rather than to taste.
+
+A view is a set of weights on channels the simulation already computes. Nothing
+here changes geometry; every number is an amount of something, not a shape.
+
+| | `natural` | `cells` | `flux` | `field` |
+|---|---|---|---|---|
+| `lamina` | 1 | 0 | 0 | 0 |
+| `veins` | 1 | 0.45 | 1.35 | 0 |
+| `cells` | 0 | 1 | 0 | 1 |
+| `needles` | 0 | 0.85 | 1 | 0 |
+| `stem` | 1 | 0.16 | 0.14 | 0.10 |
+| `stemSolid` | yes | no | no | no |
+| `fruitSolid` | yes | no | no | no |
+| `ripeTint` | — | 0.75 | 0.75 | **0** |
+| `spores` | yes | yes | yes | **no** |
+| `exposure` | 1.04 | 0.90 | 1.06 | 1.00 |
+| `bloom` | 0.38 | 0.22 | 0.30 | **0** |
+
+**`stem` is the one that moved a lot, and it is worth knowing why.** It started
+at 0.55 and read as lit frosted glass laid across the tissue behind it — the one
+thing in these views that looked drawn rather than measured. The stem's *width*
+is unchanged and is not tunable: a ribbon at the radius Murray's law grew is the
+stem's true silhouette. Only the brightness moved. `stemSolid: false` is not a
+weight at all — `tube()` writes depth, so in a view whose proposition is that
+you can see through the organism the stem has to move to the additive pass or it
+punches a plant-shaped hole in its own tissue.
+
+**`veins: 0.45` in the cell view is deliberate and not a fade for cost.** The
+veins are what the needles fall into; without them a field of needles reads as
+milling about rather than as canalising, which is the whole claim.
+
+**`ripeTint: 0` in `field` is a correctness constraint, not a taste one.**
+Ripeness and auxin concentration are two different fields and an instrument must
+not put one on the ramp measuring the other. Counted before the fix: 3,380 of
+36,049 points in a `field` garden were still carrying a species' ripe red.
+
+### The two laws, which are not taste
+
+**Cell level of detail: constant cell density per screen pixel, drawn area
+conserved.** The same law as the vein cull, stated for an area instead of a
+length, and anchored the same way — a blade at the hero's framing distance keeps
+every cell. The table is stored in a stable hashed order so any prefix is a
+uniform sample of the lattice; a kept cell stands for `1/shrink` cells, so its
+radius scales by `sqrt` and the total emitted area does not move with distance.
+Measured by `test/views.mjs`:
+
+```
+eye distance   cells drawn   total drawn area
+          6           705      1.000x
+         12           177      1.005x
+         24            44      1.000x
+         48            11      1.004x
+         96            3       0.977x
+```
+
+Do not replace the hash with a stride. The field is stored row major, so a stride
+near `nv` samples a single column and the blade comes out as stripes.
+
+**Needle visibility: 2.5 to 10 screen pixels, and this one was set by eye.** The
+geometric answer — a needle is legible once it is a pixel or two long — gives a
+whole plant 46,000 needles at three pixels each over 200,000 pixels of frame, and
+the additive pass turns it white. The question is not whether one needle is long
+enough but whether the *field* of them is sampled well enough to read as
+directions. See JOURNAL. **Do not narrow this to buy frames** — it is the same
+mistake as widening the vein cull, and it makes `cells` and `flux` the same
+picture.

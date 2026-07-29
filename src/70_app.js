@@ -316,19 +316,24 @@ export const VIEWS = {
     // the veins stay, faint. They are what the needles fall into, and without
     // them a field of needles reads as milling about rather than as canalising
     lamina: 0, veins: 0.45, cells: 1, needles: 0.85, fruitSolid: false,
-    stem: 0.55, stemSolid: false, meristem: 1, spores: true,
-    pal: { bloom: 0.22, exposure: 1.10, dof: 0.55, vignette: 0.5 },
+    // THE STEM IS A GHOST, NOT A PANE OF GLASS. A ribbon at the stem's own
+    // radius is its true silhouette, and at 0.55 it read as lit frosted glass
+    // laid across the tissue behind it — the one thing in these views that
+    // looked drawn rather than measured. The width is unchanged; only the
+    // brightness moved.
+    stem: 0.16, stemSolid: false, meristem: 1, spores: true,
+    pal: { bloom: 0.22, exposure: 0.90, dof: 0.55, vignette: 0.5 },
   },
   flux: {
     label: 'flux',
     lamina: 0, veins: 1.35, cells: 0, needles: 1, fruitSolid: false,
-    stem: 0.40, stemSolid: false, meristem: 1, spores: true,
+    stem: 0.14, stemSolid: false, meristem: 1, spores: true,
     pal: { bloom: 0.30, exposure: 1.06, dof: 0.55, vignette: 0.5 },
   },
   field: {
     label: 'field',
     lamina: 0, veins: 0, cells: 1, needles: 0, fruitSolid: false,
-    stem: 0.22, stemSolid: false, meristem: 1,
+    stem: 0.10, stemSolid: false, meristem: 1,
     // drifting spores are scenery, and on an instrument they are noise that
     // looks exactly like the signal — both are points of light
     spores: false,
@@ -337,6 +342,8 @@ export const VIEWS = {
     // Dark blue to white through the middle of the range: a sequential ramp
     // that does not pretend to a hue the concentration does not have.
     cellPal: { cell0: [0.03, 0.05, 0.16], cell1: [1.0, 0.98, 0.90] },
+    // ripeness is a different field from concentration — see `fruitCells`
+    ripeTint: 0,
     pal: { bloom: 0.0, exposure: 1.0, grain: 0.0, vignette: 0.0, dof: 0.0 },
   },
 };
@@ -1481,7 +1488,7 @@ export class App {
         const tip = ax.pts[n2 - 1];
         const fs = S.sp.fruitScale * (ax.gen === 0 ? 1 : 0.72);
         if (V.fruitSolid) fruitShell(B, ax.fruit, tip, fs, pal);
-        else fruitCells(B, ax.fruit, tip, fs, cpal, V.needles);
+        else fruitCells(B, ax.fruit, tip, fs, cpal, V.needles, V.ripeTint);
       }
 
       // the growing point itself

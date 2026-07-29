@@ -60,15 +60,17 @@ node test/wind.mjs '{"uRef":3}'                    # the wind field: profile, gu
 node test/stem.mjs                                 # the stem as a beam: ringdown vs the pre-flight, sway per species, convergence
 node test/petiole.mjs                              # the stalk as a pipe, and the hang as a force balance
 node test/veinlod.mjs                              # vein level of detail: what it saves, and the light it must conserve
+node test/views.mjs                                # render views: what each costs, and is the cell table honest
 ```
 
-Four browser tools are about the scene rather than the simulation, and one of them
+Five browser tools are about the scene rather than the simulation, and one of them
 checks something no other harness here can:
 
 ```bash
 node tools/garden_shot.mjs shots 7        # grow a stand, three framings, buffer occupancy
 node tools/garden_hitch.mjs 7             # DOES PLANTING A GARDEN FREEZE THE TAB?
 node tools/veinlod_shot.mjs shots         # before/after for the vein LOD, on the hero
+node tools/views_shot.mjs shots           # every render view, wide and close
 GARDEN=7 node tools/clip.mjs shots/g 10   # record the stand moving
 ```
 
@@ -78,8 +80,8 @@ script in `tools/` passed — they all navigate, wait, and screenshot, so a froz
 tab and a busy one are the same script. It measures the gap between animation
 frames and exits non-zero past 250ms.
 
-**Five of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
-`petiole.mjs`, `veinlod.mjs`.** The
+**Six of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+`petiole.mjs`, `veinlod.mjs`, `views.mjs`.** The
 rest print and never fail. That split is the project's epistemics in miniature — an
 *emergent* quantity must not be pinned down in a test, because that would convert it
 into an imposed one, while a *physical* claim can be checked against a number worked
@@ -266,13 +268,16 @@ src/39a_stem.js     THE STEM BENDS. Axes as coupled damped cantilevers off EI on
                     numbered, because it must load after the air and before the organism
 src/50_geom.js      simulation state -> triangles, ribbons, points; senescence colour.
                     Vein LEVEL OF DETAIL is here, and it is what lets the scene hold
-                    more than one plant
+                    more than one plant. So is the CELL TABLE, which is what lets a
+                    WHOLE PLANT be drawn at the resolution the solver runs at
 src/60_render.js    WebGL2: forward pass, bloom, depth of field, grade. No sway — the
                     geometry moves for real now
 src/70_app.js       species presets, camera director, scene assembly, App.setWind.
                     A SCENE IS A LIST OF SPECIMENS now, not one plant: makeSpecimen,
-                    drawSpecimen, plantGarden, sceneBounds
-src/80_main.js      UI wiring, including the wind slider
+                    drawSpecimen, plantGarden, sceneBounds. VIEWS lives here too --
+                    WHICH CHANNELS OF THE SIMULATION REACH THE SCREEN
+src/80_main.js      UI wiring: the wind slider, the view rail, and the only place a
+                    dropped-geometry report reaches a person
 ```
 
 `stepAuxin()` in `10_auxin.js` is the whole thesis. It runs on **any** topology —
@@ -313,9 +318,49 @@ of its bugs were found, and none would have been visible on screen.
 falsified second rotational plane (#17), the bending stem (#18), the weather being
 turned down to force 2 (#19), the occlusion cull no longer hiding leaves the viewer can
 see (#23), the petiole becoming a petiole — pipe-model radius and droop as a force
-balance (ROADMAP 5 + 7b) — and **the scene becoming a garden** (#25, ROADMAP 10); if the
-git log has moved a long way past those, treat the specifics below as needing a re-read
-rather than as fact.*
+balance (ROADMAP 5 + 7b) — **the scene becoming a garden** (#25, ROADMAP 10), and
+**the renderer getting views** (ROADMAP 12); if the git log has moved a long way past
+those, treat the specifics below as needing a re-read rather than as fact.*
+
+**THE RENDERER HAS FOUR VIEWS, AND THEY ARE ONE TABLE.** `VIEWS` in `70_app.js` says
+which channels of the simulation reach the screen — `natural` is what always shipped,
+`cells` draws every organ at the resolution the solver runs at with no lamina at all,
+`flux` keeps the veins and the pump directions and drops the surfaces, `field` puts
+auxin on one ramp with the species palette and the whole grade discarded. `app.setRenderView('cells')`
+from the console, or the rail at the top of the controls sheet. **They are one
+`drawSpecimen` reading different weights, deliberately** — four copies of that function
+would drift apart inside a week, and every real difference between these views is a
+channel turned up or down. Adding a fifth should be an entry in the table.
+
+None of it adds a spatial prior and SCIENCE.md says so explicitly: every channel was
+already being computed, and a view turns it up or down.
+
+What made a whole plant at cell resolution possible was two measurements. **A specimen
+already IS a cell field** — 9k cells on a Nightglass Parasol, 82k on an Abyssal Frond —
+and the point buffer held 74,898, so one plant saturated it; that is a buffer size, not
+a research problem. And **a mature leaf is frozen tissue** (`Leaf.step()` returns on its
+first line once `mature`) worn by 118 organs from a library of eight, so the per-cell
+neighbour loop was solving the same problem a hundred times a frame. Baked once per
+library leaf in `cellTable`: 18.98ms → 6.81ms, and `test/views.mjs` asserts the table
+reproduces the live path cell for cell.
+
+**Be honest about what it costs**: `cells` is *dearer* than the lamina it replaces —
+12.3ms against 8.3ms for one specimen — not cheaper. The first version of the harness
+asserted the opposite, off a prototype that had skipped the material-to-world map, and
+failed on its first run. The bound that survives is that a whole plant at solver
+resolution is the same *order* as a plant drawn as surfaces. **A garden of eight in
+`cells` works and is CPU-bound long before it is buffer-bound.**
+
+Two level-of-detail laws came with it, both the vein cull's law restated: cells thin
+with distance keeping drawn area constant to within 0.5% out to sixteen focal lengths,
+and needles fade where the *field* of them stops being resolvable. That second
+threshold is perceptual and was set by looking — the only number in this work that
+could not have been computed first — and **narrowing it to buy frames is the same
+mistake as widening the vein cull**: it makes `cells` and `flux` the same picture.
+
+Also here, and worth knowing separately: **a full buffer is no longer silent.**
+`Buffers` counts what it drops, `saturated()` reports it, the HUD prints it beside the
+fps and `test/views.mjs` asserts on it. That pitfall has cost two sessions.
 
 **THE SCENE IS NO LONGER ONE PLANT.** `App` holds a hero specimen plus a `garden` of
 others, each with its own species, palettes, seed and position, all standing in the same
@@ -437,6 +482,13 @@ short version, in order:
 4. **The third phyllotaxis hypothesis** — the honest headline limitation, below.
    Pure science, and a negative result is as publishable as a positive one here.
 5. **Lamina tensioning its own margin** — real quality jump, real work.
+6. **A ribbon as twelve floats (ROADMAP 11)** — the one piece of pure engineering, and
+   it has numbers now. A ribbon costs 188ns against a point's 37ns, a ratio of 5.1
+   against a data ratio of 6, so the line pass is memory traffic and there is nothing
+   to shave inside the current vertex format — a rewrite that removed 316,000
+   allocations a frame bought 3%, which is in JOURNAL so nobody tries it twice.
+   Instancing it speeds up every view at once and hands back the 64MB the line buffer
+   had to grow to.
 
 ### Four live limitations, all with diagnoses rather than excuses
 

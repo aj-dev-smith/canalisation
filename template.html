@@ -73,6 +73,12 @@
   .chip i{width:7px;height:7px;border-radius:50%;flex:0 0 auto;opacity:.65;transition:.15s}
   .chip.on{background:rgba(111,240,220,.16);color:var(--ink);border-color:rgba(111,240,220,.45)}
   .chip.on i{opacity:1;box-shadow:0 0 7px currentColor}
+  /* the view rail: which channels of the simulation reach the screen */
+  #views{display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+    padding-bottom:11px;border-bottom:1px solid var(--line)}
+  #views .lbl{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--dim);margin-right:2px}
+  #viewNote{font-size:10.5px;color:var(--dim);line-height:1.45;margin-top:7px}
   #sliders{margin-top:8px;display:grid;grid-template-columns:1fr;gap:7px}
   @media(min-width:520px){#sliders{grid-template-columns:1fr 1fr;gap:7px 16px}}
   .row label{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);
@@ -208,12 +214,14 @@
 </div>
 
 <div id="sheet">
+  <div id="views"><span class="lbl">view</span></div>
+  <div id="viewNote"></div>
   <div id="sliders"></div>
   <div id="actions">
     <button class="btn" id="regrowBtn">regrow with these</button>
     <button class="btn" id="pruneBtn">cut the apex</button>
     <button class="btn" id="cineBtn">cinema</button>
-    <span id="stats"><span>fps <b id="fps">60</b></span></span>
+    <span id="stats"><span>fps <b id="fps">60</b></span><span id="sat"></span></span>
   </div>
 </div>
 

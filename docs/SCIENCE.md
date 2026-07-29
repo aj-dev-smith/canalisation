@@ -144,6 +144,21 @@ Keep this list short. Every entry is a debt.
    than a new one — see the 2026-07-26 JOURNAL entry, and the honest limitation it
    left behind, below.
 
+**Render views add nothing to this list, and that is worth stating rather than
+assuming.** `VIEWS` in `70_app.js` decides which channels of the simulation reach
+the screen — the lamina, the vasculature, the cells, the needles — and every one of
+those channels was already being computed. A view turns a channel up or down; none
+of them invents geometry, and the `cells` and `flux` views in particular draw
+nothing that was not read straight off a `CellField`. The one thing a view chooses
+that a picture could not is *when a needle is too small to be worth drawing*, which
+is a statement about sampling and screen pixels rather than about a plant — the
+same category as the vein cull. TUNING.md has the number and how it was arrived at.
+
+The `field` view is the strongest form of the claim. Every species on one auxin
+ramp, no palette and no grade: what is left on screen is the concentration field
+and the geometry it produced, and two species look alike in there because a species
+is only a parameter set.
+
 Not simulated at all: pollination (parthenocarpy is real — auxin alone sets fruit),
 turgor and wall mechanics, light, and nutrients.
 

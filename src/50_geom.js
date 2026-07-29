@@ -832,13 +832,29 @@ export function laminaCells(B, leaf, frame, len, wid, pal, curl, ripple, t, deta
     // This is not a new rule, which is why it is allowed to be a fade where the
     // vein cull had to conserve light. The close-up has ALWAYS faded the
     // mechanism up with proximity — `detail` is that ramp — on the argument
-    // that you cannot see a cell's pumps from across the room. A view sets a
-    // floor on `detail`; this is the same ramp continuing to apply underneath
-    // the floor, per blade, which is the only place it can be evaluated. And
-    // unlike a vein, a needle is not surface: nothing integrates it at
-    // distance, so there is no light to fold anywhere.
+    // that you cannot see a cell's pumps from across the room. A view does not
+    // override that argument, it moves where the ramp starts; this is the same
+    // ramp continuing to apply underneath, per blade, which is the only place
+    // it can be evaluated. And unlike a vein, a needle is not surface: nothing
+    // integrates it at distance, so there is no light to fold anywhere.
+    //
+    // THE THRESHOLD IS PERCEPTUAL AND WAS SET BY LOOKING, which makes it one of
+    // the few numbers in this file that could not have been worked out first.
+    // At the geometric answer — a needle is legible once it is longer than a
+    // pixel or two — a whole specimen's forty-six thousand needles came out at
+    // three pixels each over a plant covering some two hundred thousand, so
+    // every pixel carried two or three of them and the additive pass turned the
+    // entire organism into a white blur. `cells` and `flux` were
+    // indistinguishable at that framing, which is the tell: a channel that
+    // cannot be told apart from another one is not showing anything.
+    //
+    // The right question is not whether ONE needle is longer than a pixel. It
+    // is whether the FIELD of them is sampled well enough to read as
+    // directions, and that needs the cells several pixels apart, not touching.
+    // Hence 2.5 to 10 rather than 0.8 to 2.4. A specimen framed whole now shows
+    // its cells and its veins; walk in and the pumps come up.
     const nlPx = ms * (0.30 + 1.40) * len / (PXR * dEye);
-    mech = clamp((nlPx - 0.8) / 1.6, 0, 1);
+    mech = clamp((nlPx - 2.5) / 7.5, 0, 1);
   }
   const dim = 1 - detail * 0.42;
   for (let i = 0; i < nDraw; i++) {
@@ -1058,7 +1074,16 @@ export function fruitShell(B, fr, origin, scale, pal) {
 // topology. Auxin is the colour, ripeness warms it, and an ovule glows through
 // from inside because it is a seed and the flesh is no longer in the way.
 // ---------------------------------------------------------------------------
-export function fruitCells(B, fr, origin, scale, pal, detail) {
+// `ripeTint` is how much of the ripening wave is allowed to show as HUE. It is
+// a knob because the instrument view has a real objection to it: ripeness and
+// auxin concentration are two different fields, and putting one on the colour
+// ramp that is measuring the other is the sort of thing an instrument must not
+// do. Measured on a garden in `field`, 3,380 of 36,049 points were still
+// carrying a species' ripe red into a view whose whole claim is that the
+// species palette has been discarded. At zero a ripe fruit and a green one look
+// alike in there, which is correct: the quantity being displayed is the same.
+export function fruitCells(B, fr, origin, scale, pal, detail, ripeTint) {
+  const rt = ripeTint === undefined ? 0.75 : ripeTint;
   const P = fr.pos, R = fr.ripe, F = fr.F;
   if (!P || !F) return;
   if (!fr._glow || fr._glow.length !== fr.n) {
@@ -1079,9 +1104,9 @@ export function fruitCells(B, fr, origin, scale, pal, detail) {
     const t = clamp(R[i], 0, 1);
     // auxin picks the cell out of the wall; ripeness carries it to the ripe
     // colour, which is the same two-ended ramp `fruitShell` reads
-    const r = lerp(lerp(pal.cell0[0], pal.cell1[0], g), pal.fruit1[0], t * 0.75);
-    const gg = lerp(lerp(pal.cell0[1], pal.cell1[1], g), pal.fruit1[1], t * 0.75);
-    const b = lerp(lerp(pal.cell0[2], pal.cell1[2], g), pal.fruit1[2], t * 0.75);
+    const r = lerp(lerp(pal.cell0[0], pal.cell1[0], g), pal.fruit1[0], t * rt);
+    const gg = lerp(lerp(pal.cell0[1], pal.cell1[1], g), pal.fruit1[1], t * rt);
+    const b = lerp(lerp(pal.cell0[2], pal.cell1[2], g), pal.fruit1[2], t * rt);
     const sd = G[i];
     v3set(_pcol, (r + sd * 0.55) * dim, (gg + sd * 0.45) * dim, (b + sd * 0.30) * dim);
     B.point(_c0, _pcol, cw * (0.55 + g * 0.45 + sd * 0.5));

@@ -597,6 +597,40 @@ Re-assert immediately before the screenshot. Related: left to itself the directo
 picks a close-up, and the first run of `veinlod_shot.mjs` produced two frames of
 the inside of a single petal.
 
+## Render views (2026-07-29)
+
+**A full buffer used to drop geometry in silence, and now it counts.** This has
+cost two debugging sessions, and the advice for spotting it was to notice
+`renderer.nTri` sitting on a round number — which you have to already suspect in
+order to check. `Buffers` ticks `dropped.tri/line/pt` when an emitter has no
+room, `Buffers.saturated()` reports it, the HUD prints it next to the fps, and
+`test/views.mjs` asserts on it. If a picture is missing things, look there first.
+
+**A framing distance that suits one species suits no other.** The first version
+of `tools/views_shot.mjs` put the camera at a fixed 9 units for every specimen.
+A Cathedral Fern at twenty seconds is 23 units tall, so that parked the lens
+*inside* it and produced a page of close-ups of the underside of one frond in
+four different views — which looked exactly like four broken views. Frame from
+`sceneBounds()`, which is what the app's own framer uses.
+
+**A level of detail rule inlined in `buildScene` is a rule no harness can see.**
+`bladeMU`/`bladeMV` were computed inline, so `test/views.mjs` measured a stand at
+the single-specimen mesh density and reported a garden 52% heavier than the one
+that ships. That is the same failure as a harness keeping its own copy of a
+shipped constant, arriving by omission instead of duplication — see `stem.mjs`
+and its hardcoded wind speed. It is `App.setBladeLOD(specimens)` now, and the
+harness calls it.
+
+**`renderer.nTri` and `nLine` are VERTEX counts, not primitive counts.** They are
+named for the draw calls they feed. `test/views.mjs` prints triangles and
+ribbons; a tool reading the renderer prints vertices. Divide by 3 and by 6 before
+comparing the two, or the same scene appears to have tripled.
+
+**A blade drawn with `veinMul: 0` still emitted every ribbon**, at zero
+brightness, costing full price for nothing — 22,439 invisible ribbons per
+specimen in the lamina-only probe. A weight of zero has to be a skip, not a
+multiply, anywhere the multiply happens after the work.
+
 ## Performance
 
 Leaf and margin simulations dominate. Grow a small **library** and share it —

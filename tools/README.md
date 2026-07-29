@@ -87,6 +87,26 @@ inside **single** quotes, so it never interpolated.
   proves nothing. The informative shot is from *inside* the canopy (9 or so), where the
   back of the plant is well beyond the framing distance and 31% of the ribbons go.
 
+- `views_shot.mjs OUTDIR [species] [seed] [waitMs]` — **every render view, one plant,
+  one frame.** `GARDEN=7 node tools/views_shot.mjs shots` does a stand instead. The
+  view registry is the only thing in the piece that changes what a frame is made *of*
+  rather than where the camera is, and no headless harness can judge that:
+  `test/views.mjs` says what each view costs and that nothing is dropped, which is
+  exactly the class of green that has twice coexisted with a picture nobody would ship.
+
+  Two framings per view, because the views disagree about which one they are for.
+  `wide` is the whole specimen, where `cells` has to still read as a plant; `close` is
+  an arm's length off the canopy, where it has to read as tissue. **A view that only
+  works at one of those is not finished** — the needle ramp was set by looking at
+  exactly this pair, after a version where `cells` and `flux` came back identical at
+  `wide`.
+
+  It enumerates `window.__VIEWS` rather than keeping its own list, so a fifth view is
+  covered the day it is added. It frames from `app.sceneBounds()` for a reason in
+  PITFALLS: a fixed distance that suits one species parks the lens inside another.
+  It also prints `B.saturated()` per frame, which is the only place a dropped-geometry
+  report reaches a person other than the HUD.
+
 - `jitter.mjs [species] [seed] [waitSeconds] [uRef]` — **where is the movement's energy?**
   Samples the drawn state at frame rate — the tip of the main axis and individual blade
   normals — and reports a dominant rate per signal, plus a verdict at about 4 Hz, which

@@ -1856,3 +1856,94 @@ Two plants three metres apart are genuinely in different air, and because the
 field advects by Taylor's hypothesis, **a gust crosses the stand** rather than
 arriving everywhere at once. That fell out of the field already being right and
 cost nothing.
+
+## Views, and four things that were wrong on the way (2026-07-29)
+
+The renderer had been decoupled from the simulation for months without anything
+taking advantage of it. What came out of finally trying is in ROADMAP 12; what
+follows is the part that did not work, which is the more useful half.
+
+### The claim that was backwards, asserted before it was measured
+
+A prototype said a whole plant at cell resolution would cost 3.86ms against the
+lamina-and-veins path's 11.59ms — so the headline was going to be that the cell
+view is *cheaper* than the view it replaces. The first version of
+`test/views.mjs` asserted exactly that, and failed on the first run.
+
+The prototype had flattened the material-to-world map, which is most of what
+`laminaCells` does per cell, and it had drawn no veins. With both put back the
+real numbers are 12.3ms against 8.3ms: the cell view is **dearer**, by about
+half. The bound that survives is a weaker and more honest one — a whole plant at
+solver resolution is the same *order* as a plant drawn as surfaces, not an order
+above it.
+
+Worth noting how close this came to shipping as a claim. The prototype was a
+measurement, not a guess; it was simply a measurement of something slightly
+different from the thing being claimed. **The check that caught it was writing
+the assertion down before believing the number.**
+
+### The optimisation that was obvious and wrong
+
+`Buffers.ribbon` built its four corners as four JS arrays and handed them to
+`gv`. At the 22,000 vein ribbons one specimen draws that is 88,000 short-lived
+allocations a frame; at the 79,000 ribbons a plant of needles wants, 316,000. It
+looked like the bottleneck, and rewriting it to write straight into the buffer is
+an obviously good change.
+
+It bought 3%. 8.38ms to 8.15ms on `natural`, 12.97 to 12.10 on the cell view. V8
+handles short-lived arrays far better than the allocation count suggests.
+
+The measurement that should have come first is the one that came second: **cost
+per primitive.** A ribbon is 188ns and a point is 37ns, a ratio of 5.1, against a
+data ratio of 42 floats to 7, which is 6. The line pass is memory traffic and
+there was never anything to shave inside that vertex format. The way out is
+instancing — twelve floats instead of forty-two — and that is ROADMAP 11 now,
+with these numbers attached so nobody re-derives them.
+
+The rewrite is kept. It is not slower and it allocates nothing on the hottest
+path in the piece. But it was an hour spent on the wrong layer.
+
+### The threshold that could not be computed first
+
+Almost every constant in this project is worked out on paper before the solver is
+written, and TUNING.md is a record of that discipline. The needle visibility ramp
+is not one of those, and pretending otherwise would have shipped a bad picture.
+
+The geometric answer is that a needle is legible once it is longer than a pixel
+or two, and at that threshold `mech` fades in over 0.8 to 2.4 screen pixels. A
+Cathedral Fern framed whole then drew 46,000 needles at about three pixels each
+over a plant covering some 200,000, so every pixel carried two or three of them,
+the additive pass turned the organism into a white blur, and `cells` and `flux`
+were **indistinguishable at that framing**. That last part is the tell: a channel
+that cannot be told apart from another one is not showing anything.
+
+The right question is not whether one needle is longer than a pixel. It is
+whether the *field* of them is sampled well enough to read as directions, which
+needs the cells several pixels apart rather than touching. The ramp is 2.5 to 10
+pixels, and it was set by looking at the pictures. A specimen framed whole now
+shows its cells and its veins; walk in and the pumps come up — which is the ramp
+the close-up has always used, arriving at the same place from a different
+direction.
+
+### The instrument that was still wearing the species' colours
+
+`field` claims to discard the species palette: auxin on one ramp, no bloom, no
+grade, and two species looking alike because a species is only a parameter set.
+
+Counting the colours actually in the point buffer for a garden in that view:
+3,380 of 36,049 were warm. `fruitCells` was carrying `pal.fruit1` — a species'
+own ripe red — into the ramp, because ripeness felt like data and therefore
+felt allowed.
+
+It is data, and that is exactly the objection. Ripeness and auxin concentration
+are two different fields, and putting one on the colour ramp that is measuring
+the other is the thing an instrument must not do. `ripeTint` is zero in `field`
+now, so a ripe fruit and a green one look alike in there. **A view that displays
+two quantities on one channel is not more informative than one that displays a
+single quantity; it is less.**
+
+The general lesson is narrower than it looks: nothing here was a rendering bug.
+Every one of these four was a claim that had drifted from what the code did, and
+three of the four were caught by writing the claim down as an assertion or a
+count rather than by looking at a picture. The fourth could only have been caught
+by looking.
