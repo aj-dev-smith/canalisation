@@ -907,3 +907,136 @@ plant-like sway. Real stems escape the trade by being continuously remodelled to
 their target orientation, so the grown shape *is* the static equilibrium. This solves
 deviations about it. **If you add self-weight loading here, every specimen will lie
 down.**
+
+## Vein level of detail, and a scene with more than one plant (2026-07-29)
+
+Numbers for the change that made a garden possible. Read the JOURNAL entry
+alongside it — the interesting part is which law was *rejected*, and why.
+
+### What one specimen costs, on an M5 Mac Pro
+
+Measured in Node, at peak canopy (~2000 steps), against a 16.7 ms frame:
+
+| species | blades | sim ms | geom ms | **ms/frame** | ktri | **kline** |
+|---|---|---|---|---|---|---|
+| Cathedral Fern | 97 | 1.62 | 7.51 | **9.12** | 18.2 | 78.4 |
+| Spiral Ossuary | 83 | 3.37 | 6.45 | **9.82** | 15.6 | 64.8 |
+| Abyssal Frond | 97 | 1.76 | 10.17 | **11.93** | 29.4 | 78.5 |
+| Sun Coral | 96 | 1.60 | 10.01 | **11.61** | 28.5 | 78.7 |
+| Hoarfrost Thicket | 96 | 8.47 | 7.29 | **15.76** | 18.7 | 72.9 |
+| Ember Creeper | 82 | 2.70 | 6.18 | **8.88** | 15.9 | 63.5 |
+| Sulphur Rosette | 42 | 3.93 | 3.62 | **7.55** | 8.7 | 37.6 |
+| Nightglass Parasol | 12 | 0.29 | 2.13 | **2.42** | 7.1 | 10.9 |
+
+**One specimen ate 53-94% of the frame, and the cost was the vein ribbons.**
+Crushing the lamina grid 30x (13x6 to 3x2) moves the line count by *nothing* —
+78.7k either way — and takes only 37% off the geometry time. Every segment of
+every leaf was emitted at every distance as a six-vertex camera-facing ribbon,
+26,200 of them per Cathedral Fern, with no gate of any kind.
+
+### The cull law
+
+**Constant vein density per screen pixel, anchored to the camera's framing
+distance.** A blade at the camera's own distance keeps every vein it always did;
+a blade with a quarter of the screen area keeps a quarter of the ribbons. The
+exponent is the inverse square because that is how screen area works — there is
+no taste constant in it, and `leaf.veins` is already sorted by traffic, so what
+survives is the top of the hierarchy the leaf canalised for itself.
+
+**Do not replace this with "drop anything narrower than a pixel".** That was
+tried first and it is the wrong law here, for a reason that is worth knowing on
+its own: measured against the app's own camera, **about ninety percent of the
+hero's veins are already sub-pixel and already clamped up to the width floor.**
+So that rule is not a statement about distant plants — it redraws the subject of
+the piece. The hierarchy below roughly `w = 0.3` does not reach the screen as
+hierarchy today; it reaches it as a uniform smear that costs full price.
+
+Two pixel widths do two different jobs and must not be conflated:
+
+| | value | job |
+|---|---|---|
+| width floor | 1.5 px | keeps a minor vein visible at all — predates this, see above |
+| `PXR` | angular px | lets a blade rescale both to its OWN distance |
+
+`setView(eye, minWorld, pxPerDist)`. Passing `0` for the third is the pre-LOD
+renderer exactly, and `app.veinLOD = false` does that from a browser.
+
+### Light: conserve surface brightness, not ribbon count
+
+An emissive surface looks equally bright per pixel however far off it is, so its
+emitted total in **world** units must not move with distance. Two things push it
+around and both must be undone:
+
+1. the cull removes ribbons;
+2. the per-blade width floor holds survivors at 1.5 screen pixels, so they get
+   *wider in world units* the further off they are.
+
+**The second is much the larger.** Left uncorrected a specimen at sixteen focal
+lengths came out **fifteen times too bright**, and the cull was under a fifth of
+that. Two baked cumulative tables per leaf (`veinLiteNat`, `veinLiteClamp` in
+`30_leaf.js`) make the correction O(1) per blade. There must be two: modelling
+every vein at its natural width **under-compensates by 60%**, because in that
+regime almost every dropped vein was in fact being drawn clamped.
+
+Conserved to ~2% while a useful number of ribbons survive, ~12% on the two
+species that fall under a tenth of one — where the specimen is about a dozen
+pixels tall. The residual is `veinLite` measuring segments in the leaf's material
+space while the blade is drawn through `wAt`; it averages out over hundreds of
+ribbons and stops averaging when a handful are left. `test/veinlod.mjs` asserts
+15% and says why it is not tighter.
+
+**A blade still canalising is not culled at all** (`dev >= 1`). The tables are
+baked over the whole network while the draw loop skips veins ahead of the
+development wave, so on a half-grown blade the relight over-brightens — by 69%
+across a growing canopy, which is how the guard was found.
+
+### Buffer sizes — set from a measurement, twice
+
+`1 << 23` floats each for `tri` and `line`, 32MB apiece. Eight specimens and 525
+organs framed as a stand is 551k triangles and 664k lines, which is 66% and 55%.
+
+Both previous sizes were exceeded by the thing that came next: `1 << 21` was
+pinned by one dense specimen with a blade at cell resolution, and `1 << 22` was
+pinned by a garden of eight **on the very first frame it was asked for**. A full
+buffer drops geometry silently, so the failure is a picture that is merely
+missing things — `renderer.nTri`/`nLine` on a round number equal to
+`B.tri.length/10` or `B.line.length/7` means saturated, not busy.
+
+### The garden
+
+| knob | value | why |
+|---|---|---|
+| ring radius | 20 | must clear the blade length; these carry 4-unit fronds, and a ring of 9 puts them through each other |
+| head start | 120-2600 steps | a seedling beside a flowering adult beside a seed head — the one thing a single specimen cannot show |
+| `warmBudgetMs` | 8 | ms per frame paid toward establishing the stand |
+
+**The head start is not free and must not be paid at once.** A step during
+*growth* costs about **1.7ms**, not the ~300us a grown plant costs, because that
+is when the leaf pool canalises its library; and a `Plant` costs ~70ms to
+construct before it takes a single step, since every `Axis` runs its meristem
+forward 220 steps in its own constructor. Seven of each, synchronously, was **19
+seconds of frozen tab**. Both are budgeted per frame now: worst frame gap 501ms →
+149ms, measured by `tools/garden_hitch.mjs`.
+
+At 8ms/frame a stand of seven takes ~38s to establish. That is interactive
+throughout and it reads as the clearing filling in, but if it needs to be faster
+the cost is nearly all leaf-library canalisation — sharing libraries between
+same-species plants is the lever, and it has a visual cost.
+
+### `senesceHold` — a viewer control, not a mechanism
+
+`0`. Same category as the wind and time sliders: it pauses a stage rather than
+inventing one, and a specimen released carries on from where it stopped rather
+than jumping.
+
+| | live | shed | mean sen |
+|---|---|---|---|
+| both at 2400 | 97 | 0 | 0.110 |
+| free at 5000 | 78 | 19 | 0.653 |
+| **held** at 5000 | **97** | **0** | **0.110** |
+| released +1500 | 95 | 2 | 0.583 |
+
+It exists because a garden is mostly *background*, and the piece's timing was
+built around one specimen being watched all the way through — left alone, a stand
+with staggered ages has half its members dismantling themselves before anyone has
+looked at them. `app.holdSenescence()` sets it across the clearing.

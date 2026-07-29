@@ -11,23 +11,29 @@ import {
 
 export class Buffers {
   constructor() {
-    // Sized for a dense specimen with one blade refined to cell resolution.
-    // These were half this and it was not obviously wrong: a full buffer drops
-    // geometry silently, so the failure is a picture that is merely missing
-    // things. Measured on Sun Coral, 104 organs — the plant alone reaches 86%
-    // of the old triangle buffer, and going into a blade pinned both the
-    // triangle and the line buffers at exactly their caps, which is where the
-    // needles were being thrown away. `renderer.nTri`/`nLine` sitting on a
-    // round number equal to `B.tri.length/10` or `B.line.length/7` means
-    // saturated, not busy. Uploads are subarrays, so headroom costs nothing
-    // per frame — only the allocation.
-    this.tri = new Float32Array(1 << 21);   // pos3 nrm3 col3 emis1 = 10
+    // SIZED FOR A CLEARING, NOT FOR A SPECIMEN.
+    //
+    // A full buffer drops geometry silently, so the failure is a picture that is
+    // merely missing things — `renderer.nTri`/`nLine` sitting on a round number
+    // equal to `B.tri.length/10` or `B.line.length/7` means saturated, not busy.
+    // That is worth knowing twice over, because it has now happened twice. At
+    // 1<<21 one dense specimen reached 86% of the triangle buffer on its own and
+    // going into a blade at cell resolution pinned BOTH at exactly their caps,
+    // which is where the needles were being thrown away. At 1<<22 a garden of
+    // eight pinned both again on the very first frame it was asked for.
+    //
+    // Eight specimens, 525 organs, framed as a stand: 551k triangles and 664k
+    // lines, which is 66% and 55% of these. That is the measurement they are set
+    // from rather than a guess, and the headroom above it is deliberate — the
+    // close-up modes multiply one blade's cost by a large factor and the garden
+    // does not switch them off. Uploads are subarrays, so headroom costs nothing
+    // per frame; only the allocation, which is 32MB apiece.
+    this.tri = new Float32Array(1 << 23);   // pos3 nrm3 col3 emis1 = 10
     this.triN = 0;
-    // Lines get the most headroom: every vein and every needle is a six-vertex
-    // camera-facing ribbon, so a refined blade full of committed cells is by
-    // far the heaviest thing the scene ever builds. One notch up from the
-    // triangle buffer measured 98.5% full on Sun Coral, which is not headroom.
-    this.line = new Float32Array(1 << 21);  // pos3 col3 emis1 = 7
+    // Lines still get the most traffic: every vein and every needle is a
+    // six-vertex camera-facing ribbon, so a refined blade full of committed
+    // cells is by far the heaviest thing the scene ever builds.
+    this.line = new Float32Array(1 << 23);  // pos3 col3 emis1 = 7
     this.lineN = 0;
     this.pt = new Float32Array(1 << 19);    // pos3 col3 size1 = 7
     this.ptN = 0;
@@ -83,9 +89,21 @@ export class Buffers {
 const _a = v3(), _b = v3(), _c = v3(), _d = v3(), _n = v3(), _t = v3(), _u = v3();
 const _sa = v3(), _sb = v3(), _sc = v3();
 
-// where the camera is, for orienting vein ribbons
-let VIEW = v3(0, 0, 1), MINW = 0.004;
-export function setView(eye, minWorld) { v3copy(VIEW, eye); MINW = minWorld; }
+// Where the camera is, for orienting vein ribbons — and how big a pixel is, so
+// that a blade can ask what IT resolves rather than what the focal distance
+// does. `MINW` is world units per pixel at the camera's orbit distance, which
+// is the right answer for one centred specimen and the wrong one the moment
+// there are two: a plant across the clearing needs a coarser floor than the one
+// in front of the lens, and using the near one draws its veins sub-pixel thin.
+//
+// `PXR` is the ANGULAR pixel size — world units per pixel per unit of distance —
+// so `PXR * d` is the scale at a blade `d` away. Zero means no per-object scale
+// was supplied and everything falls back to `MINW`, which is what every caller
+// that has not been told about this gets.
+let VIEW = v3(0, 0, 1), MINW = 0.004, PXR = 0;
+export function setView(eye, minWorld, pxPerDist) {
+  v3copy(VIEW, eye); MINW = minWorld; PXR = pxPerDist || 0;
+}
 
 // a generalised cylinder along a polyline, with a parallel-transported frame
 export function tube(B, pts, radii, sides, colFn) {
@@ -349,7 +367,106 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
     const sv = sen > 0 ? clamp((sen - VEIN_LAG) / (1 - VEIN_LAG), 0, 1) : 0;
     senesceTint(_senV, pal.vein[0], pal.vein[1], pal.vein[2], sv);
     const vglow = glow * (1 - sv * 0.92);
-    for (const s of segs) {
+
+    // LEVEL OF DETAIL, AND WHY IT IS NOT A CHEAT.
+    //
+    // A ribbon narrower than a pixel is not drawn thin — the `Math.max` below
+    // clamps it UP to the minimum width. So every sub-pixel vein comes out the
+    // same width as every other one, and the hierarchy the leaf spent its
+    // canalisation finding is destroyed on the way to the screen: what is left
+    // is a smear at uniform width that costs exactly as much to draw as the
+    // real thing. Twenty-six thousand ribbons per specimen, every frame,
+    // however far away it is, and that — not the triangles — is what capped
+    // the scene at one plant.
+    //
+    // The statement here is about SAMPLING, not about the plant: draw the veins
+    // this blade can resolve, and fold the light of the rest into them so the
+    // blade does not simply dim as it recedes. Nothing is invented and nothing
+    // is hidden — at the focal distance `wpp` IS `MINW`, `wMin` lands near 0.02
+    // and no vein is dropped, which is why one specimen looks exactly as it did.
+    // THE CULL LAW: constant vein density per screen pixel.
+    //
+    // The tempting law is "drop anything narrower than a pixel", and it is
+    // wrong here for a reason worth writing down: measured against the app's own
+    // camera, about NINETY PERCENT of the veins on the hero specimen are already
+    // sub-pixel and are already being clamped up to the width floor. So that
+    // rule is not a statement about distant plants at all — it would redraw the
+    // subject of the piece. The hierarchy below roughly `w = 0.3` never reaches
+    // the screen as hierarchy today; it reaches it as a uniform smear.
+    //
+    // What IS new when a second plant appears is that a blade can be further off
+    // than the distance the width floor was calibrated at. So anchor to the
+    // hero: a blade at the focal distance keeps everything, exactly as it does
+    // now, and a blade with a quarter of the screen area keeps a quarter of the
+    // ribbons. `veins` is sorted by traffic, so what it keeps is the top of the
+    // hierarchy — which is precisely what survives being looked at from further
+    // away. Nothing here is a taste constant: the exponent is the inverse square
+    // of distance because that is how screen area works.
+    const dEye = PXR > 0
+      ? Math.hypot(frame.o[0] - VIEW[0], frame.o[1] - VIEW[1], frame.o[2] - VIEW[2])
+      : 0;
+    const wFloor = PXR > 0 ? 1.5 * PXR * dEye : MINW;
+    // the distance the scene-wide floor was measured at — the hero's distance
+    const dRef = PXR > 0 ? MINW / (1.5 * PXR) : 0;
+    const shrink = (PXR > 0 && dEye > dRef) ? (dRef / dEye) * (dRef / dEye) : 1;
+    // invert `base * (0.25 + w*1.35) >= width` for the order at the clamp
+    const oClamp = base > 1e-9 ? (wFloor / base - 0.25) / 1.35 : 0;
+    const N = segs.length;
+    // ONLY CULL A BLADE WHOSE NETWORK IS ALL THERE. The light tables are baked
+    // over every vein, but the loop below skips any vein ahead of the
+    // development wave, so on a half-grown blade the tables describe a network
+    // larger than the one being drawn and the relight over-brightens it — by 69%
+    // across a growing canopy, which is how this was found. A blade still
+    // canalising is small, short-lived and near the camera, so the honest fix is
+    // to leave it alone rather than to bake a second table per stage of growth.
+    // If a garden of SIMULTANEOUSLY germinating plants ever needs this, the
+    // cheap version is a five-flop pass over the dropped tail respecting `dev`.
+    const grown = dev >= 1;
+    // `veins` is sorted by traffic, so the kept set is a prefix — a count, not a
+    // search. `nClamp` is where the width floor takes over from natural width,
+    // and it is needed whether or not anything is culled.
+    let nClamp = N;
+    while (nClamp > 0 && segs[nClamp - 1].w < oClamp) nClamp--;
+    // A blade is never less than its midrib, however far off it is
+    let nDraw = grown ? Math.max(1, Math.round(N * shrink)) : N;
+    if (nDraw > N) nDraw = N;
+    if (nClamp > nDraw) nClamp = nDraw;
+
+    // CONSERVE SURFACE BRIGHTNESS, which is the invariant a receding object has
+    // to obey: an emissive surface looks equally bright per pixel however far
+    // off it is, so its total light falls as the inverse square exactly as its
+    // area does — and in world units that means the emitted total must not move
+    // with distance at all.
+    //
+    // Two things here push it around and both have to be undone. The cull
+    // removes ribbons. And the width floor is per-blade now, so a distant
+    // ribbon is held at 1.5 screen pixels and is therefore much WIDER in world
+    // units than it used to be — which is right, because the alternative is
+    // veins thinning away to nothing, but it inflates the light badly: left
+    // uncorrected a specimen at sixteen focal lengths came out fifteen times too
+    // bright, and it was the width floor doing most of that, not the cull.
+    //
+    // So the target is what the old renderer emitted with the scene-wide floor,
+    // which is constant with distance and is therefore the correct answer as
+    // well as the compatible one. Each vein is accounted at the width it would
+    // actually have been drawn at, which is why there are two tables; `base` and
+    // `vglow` cancel in the ratio.
+    const LN = leaf.veinLiteNat, LC = leaf.veinLiteClamp;
+    let relight = 1;
+    if (LN && LC && PXR > 0) {
+      const nRef = (() => {
+        const o0 = base > 1e-9 ? (MINW / base - 0.25) / 1.35 : 0;
+        let n = N;
+        while (n > 0 && segs[n - 1].w < o0) n--;
+        return n;
+      })();
+      const target = base * LN[nRef] + MINW * (LC[N] - LC[nRef]);
+      const drawn = base * LN[nClamp] + wFloor * (LC[nDraw] - LC[nClamp]);
+      if (drawn > 1e-12 && target > 1e-12) relight = target / drawn;
+    }
+
+    for (let k = 0; k < nDraw; k++) {
+      const s = segs[k];
       // veins mature basipetally too — none exist ahead of the wave
       if (s.x0 > dev + 0.04 || s.x1 > dev + 0.04) continue;
       // a vein whose material half-width has collapsed cannot be mapped onto
@@ -365,8 +482,8 @@ export function blade(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV,
       v3sub(_e2, VIEW, _q0);
       v3norm(_side, v3cross(_side, _e1, _e2));
       if (!isFinite(_side[0])) continue;
-      const w = Math.max(MINW, base * (0.25 + s.w * 1.35));
-      B.ribbon(_q0, _q1, _side, w, w, _senV, vglow * (0.06 + s.w * 0.52));
+      const w = Math.max(wFloor, base * (0.25 + s.w * 1.35));
+      B.ribbon(_q0, _q1, _side, w, w, _senV, vglow * (0.06 + s.w * 0.52) * relight);
     }
   }
 }

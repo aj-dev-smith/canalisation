@@ -1753,3 +1753,106 @@ scale — and both passed for years before this branch made them wrong.
   release, are properties of the frame and have nothing to do with the flap. Worth noting
   that the seam got *better* through all of this: the chord jump is 2.3° median, against
   6.4° before the branch and 14.9° with the flap on.
+
+## A garden, and three laws that were wrong on the way (2026-07-29)
+
+The ask was a stand of plants rather than one specimen. The answer to "how many
+can we render" turned out to be **one**, and the reason was not what anyone
+expected.
+
+### The bottleneck was not the triangles
+
+Crushing the lamina grid thirty-fold moves the line count by exactly nothing:
+
+| | mu×mv | geom ms | ktri | kline |
+|---|---|---|---|---|
+| shipped (near) | 13×6 | 9.17 | 15.2 | **78.7** |
+| coarse | 8×4 | 6.88 | 7.1 | **78.7** |
+| minimum | 3×2 | 5.80 | 2.5 | **78.7** |
+
+Every vein segment of every leaf was emitted at every distance — 26,200
+six-vertex ribbons per Cathedral Fern — with no level of detail of any kind. One
+plant is 65-79k lines against what was then a 149k buffer, so the scene was
+capped at one plant by a feature nobody had noticed was missing.
+
+### Wrong law 1: "drop anything narrower than a pixel"
+
+The obvious rule, and it fails on a fact that is more interesting than the rule
+was: **measured against the app's own camera, about ninety percent of the hero's
+veins are already sub-pixel and already clamped up to the width floor.** The
+default `MINW` of 0.004 is not what the app uses — it passes
+`cam.dist * px * 1.5`, which is 9.7e-3 at the shipped framing, and against that
+almost the whole minor network is being drawn at one uniform width.
+
+So the rule would not have been a distance optimisation. It would have redrawn
+the subject of the piece, dropping 87% of the hero's ribbons at the framing
+distance. The hierarchy the leaf spends its canalisation finding does not reach
+the screen as hierarchy today — it reaches it as a smear that costs full price.
+That is a real limitation of the display mapping and it is now written down in
+TUNING; it is not something to fix by deleting the smear.
+
+**What shipped instead:** constant vein density per screen pixel, anchored to the
+camera's framing distance. A blade at the camera's own distance keeps everything;
+a blade with a quarter of the screen area keeps a quarter of the ribbons. Since
+`leaf.veins` is sorted by traffic, what survives is the top of the hierarchy.
+
+### Wrong law 2 and 3: two ways to get the light wrong
+
+Culling ribbons must not change how bright a blade is. Two attempts failed
+before the third worked, and both failures were instructive.
+
+**Modelling every vein at its natural width under-compensates by 60%.** In the
+regime where the cull operates, almost every *dropped* vein was in fact being
+drawn clamped to the width floor, which is much wider than its order says. There
+have to be two cumulative tables, not one.
+
+**Conserving against the new renderer's own output over-compensates by 15x.**
+The per-blade width floor holds a distant ribbon at 1.5 screen pixels, which
+makes it far wider in world units than it used to be. Conserving light against a
+renderer that had already inflated it keeps the inflation. A specimen at sixteen
+focal lengths came out fifteen times too bright, and **the cull was under a fifth
+of that error** — the width floor was the rest.
+
+**The invariant that is actually right:** an emissive surface looks equally
+bright per pixel however far off it is, so its emitted total in *world* units
+must not move with distance at all. Target that and both effects are undone at
+once. Conserved to ~2%, and ~12% where so few ribbons survive that the
+material-space length approximation stops averaging out.
+
+There is also a fourth thing that was wrong, in the *harness* rather than the
+code: the first version moved the camera and the pixel calibration together,
+which models one plant being backed away from and can never produce a blade
+further off than the subject. It reported the cull working in reverse. **A
+measurement of a multi-object scene has to be set up as a multi-object scene.**
+
+### And then the garden froze the tab for nineteen seconds
+
+`plantGarden` warmed every specimen to its head start in one synchronous loop.
+The whole test suite passed, every capture tool produced correct pictures, and
+the thing was unusable — because a step during *growth* costs 1.7ms rather than
+the ~300us a grown plant costs, and 11,400 of them is 19 seconds of blocked main
+thread.
+
+Nothing in `tools/` could have caught it. Every tool there navigates, waits, and
+screenshots, so a frozen tab and a busy one are indistinguishable. It was found
+by a person typing the call into a console. That is the fourth time on this
+project that the fastest route to a real defect has been someone watching, and
+the second time the suite was green while the piece was visibly broken.
+
+`tools/garden_hitch.mjs` now measures the one thing those tools cannot — the gap
+between animation frames — and it immediately found a second freeze underneath
+the first, worth 501ms, from constructing seven `Plant`s back to back.
+
+### What is not derived here, and should be said plainly
+
+Where a plant is standing is scene composition, not chemistry — a jittered ring,
+scattered by a seeded PRNG. It says where a seed landed, not what grows out of
+it, so it does not belong on the SCIENCE.md list; but it is a spatial choice and
+it should not be allowed to quietly become one.
+
+What *is* worth keeping: the positions are real, not applied at draw time, so the
+axes are solved as cantilevers in a wind field that varies across the ground.
+Two plants three metres apart are genuinely in different air, and because the
+field advects by Taylor's hypothesis, **a gust crosses the stand** rather than
+arriving everywhere at once. That fell out of the field already being right and
+cost nothing.

@@ -6,23 +6,29 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
-1. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
-   of the life cycle, and the only part of senescence still unbuilt. `dead()` is
-   the trigger and the camera director already exists. It carries the ending as a
-   *shot* too: a run currently tails off rather than finishing.
-2. **[#9, a blade that gives](#9-a-lamina-that-gives-and-a-blade-that-reconfigures)** — NEW, and it
-   is the debt #5 left behind. The attached blade's twist ships **off**, because on a
+1. **[#10b, what the garden still owes](#10-a-garden-2026-07-29)** — a stand of plants
+   ships, and it left three things behind: the simulation cost of stepping eight
+   specimens, a species picker that samples with replacement, and a director whose
+   whole shot list assumes one subject. The first is the real one. **None of it is
+   research** — it is the cheapest interesting work on this list.
+2. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
+   of the life cycle, and the garden has **reframed rather than replaced** it: the
+   question is no longer "one plant replaces another" but "a stand gains and loses
+   members", and the scene already holds a list. `dead()` is still the trigger. It
+   carries the ending as a *shot* too: a run currently tails off rather than finishing.
+3. **[#9, a blade that gives](#9-a-lamina-that-gives-and-a-blade-that-reconfigures)** — the debt #5
+   left behind. The attached blade's twist ships **off**, because on a
    petiole with a physical radius one rigid degree of freedom hinged at mid-chord snaps
    between face-on attitudes instead of rocking. It is also the same machinery #4 wants.
-3. **[#3, the third phyllotaxis hypothesis](#3-third-phyllotaxis-hypothesis)** — the honest headline limitation.
+4. **[#3, the third phyllotaxis hypothesis](#3-third-phyllotaxis-hypothesis)** — the honest headline limitation.
    Pure science; a negative result is as publishable as a positive one here. **Read
    #7 first**: its second candidate route is a mechanical-stress term, which is #7's
    machinery, so the two are cheaper together than apart.
-4. **[#4, lamina tensioning its own margin](#4-lamina-pulls-on-its-own-margin)** — meaningful quality jump, meaningful work.
+5. **[#4, lamina tensioning its own margin](#4-lamina-pulls-on-its-own-margin)** — meaningful quality jump, meaningful work.
    Cheaper alongside #9, which needs a lamina that deforms for a different reason.
 
-#1, #2, #4b, #5, #7, #7b and #8 are **done**; their entries are kept for what they
-record.
+#1, #2, #4b, #5, #7, #7b, #8 and #10 are **done**; their entries are kept for what
+they record.
 
 ## 1. Life cycle and senescence — DONE (2026-07-26)
 Both halves, simulated and drawn, in one day and two branches.
@@ -385,6 +391,61 @@ Blades also now land, which they could not before — there was no ground. Four 
 and one bad assertion are written up in JOURNAL.md; all five were found by
 `test/fall.mjs` and none would have been visible on screen. The limitation it left
 behind is #7 above.
+
+## 10. A garden — DONE (2026-07-29)
+
+The scene holds a stand of plants rather than one specimen. Two branches' worth of
+work in one: a level of detail for the vein network, which was the thing capping the
+scene at one plant, and then the scene itself.
+
+**The cap was the veins, and nobody had noticed it was ungated.** Crushing the lamina
+grid thirty-fold moves the line count by *nothing* — every vein segment of every leaf
+was emitted at every distance as a six-vertex ribbon, 26,200 per Cathedral Fern. One
+specimen ate 53-94% of a 16.7ms frame on an M5 Mac Pro. The law that shipped is
+constant vein density per screen pixel anchored to the camera's framing distance; the
+law that was rejected, and why, is the more useful half and is in JOURNAL.md.
+
+**What the scene gained:** `makeSpecimen` bundles a plant with its palettes and
+species options, `drawSpecimen` is `buildScene`'s axis loop reading off that bundle,
+`Plant` has an `origin`, and `plantGarden(n)` scatters specimens on a jittered ring
+with staggered ages. The hero is still mirrored onto the App, which is what kept the
+HUD, the director, the close-up modes and every tool working untouched.
+
+**One air over the whole clearing**, and it fell out of the field already being right:
+positions are real rather than applied at draw time, so a gust crosses the stand.
+
+Three defects it exposed rather than added — a buffer sized for one plant, an LOD rule
+counting one plant's organs, and a framer that framed the subject and left the camera
+standing inside the garden. All three in PITFALLS.
+
+### 10b. What it owes
+
+1. **Simulation cost is the ceiling now, not geometry.** Eight specimens each take up
+   to six `plant.step(1)` per frame. Geometry is comfortable — 551k triangles and 664k
+   lines against buffers at ~60% — but a grown background plant is paying full
+   `stepAuxin` cost to pattern tissue that will never change again. That is the lever,
+   and it has not been measured in a real browser yet, only headless where the fps is
+   explicitly not worth reading.
+2. **A stand takes ~38s to establish** at the shipped 8ms/frame budget. Interactive
+   throughout, and it reads as the clearing filling in, but nearly all of that time is
+   leaf-library canalisation. Sharing libraries between same-species plants is the
+   lever and it has a visual cost — same-species plants would stop having their own
+   leaves — so it wants its own before/after.
+3. **Species are sampled with replacement.** A stand of seven from a catalogue of
+   eight came out as four distinct species with one appearing three times. Fine as a
+   default, wrong whenever the point of the shot is the catalogue. Deal without
+   replacement — shuffle and pop, reshuffling only when the stand is bigger than the
+   catalogue.
+4. **The director still assumes one subject.** Its shot list flies into an apex, a
+   flower, a fruit; with a stand it picks one plant and the other seven stop being the
+   point. `tools/garden_shot.mjs` and the `GARDEN=` path in `clip.mjs` both switch it
+   off rather than solve this. A garden wants shots of its own, and that is the same
+   question #6 is holding — what the *film* is, once there is more than one plant in
+   it.
+
+Not on this list, deliberately: **do not widen the vein cull to buy frames.** It is
+anchored so the subject keeps every ribbon it always had, and loosening that anchor
+is how the hero specimen quietly stops looking like itself.
 
 ## 3. Third phyllotaxis hypothesis
 A second length scale from structure rather than chemistry: two cell layers (L1

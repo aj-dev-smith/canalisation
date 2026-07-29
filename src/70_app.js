@@ -316,54 +316,213 @@ export class App {
     this._bindInput();
   }
 
-  newSpecimen(name = this.speciesName, seed = (Math.random() * 1e6) | 0) {
-    this.specimenNo = ('000' + (seed % 9973)).slice(-4);
+  // ONE SPECIMEN, AND EVERYTHING IT NEEDS TO BE DRAWN.
+  //
+  // All of this used to be assigned straight onto the App, because there was
+  // only ever one of it. A second plant of a different species needs its own
+  // species options and its own three palettes, so they are bundled instead —
+  // and the hero is mirrored back onto the App below, which is what keeps
+  // `app.plant`, `app.pal` and `app.sp` meaning exactly what they have always
+  // meant to the HUD, the director, `80_main.js` and everything in `tools/`.
+  //
+  // `wind` is passed in rather than made here on purpose. THE WHOLE CLEARING IS
+  // IN ONE AIR: the field is the piece's one weather and a garden of plants each
+  // holding a private `windField()` would be a stand of plants in unrelated
+  // breezes, which is precisely the defect ROADMAP 7 was opened to fix, arriving
+  // again by a different route.
+  makeSpecimen(name, seed, origin, wind) {
     const S = SPECIES[name] || SPECIES['Cathedral Fern'];
-    this.speciesName = name;
-    this.prm = { ...DEFAULT_PRM, ...S.prm };
-    this.mo = { ...MERISTEM_DEFAULTS, ...S.mo };
-    this.sp = { ...SPECIES_DEFAULTS, ...S.sp };
-    this.sp.leafOpts = { ...LEAF_DEFAULTS, ...(S.sp.leafOpts || {}) };
-    this.pal = { ...BASE_PAL, ...S.pal };
+    const prm = { ...DEFAULT_PRM, ...S.prm };
+    const mo = { ...MERISTEM_DEFAULTS, ...S.mo };
+    const sp = { ...SPECIES_DEFAULTS, ...S.sp };
+    sp.leafOpts = { ...LEAF_DEFAULTS, ...(S.sp.leafOpts || {}) };
+    const pal = { ...BASE_PAL, ...S.pal };
     // The lamina is pulled down so the vasculature is the brightest thing in
     // the plant. A leaf should read as light held inside tissue.
-    const m = this.pal.laminaMul;
-    this.pal.blade0 = this.pal.blade0.map(v => v * m);
-    this.pal.blade1 = this.pal.blade1.map(v => v * m);
+    const m = pal.laminaMul;
+    pal.blade0 = pal.blade0.map(v => v * m);
+    pal.blade1 = pal.blade1.map(v => v * m);
     // petals share every rendering rule with leaves; only the colours differ
-    this.petalPal = { ...this.pal, blade0: this.pal.petal0.map(v => v * m),
-      blade1: this.pal.petal1.map(v => v * m), vein: this.pal.petalVein,
-      veinTint: this.pal.petal1.map(v => v * 0.25) };
-    // Inner floral organs. Until the apex started consuming itself, `q` never
-    // rose above `petalQ`, so no organ ever took this path and it fell through to
-    // the foliage palette — a whorl of stamens rendered as green stem-stubs the
-    // first time it was looked at. They grade from the petal colour toward the
-    // species' own vein colour, which is its bright accent, so an inner organ
-    // reads as catching light rather than as a leaf that failed to open. Graded
-    // on `q` and not switched on identity: q is continuous, and nothing here
-    // should know how many whorls there are.
-    this.innerPals = [];
+    const petalPal = { ...pal, blade0: pal.petal0.map(v => v * m),
+      blade1: pal.petal1.map(v => v * m), vein: pal.petalVein,
+      veinTint: pal.petal1.map(v => v * 0.25) };
+    const innerPals = [];
     for (let i = 0; i < INNER_STEPS; i++) {
       const t = 0.30 + 0.62 * (i / (INNER_STEPS - 1));
       const mix = (c, d) => c.map((v, k) => lerp(v, d[k], t));
-      this.innerPals.push({ ...this.petalPal,
-        blade0: mix(this.petalPal.blade0, this.pal.vein.map(v => v * m * 0.55)),
-        blade1: mix(this.petalPal.blade1, this.pal.vein.map(v => v * m)),
-        glow: this.petalPal.glow * (1 + 0.5 * t) });
+      innerPals.push({ ...petalPal,
+        blade0: mix(petalPal.blade0, pal.vein.map(v => v * m * 0.55)),
+        blade1: mix(petalPal.blade1, pal.vein.map(v => v * m)),
+        glow: petalPal.glow * (1 + 0.5 * t) });
     }
-    if (this.ringWidth) this.mo.rOut = this.mo.rCZ + this.ringWidth;
+    if (this.ringWidth) mo.rOut = mo.rCZ + this.ringWidth;
+    if (this.windU !== undefined) sp.windOpts = { ...sp.windOpts, uRef: this.windU };
+    const fr2 = mulberry32(seed ^ 0x51ed270b);
+    sp.fruitOpts = {
+      T: lerp(14, 34, fr2()), D: lerp(1.8, 4.2, fr2()),
+      gExp: lerp(1.3, 2.6, fr2()), gAux: lerp(0.00035, 0.00075, fr2()),
+      seedThresh: lerp(1.25, 1.7, fr2()),
+    };
+    if (origin) sp.origin = origin;
+    if (wind) sp.wind = wind;
+    // a specimen planted while the last act is held joins it held
+    if (this.senesceHeld) sp.senesceHold = true;
+    return { name, seed, prm, mo, sp, pal, petalPal, innerPals,
+      plant: new Plant(prm, mo, sp, seed) };
+  }
+
+  // everything drawn this frame: the subject, then whatever else came up
+  specimens() { return this.garden.length ? [this.hero, ...this.garden] : [this.hero]; }
+
+  // WHAT THE CAMERA HAS TO FIT. With one plant this was `plant.bounds()` and the
+  // distinction did not exist; with a stand it has to be the clearing, or the
+  // framer damps in on the subject and the camera ends up standing INSIDE the
+  // garden looking at the underside of somebody's canopy — which is exactly what
+  // the first capture did, and it looks like a bug in the scene rather than in
+  // the framing.
+  //
+  // When the shot has a subject the answer is still that subject: a close-up is a
+  // statement that the rest of the clearing is not what we are looking at.
+  sceneBounds() {
+    if (!this.garden.length || this.subject || this.focus) return this.plant.bounds();
+    let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+    for (const S of this.specimens()) {
+      const b = S.plant.bounds();
+      const hw = b.w / 2, hh = b.h / 2;
+      if (b.cx - hw < x0) x0 = b.cx - hw; if (b.cx + hw > x1) x1 = b.cx + hw;
+      if (b.cy - hh < y0) y0 = b.cy - hh; if (b.cy + hh > y1) y1 = b.cy + hh;
+      if (b.cz - hw < z0) z0 = b.cz - hw; if (b.cz + hw > z1) z1 = b.cz + hw;
+    }
+    return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, cz: (z0 + z1) / 2,
+      w: Math.max(x1 - x0, z1 - z0), h: y1 - y0 };
+  }
+
+  // A STAND OF PLANTS.
+  //
+  // Positions are scattered on a ring around the subject, and that is scene
+  // composition rather than an imposed shape — it says where a seed landed, not
+  // what grows out of it. Every other thing that separates these plants is the
+  // engine's: species, seed, and how far through its life each one is.
+  //
+  // They are staggered in AGE on purpose, and it is the cheapest interesting
+  // thing here. Given the same species and a different seed you get a different
+  // plant; given a different head start you get a seedling next to a flowering
+  // adult next to a standing seed head, which is what a clearing actually looks
+  // like and what no single specimen can show. `warm` is run before the first
+  // frame, so the stand is already established when the shot opens.
+  plantGarden(n = 6, opts = {}) {
+    const seed = opts.seed === undefined ? (Math.random() * 1e6) | 0 : opts.seed;
+    const r = mulberry32(seed ^ 0x9e3779b9);
+    const names = Object.keys(SPECIES);
+    const rad = opts.radius === undefined ? 9 : opts.radius;
+    const wind = this.plant.wind;      // ONE air over the whole clearing
+    this.garden = [];
+    // Only the PLAN is drawn up here. Constructing a specimen is not cheap
+    // either — every `Axis` runs its meristem forward 220 steps in its own
+    // constructor, so it is born from a settled sheet rather than a burst of
+    // organs — and seven of those back to back is a 501ms hitch on its own,
+    // measured with `tools/garden_hitch.mjs`. Budgeting the head start while
+    // building all seven plants up front fixes the long freeze and leaves the
+    // sharp one.
+    this._plan = [];
+    for (let i = 0; i < n; i++) {
+      // a ring, jittered, so nothing reads as a planted row
+      const a = (i + 0.5) / n * TAU + (r() - 0.5) * 0.9;
+      const d = rad * (0.55 + 0.75 * r());
+      this._plan.push({
+        name: opts.species || names[(r() * names.length) | 0],
+        seed: (seed + i * 7919) >>> 0,
+        origin: [Math.cos(a) * d, 0, Math.sin(a) * d],
+        wind,
+        // stagger: from just-germinated to well past flowering
+        warm: Math.floor(lerp(opts.minAge === undefined ? 120 : opts.minAge,
+          opts.maxAge === undefined ? 2600 : opts.maxAge, r())),
+      });
+    }
+    this.bbS = null;
+    // A HEAD START IS NOT FREE, AND IT MUST NOT BE PAID ALL AT ONCE.
+    //
+    // This used to run every specimen's warm-up in one synchronous loop right
+    // here, which is 11,400 steps for a stand of seven — and a step during
+    // GROWTH is not the ~300us a grown plant costs, it is about 1.7ms, because
+    // that is when the leaf pool is canalising its library. Measured at 19
+    // SECONDS of blocked main thread. The tab simply stops, and the headless
+    // capture tools never noticed because sitting and waiting is all they do.
+    //
+    // So it is paid off a slice at a time, round-robin, which also happens to be
+    // the better thing to watch: every plant comes up as a seedling at once and
+    // the clearing fills in together, rather than specimens popping into
+    // existence fully grown one after another.
+    if (opts.instant) this.warmGarden(Infinity);
+    return this.garden.length;
+  }
+
+  // is the stand still being planted, or still growing into its head start?
+  gardenWarming() {
+    return (this._plan && this._plan.length > 0) || this.garden.some(S => S.debt > 0);
+  }
+
+  // HOLD THE LAST ACT, across the whole clearing.
+  //
+  //   __app.holdSenescence()        stop leaves ageing and dropping
+  //   __app.holdSenescence(false)   let them carry on from where they stopped
+  //
+  // Set on `plant.sp` rather than on the specimen's own `sp`: `Plant` copies its
+  // options at construction, so the two are different objects and setting the
+  // outer one looks like it works and does nothing.
+  holdSenescence(on = true) {
+    for (const S of this.specimens()) S.plant.sp.senesceHold = !!on;
+    this.senesceHeld = !!on;
+    return !!on;
+  }
+
+  // Pay down the head start, round-robin, inside a time budget. Returns true
+  // when the whole stand has arrived.
+  warmGarden(budgetMs) {
+    if (!this.gardenWarming()) return true;
+    const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const t0 = now();
+    const spent = () => budgetMs !== Infinity && now() - t0 >= budgetMs;
+    for (;;) {
+      // plant at most one per round — a `Plant` costs about 70ms to construct
+      if (this._plan && this._plan.length) {
+        const p = this._plan.shift();
+        const S = this.makeSpecimen(p.name, p.seed, p.origin, p.wind);
+        S.warm = p.warm; S.debt = p.warm;
+        this.garden.push(S);
+        if (spent()) return false;
+      }
+      let any = false;
+      for (const S of this.garden) {
+        if (S.debt <= 0) continue;
+        S.plant.step(1); S.debt--;
+        any = true;
+      }
+      if (!any && !(this._plan && this._plan.length)) return true;
+      // checked once per round rather than per step: a round is seven steps and
+      // the budget is in whole milliseconds, so per-step timing would cost more
+      // than it saves
+      if (spent()) return false;
+    }
+  }
+
+  newSpecimen(name = this.speciesName, seed = (Math.random() * 1e6) | 0) {
+    this.specimenNo = ('000' + (seed % 9973)).slice(-4);
+    this.speciesName = name;
     // The weather outlives the specimen. `windU` is only set once the viewer has
     // touched the slider; until then the species' own `windOpts` (usually nothing,
     // so `WIND_DEFAULTS`) decides, and a regrow must not silently return the scene
-    // to a calm the viewer had turned up out of.
-    if (this.windU !== undefined) this.sp.windOpts = { ...this.sp.windOpts, uRef: this.windU };
-    const fr = mulberry32(seed ^ 0x51ed270b);
-    this.sp.fruitOpts = {
-      T: lerp(14, 34, fr()), D: lerp(1.8, 4.2, fr()),
-      gExp: lerp(1.3, 2.6, fr()), gAux: lerp(0.00035, 0.00075, fr()),
-      seedThresh: lerp(1.25, 1.7, fr()),
-    };
-    this.plant = new Plant(this.prm, this.mo, this.sp, seed);
+    // to a calm the viewer had turned up out of. `makeSpecimen` reads it.
+    const spec = this.makeSpecimen(name, seed);
+    this.hero = spec;
+    // Mirror the hero onto the App. Everything that predates the garden reads
+    // these — the HUD, the director, the close-up modes, `80_main.js`, every
+    // tool in `tools/` — and a specimen bundle is an addition rather than a
+    // replacement precisely so none of that has to know about it.
+    this.prm = spec.prm; this.mo = spec.mo; this.sp = spec.sp;
+    this.pal = spec.pal; this.petalPal = spec.petalPal;
+    this.innerPals = spec.innerPals; this.plant = spec.plant;
+    this.garden = [];
     this.bbS = null;
     this.cam.dist = 7.5; this.cam.tgtY = 1.4;
     const rnd = mulberry32(seed ^ 0x5bf03635);
@@ -736,6 +895,14 @@ export class App {
     const steps = clamp(Math.floor(this._acc), 0, 6);
     this._acc -= steps;
     for (let i = 0; i < steps; i++) this.plant.step(1);
+    // A specimen still growing into its head start is stepped by the warm-up and
+    // not here as well, so it arrives at the age it was given rather than at
+    // that age plus however long the stand took to establish.
+    this.warmGarden(this.warmBudgetMs === undefined ? 8 : this.warmBudgetMs);
+    for (const S of this.garden) {
+      if (S.debt > 0) continue;
+      for (let i = 0; i < steps; i++) S.plant.step(1);
+    }
     this.age += steps;
     this.t += dtms;
 
@@ -755,7 +922,7 @@ export class App {
     // The raw bounding box jumps every time an organ appears. Smooth it first,
     // then smooth the camera against it — two stages of damping is the
     // difference between a camera that drifts and one that twitches.
-    const raw = this.plant.bounds();
+    const raw = this.sceneBounds();
     const bs = this.bbS || (this.bbS = { ...raw });
     // damping expressed as a time constant, so a slow device and a fast one
     // settle at the same rate rather than the same number of frames
@@ -908,7 +1075,17 @@ export class App {
     // sixty fronds gets a coarser surface than one with six
     // vein ribbons face the camera and never get thinner than a pixel or so
     const px = 2 * Math.tan(this.cam.fov / 2) / Math.max(1, this.renderer.H);
-    setView(this.cam.eye, this.cam.dist * px * 1.5);
+    // The third number is the ANGULAR pixel size, so a blade can work out its
+    // own scale from its own distance rather than inheriting the one measured
+    // at the camera's orbit radius. Passing it alongside the second rather than
+    // replacing it keeps every non-blade caller on the scene-wide value.
+    //
+    // Passing ZERO instead is the pre-LOD renderer, exactly — every vein of
+    // every blade at the scene-wide floor. It is here so the change stays
+    // re-measurable from a browser rather than only from a harness
+    // (`tools/veinlod_shot.mjs`), the same reason `FALL_DEFAULTS.tiltPlane` and
+    // `shootOpts.enabled` are still in the tree.
+    setView(this.cam.eye, this.cam.dist * px * 1.5, this.veinLOD === false ? 0 : px);
     this.detail = 0;
     // when the camera has gone in to look at a growing tip, anything between it
     // and that tip is in the way — drop it rather than let a leaf fill the frame
@@ -993,11 +1170,38 @@ export class App {
       cullDist = sl;
       cullR = sl - cullRad;      // stop clearing just short of the subject
     }
-    const nOrg = P.organCount();
-    const fen = (this.sp.leafOpts.fenestrate || 0) > 0;
+    // BLADE LEVEL OF DETAIL IS A PROPERTY OF THE SCENE, NOT OF A PLANT. This
+    // counted one specimen's organs, which was the same number while there was
+    // only one specimen; in a garden it would give every plant the mesh density
+    // it would have had alone, and the cost is what the frame has to carry all
+    // together.
+    let nOrg = 0, fen = false;
+    for (const S of this.specimens()) {
+      nOrg += S.plant.organCount();
+      if ((S.sp.leafOpts.fenestrate || 0) > 0) fen = true;
+    }
     this.bladeMU = nOrg > 42 ? (fen ? 17 : 13) : nOrg > 24 ? 18 : 22;
     this.bladeMV = nOrg > 42 ? (fen ? 9 : 6) : nOrg > 24 ? 8 : 10;
-    for (const ax of P.axes) {
+    // the subject first, with the clearance, then the rest of the clearing
+    this.drawSpecimen(B, this.hero, cullFrom ? {
+      keep: cullKeep, keepOrg: cullKeepOrg, r: cullR, rad: cullRad,
+      dist: cullDist, dx: sdx, dy: sdy, dz: sdz,
+    } : null);
+    for (const S of this.garden) this.drawSpecimen(B, S, null);
+    for (const s of this.spores) B.point(s.p, pal.spore, s.s * 0.9);
+    this.renderer.upload(B);
+  }
+
+  // DRAW ONE SPECIMEN. Lifted out of `buildScene` whole when the scene stopped
+  // being a single plant; every line of it is what was there before, reading its
+  // species options and its three palettes off the specimen rather than off the
+  // App. `cull` is the occlusion clearance, and it is null for everything except
+  // the subject of the shot — a background plant is never in its own way, and
+  // clearing a cone through one of them would be clearing scenery the viewer is
+  // looking AT rather than through.
+  drawSpecimen(B, S, cull) {
+    const pal = S.pal;
+    for (const ax of S.plant.axes) {
       const nseg = ax.pts.length;
       if (nseg > 1) {
         tube(B, ax.pts, ax.radii, 7, (t) => ({
@@ -1030,13 +1234,13 @@ export class App {
         // cylinder to be dropped and clearly OUTSIDE to come back, so a wobble
         // at the boundary decides once instead of once per frame.
         let occluded = false;
-        if (cullFrom && org !== cullKeepOrg && !(ax === cullKeep && org.floral)) {
+        if (cull && org !== cull.keepOrg && !(ax === cull.keep && org.floral)) {
           const ox = oFr.o[0] - this.cam.eye[0];
           const oy = oFr.o[1] - this.cam.eye[1];
           const oz = oFr.o[2] - this.cam.eye[2];
-          const t = ox * sdx + oy * sdy + oz * sdz;          // along the sight line
-          if (t > 0 && t < cullR) {
-            const px2 = ox - sdx * t, py2 = oy - sdy * t, pz2 = oz - sdz * t;
+          const t = ox * cull.dx + oy * cull.dy + oz * cull.dz;          // along the sight line
+          if (t > 0 && t < cull.r) {
+            const px2 = ox - cull.dx * t, py2 = oy - cull.dy * t, pz2 = oz - cull.dz * t;
             // how far off the sight line it sits, allowing for its own reach
             const lat = Math.hypot(px2, py2, pz2) - (org.len || 0);
             // A CONE from the eye to the subject, not a cylinder. Being "in the
@@ -1049,7 +1253,7 @@ export class App {
             // on average, half of them at once at the peak, blinking as the
             // shot moved. The radius at the subject is unchanged, so the thing
             // the clearance exists for still happens.
-            occluded = lat < cullRad * (t / cullDist) * (org._occ ? 1.20 : 0.86);
+            occluded = lat < cull.rad * (t / cull.dist) * (org._occ ? 1.20 : 0.86);
           }
         }
         org._occ = occluded;
@@ -1094,9 +1298,9 @@ export class App {
         // the cheat that would make the fall read as a dissolve.
         const bl = drawnBladeLen(org.len, sen);
         if (bl < 0.02) continue;
-        const bp = org.petal ? this.petalPal
-          : org.floral ? this.innerPals[clamp(
-            Math.round(((org.q - this.sp.petalQ) / Math.max(1e-3, 1 - this.sp.petalQ)) * (INNER_STEPS - 1)),
+        const bp = org.petal ? S.petalPal
+          : org.floral ? S.innerPals[clamp(
+            Math.round(((org.q - S.sp.petalQ) / Math.max(1e-3, 1 - S.sp.petalQ)) * (INNER_STEPS - 1)),
             0, INNER_STEPS - 1)]
             : pal;
         // and it curls as it dries, hard: a dead leaf on the ground is a tube
@@ -1152,7 +1356,7 @@ export class App {
       if (ax.fruit && !ax.fruit.barren && ax.fruit.phase !== 'pattern') {
         const n2 = ax.pts.length;
         const tip = ax.pts[n2 - 1];
-        const fs = this.sp.fruitScale * (ax.gen === 0 ? 1 : 0.72);
+        const fs = S.sp.fruitScale * (ax.gen === 0 ? 1 : 0.72);
         fruitShell(B, ax.fruit, tip, fs, pal);
       }
 
@@ -1177,8 +1381,6 @@ export class App {
           mScale, pal, this.t, det);
       }
     }
-    for (const s of this.spores) B.point(s.p, pal.spore, s.s * 0.9);
-    this.renderer.upload(B);
   }
 
   render() {

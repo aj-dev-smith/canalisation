@@ -745,6 +745,7 @@ export const SPECIES_DEFAULTS = {
   // How long the slowest blade on a finished specimen takes to let go. Only the
   // rate is set here — whether it happens at all is `Plant.spent()`.
   senesceFor: 2200,
+  senesceHold: 0,  // viewer control: pause the last act. See `senesceStep`
   shootOpts: {},     // per-species overrides on the transport stream (38_shoot)
   // per-species multipliers on the leaf margin's own chemistry (see LeafPool).
   // ay slenderness, g1/gExp how hard a convergence point pushes, D how far
@@ -770,7 +771,15 @@ export class Plant {
     // step 5) it will be handed this object, and when a second specimen germinates
     // (ROADMAP 6) it has to be standing in the same weather as the first.
     this.wind = (sp && sp.wind) || windField(this.sp.windOpts);
-    this.addAxis(v3(0, 0, 0), v3(0, 1, 0), 0);
+    // WHERE IN THE CLEARING THIS ONE CAME UP. Until there was a garden every
+    // specimen germinated at the origin and nothing had to say so. A position is
+    // not a shape — it says nothing about what the plant becomes — but it has to
+    // be real rather than applied at draw time, because the axes are solved as
+    // cantilevers in a wind field that varies across the ground: two plants three
+    // metres apart are genuinely in different air, and Taylor advection means a
+    // gust crosses the stand rather than arriving everywhere at once.
+    this.origin = (this.sp.origin || [0, 0, 0]).slice();
+    this.addAxis(v3(this.origin[0], this.origin[1], this.origin[2]), v3(0, 1, 0), 0);
   }
   // `parentNode` is the stem node of the organ this shoot came out of, so a
   // branch joins the transport stream where it physically joins the plant.
@@ -1086,6 +1095,18 @@ export class Plant {
     // exactly one mechanism may own `sen`, or the falsified path cannot be
     // measured against this one — they simply add, and both look like they work
     if (this.vasc.o.enabled && this.vasc.o.senesceFromStream) return;
+    // HOLD THE LAST ACT. A viewer control, in the same category as the wind
+    // slider and the time slider: it pauses a stage rather than inventing one,
+    // and a specimen released from it carries on from exactly where it stopped.
+    // Nothing downstream reads it, so it cannot leak into the chemistry — what
+    // it does is stop `sen` advancing, and `sen` is the only thing that shedding,
+    // the drained colour and the fall all key off.
+    //
+    // It exists because a garden is mostly BACKGROUND, and the piece's timing was
+    // built around one specimen being watched all the way through. Left alone a
+    // stand planted with staggered ages has half its members dismantling
+    // themselves before anyone has looked at them.
+    if (this.sp.senesceHold) return;
     if (!this.spent()) return;
     const sp = this.sp;
     let oldest = 0;

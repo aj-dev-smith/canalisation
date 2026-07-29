@@ -260,6 +260,45 @@ export class Leaf {
     for (const s of this.veins) {
       s.w = span > 1e-6 ? clamp((Math.log(1 + s.mag) - l0) / span, 0, 1) : 1;
     }
+    // How much of the blade's light each vein carries, accumulated.
+    //
+    // A distant blade cannot resolve its minor network — the ribbons come out
+    // narrower than a pixel and `blade()` drops them (see the LOD note there).
+    // Dropping them must not make the blade DIMMER, because what a viewer sees
+    // at that distance is the integrated glow of the network rather than its
+    // structure. So the renderer folds the lost light into the veins it does
+    // draw, and this is the table that lets it: `veinLite[k]` is the light
+    // carried by the k highest-traffic veins, and `veins` is sorted by traffic,
+    // so the ones a distant blade keeps are exactly a prefix.
+    //
+    // Drawn light per ribbon is area times emissive: `2w * segLen` by
+    // `vglow * (0.06 + w*0.52)`. But the drawn width is
+    // `max(pixelFloor, base * (0.25 + w*1.35))` — a NARROW vein is clamped up to
+    // the floor and is therefore drawn much wider than its order says. Which of
+    // the two branches a vein is on depends on how far away the blade is, so
+    // there are two tables, not one, and the renderer picks per blade:
+    //
+    //   veinLiteNat   light if drawn at its natural width  (units of `base`)
+    //   veinLiteClamp light if drawn at the pixel floor    (units of that floor)
+    //
+    // Both leave out the per-blade factor they are measured in, and `vglow`,
+    // because the renderer only ever reads them as a ratio. Getting this wrong
+    // in the obvious way — modelling every vein at its natural width —
+    // under-compensates by 60% at four focal lengths, because in that regime
+    // almost every dropped vein was in fact being drawn clamped.
+    const nv = this.veins.length;
+    this.veinLiteNat = new Float64Array(nv + 1);
+    this.veinLiteClamp = new Float64Array(nv + 1);
+    let accN = 0, accC = 0;
+    for (let k = 0; k < nv; k++) {
+      const s = this.veins[k];
+      s.len = Math.hypot(s.x1 - s.x0, s.y1 - s.y0);
+      const emis = 0.06 + s.w * 0.52;
+      accN += s.len * (0.25 + s.w * 1.35) * emis;
+      accC += s.len * emis;
+      this.veinLiteNat[k + 1] = accN;
+      this.veinLiteClamp[k + 1] = accC;
+    }
     this.maxPi = maxPi;
     this.mature = true;
   }
