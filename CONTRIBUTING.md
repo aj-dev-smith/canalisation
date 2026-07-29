@@ -111,7 +111,10 @@ open canalisation.html
 
 ## Testing
 
-**Two harnesses gate a merge: `test/smoke.mjs` and `test/views.mjs`.**
+**Two harnesses gate a merge: `test/smoke.mjs` and `test/views.mjs`.** (`views.mjs`
+appears as two CI jobs — one beside the invariants with a species named, one running
+the full garden of eight concurrently. Naming a species skips the garden, which is
+almost all of its runtime; do that while iterating.)
 
 `smoke.mjs` checks the simulation, and its checks are deliberately loose — it verifies
 that the chemistry is alive and finite, not that any emergent quantity has a particular

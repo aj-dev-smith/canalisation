@@ -84,7 +84,14 @@ frames and exits non-zero past 250ms.
 `petiole.mjs`, `veinlod.mjs`, `views.mjs`.** Only **two of the six are wired into
 CI** and therefore gate a merge — `smoke.mjs` and `views.mjs`. The other four assert
 locally and *nothing runs them for you*, which is worth knowing before treating a
-green PR as evidence about the stem or the air. The rest print and never fail. That split is the project's epistemics in miniature — an
+green PR as evidence about the stem or the air. The rest print and never fail.
+
+`views.mjs` runs **twice** in CI and both runs gate: once beside the invariants with
+a species named, which skips the garden of eight and costs 5s, and once as its own
+concurrent `views-garden` job that runs the whole thing. That split is worth copying
+if you add another expensive gate — as a single step it took the invariants job from
+123s to 335s; beside it, the wall clock is unchanged. **The expensive half of a gate
+belongs next to the cheap half, not behind it.** That split is the project's epistemics in miniature — an
 *emergent* quantity must not be pinned down in a test, because that would convert it
 into an imposed one, while a *physical* claim can be checked against a number worked
 out beforehand and therefore should be. When you add something to the mechanics, work

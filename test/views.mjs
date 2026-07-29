@@ -3,14 +3,18 @@
 //   node test/views.mjs            # one specimen and a garden of eight
 //   node test/views.mjs 'Sun Coral'   # named species, and NO garden — much faster
 //
-// The garden of eight is most of the runtime (~35s of ~41s) and it is there for one
-// reason: it is the heaviest configuration the scene can reach, and therefore the
-// only one that can prove a buffer is not silently dropping geometry. Naming a
-// species skips it, which is what you want while iterating. CI does not name one.
+// The garden of eight is almost all of the runtime — 34s of 39s — and it is there
+// for one reason: it is the heaviest configuration the scene can reach, and
+// therefore the only one that can prove a buffer is not silently dropping geometry.
+// **Naming a species skips it**, which is what you want while iterating.
 //
-// This gates, and gating it roughly doubled CI — 123s to 401s at first, before the
-// memoisation below. That is a real cost and it was taken deliberately: what this
-// covers is the class of thing that would be silently wrong in every view at once.
+// CI runs this harness TWICE for that reason, and both runs gate. The invariants
+// job names a species and pays 5s; a separate `views-garden` job runs the whole
+// thing and, because jobs run concurrently, costs no wall clock at all. Gating it
+// as one step took the invariants job from 123s to 401s, then 335s after the
+// memoisation below, then back to ~135s once it was split out. Worth knowing before
+// folding it back in: **the expensive half of a gate belongs beside the cheap half,
+// not behind it.**
 //
 // This one ASSERTS and exits non-zero, which puts it with `smoke`, `wind`,
 // `stem`, `petiole` and `veinlod` rather than with the printing harnesses. The

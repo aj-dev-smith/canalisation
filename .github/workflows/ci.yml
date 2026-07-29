@@ -46,11 +46,35 @@ jobs:
       # The second gate. `smoke.mjs` imports `50_geom.js` and checks that a
       # senescing blade is drawn differently from a live one; this checks the
       # things that would be silently wrong EVERYWHERE at once — the ribbon
-      # emitter every vein and needle goes through, the cell table that stands in
-      # for the live per-cell solve on a mature leaf, and whether any buffer is
-      # dropping geometry in any view. A green gate is a statement about what the
-      # gate imports, and this widens what it imports.
+      # emitter every vein and needle goes through, and the cell table that
+      # stands in for the live per-cell solve on a mature leaf. A green gate is a
+      # statement about what the gate imports, and this widens what it imports.
+      #
+      # Naming a species skips the garden of eight, which is 34s of the harness's
+      # 39s and the whole reason gating it took this job from 123s to 335s. The
+      # garden still gates — it is the `views-garden` job below, which runs at the
+      # same time as this one and therefore costs no wall clock at all.
       - name: Render views
+        run: node test/views.mjs 'Cathedral Fern'
+
+  # THE HEAVIEST CONFIGURATION THE SCENE CAN REACH, and the only one that can
+  # prove a buffer is not silently dropping geometry. It is a separate job rather
+  # than a step so it runs CONCURRENTLY with the invariants instead of after them:
+  # the work is 8 specimens x 4200 steps and nothing about it needs the build.
+  #
+  # It is a gate, not a diagnostic. A full buffer is a picture that is merely
+  # missing things, which is a failure that does not announce itself.
+  views-garden:
+    name: render views (a garden of eight)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Every view, a stand of eight
         run: node test/views.mjs
 
   diagnostics:
