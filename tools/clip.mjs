@@ -51,6 +51,26 @@ if (species) {
   await pg.evaluate(([s, sd]) => window.__app.newSpecimen(s, sd ? +sd : undefined),
     [species, seed]);
 }
+// A GARDEN, optionally: `GARDEN=7 node tools/clip.mjs ...` plants a stand around the
+// subject and lets the framer fit the whole clearing. `GARDEN_RADIUS` defaults to 20,
+// which wants to stay well clear of the blade length -- these plants carry 4-unit
+// fronds, so a tighter ring puts them through each other and reads as one tangled mass
+// rather than as a stand of separate plants.
+//
+// The director is switched off for a garden shot. Its shot list is written around a
+// single subject, so left running it flies into one plant's apex and the other seven
+// stop being the point.
+const gardenN = +(process.env.GARDEN || 0);
+if (gardenN > 0) {
+  await pg.evaluate(([n, r, sd]) => {
+    const a = window.__app;
+    a.plantGarden(+n, { radius: +r, seed: sd ? +sd : undefined });
+    a.userDriving = true;          // the director's shots are about one plant
+    a.shot = null; a.subject = null; a.focus = null;
+    a.cam.autoRot = true;          // keep the slow drift; the framer sets the distance
+    a.cam.el = 0.30;
+  }, [gardenN, process.env.GARDEN_RADIUS || 20, seed]);
+}
 // Grow at speed with the panel collapsed, then settle to the recording speed. The wait
 // is in real seconds and is what decides which act of the life cycle gets filmed.
 if (uRef !== undefined) await pg.evaluate(u => window.__app.setWind(+u), uRef);
