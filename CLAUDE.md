@@ -98,6 +98,10 @@ Two things about CI worth not relearning, both learned here:
   would have let the merge through. GitHub matches required checks by NAME —
   **renaming that job silently stops it gating**, and requiring a context that never
   reports blocks every PR instead. The workflow says this where someone would look.
+  It is verified rather than assumed: a throwaway PR broke an assertion that only
+  fires with more than one specimen, the fast form passed, the garden job failed and
+  the PR went `BLOCKED`. **A gate you have not watched fail is not a gate you know
+  about** — which is the same argument as the rest of this file, applied to CI.
 - **The runner is about 4.5x slower than a laptop** on this CPU-bound work, not the
   1.7x assumed. Estimate CI cost from a measurement, not a ratio: gating the garden
   as a step took the invariants job from 105s to 269s against a predicted ~195s. That split is the project's epistemics in miniature — an

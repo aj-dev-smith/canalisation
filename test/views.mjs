@@ -15,13 +15,22 @@
 //
 //   as one step, both matrix entries        123s -> 401s   (then 335s, memoised)
 //   as one step, node 22 only               105s / 269s
-//   as its own concurrent job               105s / 135s, garden alongside
+//   as its own concurrent job               160-175s, garden 174s ALONGSIDE
+//
+// The last line is the point: the garden takes as long as the whole invariants job
+// and costs nothing, because they run at the same time. Wall clock is set by
+// whichever is slower, and runner variance on these (105-175s for the same job) is
+// larger than the difference between the arrangements.
 //
 // Two things learned the hard way and worth not relearning. **A check that is not a
 // required status context is not a gate** — this was briefly its own job while only
 // `build + invariants` was required, so it ran, went red and let the merge through.
-// And **the runner is ~4.5x slower than a laptop here**, not the ~1.7x assumed, so
-// estimate CI cost from a measurement rather than from a ratio.
+// That is now verified rather than assumed: a throwaway PR broke an assertion that
+// only fires with more than one specimen, so the fast form passed, the garden job
+// failed, and the PR went BLOCKED. If you change how this is wired, do that again —
+// **a gate you have not watched fail is not a gate you know about.** And **the runner
+// is ~4.5x slower than a laptop here**, not the ~1.7x assumed, so estimate CI cost
+// from a measurement rather than from a ratio.
 //
 // This one ASSERTS and exits non-zero, which puts it with `smoke`, `wind`,
 // `stem`, `petiole` and `veinlod` rather than with the printing harnesses. The

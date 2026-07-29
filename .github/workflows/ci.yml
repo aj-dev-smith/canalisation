@@ -63,7 +63,13 @@ jobs:
   # ITS OWN JOB, so it runs concurrently with the invariants rather than inside
   # them. That is worth 165s of wall clock: as a step on one matrix entry it took
   # that job from 105s to 269s, and as a step on both it took it to 335s. Nothing
-  # here needs the build, so there is no reason for it to wait.
+  # here needs the build, so there is no reason for it to wait. Measured alongside:
+  # this job 174s, the invariants 160-175s, so the garden is entirely hidden.
+  #
+  # AND IT WAS WATCHED FAILING. A throwaway PR broke an assertion that only fires
+  # with more than one specimen — so the fast form beside the invariants still
+  # passed, this job went red, and the PR went BLOCKED. Do that again if you rewire
+  # any of it: a gate you have not watched fail is not a gate you know about.
   #
   # **THE JOB NAME BELOW IS A REQUIRED STATUS CONTEXT on `main`.** Renaming it
   # silently stops it gating — GitHub matches required checks by name, and a
