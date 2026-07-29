@@ -89,11 +89,15 @@ import {
   clamp,
 } from './00_math.js';
 import { WORLD, windAt } from './37_wind.js';
+import { FLAP_DEFAULTS } from './39_fall.js';
 
 export const STEM_DEFAULTS = {
   // --- material, all of it already in the tree -------------------------------
   eModulus: 60e6,   // Pa. ROADMAP 7's pre-flight; `FLAP_DEFAULTS` uses the same one
-  rhoTissue: 800,   // kg/m^3, hydrated plant tissue. The pre-flight uses the same one
+  // Hydrated plant tissue, and READ from the petiole's own defaults rather than
+  // written down again — a stem and a petiole are the same tissue, and once the droop
+  // balance needed the stalk's own weight this number had two homes. It has one.
+  rhoTissue: FLAP_DEFAULTS.rhoTissue,
   poisson: 0.5,     // unused for bending; here so the material is described in one place
   zeta: 0.10,       // structural damping ratio, as the petiole. Measured 0.05-0.2
 

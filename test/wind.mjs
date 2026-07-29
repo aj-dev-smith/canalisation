@@ -23,11 +23,15 @@
 // pre-flight table). If the wind has no energy near the stem's first mode, nothing
 // in step 3 will move, and that is worth knowing before writing a solver.
 //
-// The attached-blade section prints more than it judges on purpose. What it found is
-// that the rock is correct, quasi-static and nearly invisible on the petiole radii
-// this plant grows — 0.28 degrees rms at the shipped weather — and *why* is a
-// modelling argument rather than a number: see the 2026-07-26 JOURNAL entry before
-// concluding the solver is broken.
+// The attached-blade section prints more than it judges on purpose, and it now
+// documents a mechanism that SHIPS OFF. On the old petiole — half the stem's radius —
+// the rock was correct, quasi-static and invisible at 0.28 degrees rms. ROADMAP 5 gave
+// the stalk a physical radius and the same mechanism did not become visible, it became
+// wrong: 69 degrees rms, a third of the time against the stop, and blades snapping
+// between face-on attitudes at 10-25 Hz when the wind's own top gust mode is 1.78 Hz.
+// So the numbers below are a falsified mechanism kept measurable, and every assertion
+// on them is deliberately weak. `40_plant.js` above `stepFlaps` has the full account;
+// read it before concluding the solver is broken, and before reaching for `kappa`.
 
 import { WORLD, WIND_DEFAULTS, windField, windAt, windShear, windGLSL, windGLSLNumbers }
   from '../src/37_wind.js';
@@ -306,11 +310,24 @@ section('attached blades');
       r.fl.om0 * toHz, r.fl.arm]
       .map((x, i) => (i === 5 ? x.toFixed(0) : x.toFixed(4)).padStart(7)).join(' '));
   }
+  // THIS RATIO IS A SECOND, INDEPENDENT MEASUREMENT OF `kappa`, and it is the reason
+  // the shipped value is not just "the middle of a published range".
+  //
+  // It read 0.135-0.274 while the petiole came off the stem's radius, against a note
+  // saying a real leaf is nearer 0.02. That 0.02 was an estimate and it was high. Take
+  // an ordinary broadleaf — a birch, a poplar, a maple — and the petiole diameter runs
+  // about 1 mm on a 4 cm blade, 1.5 on 6, 2.5 on 10: r/chord ≈ 0.0125 in all three,
+  // which is also what `kappa = A_pet/A_blade` ≈ 4.6e-4 gives on the same leaf. So the
+  // pipe model's constant and this ratio are the same measurement taken two ways, and
+  // they agree to within the width of the published range.
   {
     const mm = rows.map(r => r.pet.r0 / r.fl.p.c);
     console.log(`  petiole radius as a fraction of the blade's chord: `
       + `${Math.min(...mm).toFixed(3)}-${Math.max(...mm).toFixed(3)}`
-      + '   — a real leaf is nearer 0.02, and stiffness goes as the FOURTH POWER');
+      + '   — a real broadleaf is about 0.0125, and stiffness goes as the FOURTH POWER');
+    ok(Math.min(...mm) > 0.006 && Math.max(...mm) < 0.025,
+      'the stalk is a petiole rather than scaffolding, measured against a real leaf',
+      `${Math.min(...mm).toFixed(3)}-${Math.max(...mm).toFixed(3)}`);
   }
 
   // Response against gust strength. The aerodynamic torque is quadratic in the wind,
@@ -319,19 +336,28 @@ section('attached blades');
   // linearly would mean something was being driven by the mean rather than the load.
   const respond = (uRef, lenMul = 1) => {
     const fw = windField({ ...opt, uRef });
-    let s2 = 0, n = 0, worst = 0, hits = 0;
+    let s2 = 0, n = 0, worst = 0, hits = 0, pin = 0;
     for (const o of organs) {
       const pet = petioleOf(o);
       const len = drawnBladeLen(o.len, o.sen || 0) * lenMul;
-      const st = flapState(flapOf(o.leaf, len, o.sen || 0, pet));
+      const fl = flapOf(o.leaf, len, o.sen || 0, pet);
+      const st = flapState(fl);
       for (let i = 0; i < 1200; i++) {
         windAt(u, fw, o.frame.o[0], o.frame.o[1], o.frame.o[2], i);
         flapStep(st, v3dot(u, o.frame.z), v3dot(u, o.frame.y), 1);
-        if (i > 200) { s2 += st.phi * st.phi; n++; worst = Math.max(worst, Math.abs(st.phi)); }
+        if (i > 200) {
+          s2 += st.phi * st.phi; n++;
+          worst = Math.max(worst, Math.abs(st.phi));
+          // TIME AT THE STOP, not contacts with it. A blade that grazes the stop in a
+          // gust and one that lives against it are the same number of contacts and
+          // completely different pictures, and counting contacts is what let an
+          // earlier version of this file believe the stop was idle.
+          if (Math.abs(st.phi) > 0.95 * fl.o.maxFlap) pin++;
+        }
       }
       hits += st.hit;
     }
-    return { rms: Math.sqrt(s2 / Math.max(1, n)), worst, hits };
+    return { rms: Math.sqrt(s2 / Math.max(1, n)), worst, hits, pinned: pin / Math.max(1, n) };
   };
   const u = [0, 0, 0];
   console.log('\n  twist against wind speed (all blades, 10s of plant time each)');
@@ -345,12 +371,49 @@ section('attached blades');
       + `rms ${(s.rms * DEG).toExponential(2)} deg   peak ${(s.worst * DEG).toExponential(2)} deg`);
   }
   ok(sweep[0].rms === 0, 'a blade in still air does not move at all', sweep[0].rms);
-  ok(sweep[2].rms > sweep[1].rms * 1.5 && sweep[3].rms > sweep[2].rms * 1.5,
-    'response grows faster than linearly with wind speed — it is a load, not a drift',
-    sweep.map(s => (s.rms * DEG).toExponential(1)).join(' '));
-  ok(sweep.every(s => s.hits === 0),
-    'no blade reaches the stop at any weather up to force 5',
-    sweep.map(s => s.hits).join(' '));
+  // THE QUADRATIC CHECK HAS TO BE MADE IN THE LINEAR REGIME, and it did not used to
+  // have to be. On the old petiole — half the STEM's radius, four orders of magnitude
+  // too stiff — the blade never left the linear regime at any weather, so the whole
+  // sweep was a straight line on log-log and this assertion could be made anywhere on
+  // it. On a pipe-model petiole (ROADMAP 5) the blade reaches its aerodynamic
+  // equilibrium, face-on, at ordinary wind speeds, and past that point MORE wind cannot
+  // buy more angle. So the load is still quadratic and the response saturates, and an
+  // assertion that reads the saturated end reports neither.
+  //
+  // Measured where the response is still small, which is the only place the claim is
+  // about the load rather than about the geometry.
+  const lin = [0.08, 0.16, 0.32].map(m => ({ m, ...respond(f.o.uRef * m) }));
+  console.log('  in the linear regime, where the answer is still about the load:');
+  for (const s of lin) {
+    console.log(`    uRef ${(f.o.uRef * s.m).toFixed(2).padStart(5)} m/s   `
+      + `rms ${(s.rms * DEG).toExponential(2)} deg`);
+  }
+  ok(lin.every(s => s.rms * DEG < 12), 'the linear-regime samples really are unsaturated',
+    lin.map(s => (s.rms * DEG).toFixed(1)).join(' '));
+  ok(lin[1].rms > lin[0].rms * 2.6 && lin[2].rms > lin[1].rms * 2.6,
+    'in that regime the response grows as the SQUARE of the wind — it is a load, not a drift',
+    lin.map(s => (s.rms * DEG).toExponential(1)).join(' '));
+  // ...and how much of the time the stop is what you are looking at. THIS IS THE
+  // HONEST WEAK POINT OF THE WHOLE FLAP MODEL and the number is here so it cannot be
+  // forgotten: on a pipe-model petiole the aerodynamic torque and the spring are
+  // COMPARABLE — within a factor of two at the shipped weather — so the blade reaches
+  // face-on and a shifting wind carries it past. That is the one-DOF rigid blade
+  // showing its seams, exactly as the ROADMAP 5 pre-flight predicted it would: a plate
+  // hinged along its own midrib is statically unstable in twist, and nothing in this
+  // model reconfigures or lets the lamina give.
+  //
+  // So the assertion is deliberately weak, and says what can be defended: the blade is
+  // still a dynamical system rather than a thing lying against a clip. The strong claim
+  // — that the twist is a good model of a leaf — is NOT made, and ROADMAP 5 carries
+  // what would have to be true for it to be.
+  console.log('  time spent within a whisker of the stop: '
+    + sweep.map(s => `${(100 * s.pinned).toFixed(1)}%`).join('  ')
+    + '   <- the one-DOF blade showing its seams; see ROADMAP 5');
+  ok(sweep[1].pinned < 0.05,
+    'in a light wind the blade is nowhere near the stop', `${(100 * sweep[1].pinned).toFixed(1)}%`);
+  ok(sweep[3].pinned > sweep[1].pinned && sweep[2].pinned > sweep[1].pinned,
+    'and how much of the time it is there grows with the weather rather than being fixed',
+    sweep.map(s => (100 * s.pinned).toFixed(1)).join(' '));
   // And in a gale it must still be bounded and finite rather than diverging. The
   // exact solution is unconditionally stable at any stiffness, which is the property
   // being checked here — the first version of the integrator was explicit and blew
@@ -378,11 +441,23 @@ section('attached blades');
   {
     const o = organs[Math.floor(organs.length / 2)];
     const len = drawnBladeLen(o.len, 0);
-    // The spring made negligible, and the stop opened past a quarter turn — face-on
-    // is at 90 degrees and the shipped `maxFlap` is 69, so with the shipped stop this
-    // check measures the stop instead of the physics. It did exactly that first time.
+    // The spring made negligible — but RELATIVE to the shipped one, not at an absolute
+    // value. It was `eModulus: 1e2`, which was four orders below the modulus of the day
+    // and comfortably negligible against the petiole of the day. ROADMAP 5 then thinned
+    // every stalk, `k` goes as r^4, and the same absolute number became numerically
+    // degenerate rather than merely small: `flapStep` solves the oscillator exactly and
+    // its equilibrium term is `torque/k`, so as k falls the closed form evaluates a
+    // finite angle as an enormous number times a tiny one and loses every digit. The
+    // answer wandered — 53, 132, 65 degrees — and looked like a sign error in the
+    // added-mass torque. The floor is at k ~ 1e-6 in world units; above it the answer is
+    // clean and monotone in the residual spring, settling at 94.5, 89.9, 86.7, 79.7 and
+    // 77.2 degrees as the spring is stiffened, which is face-on approached from the
+    // stiff side. That is the actual physics, and 3e-3 of the shipped modulus sits in
+    // the middle of it.
+    //
+    // So: negligible against what is shipped, and it stays negligible if that changes.
     const fl = flapOf(o.leaf, len, 0, petioleOf(o),
-                      { eModulus: 1e2, zeta: 0, maxFlap: 3 });
+                      { eModulus: FLAP_DEFAULTS.eModulus * 3e-3, zeta: 0, maxFlap: 3 });
     const st = flapState(fl, 0.9);          // well off face-on
     // A fixed wind vector, resolved onto the rocking chord and normal. Face-on means
     // none of it lies along the chord.
@@ -417,8 +492,13 @@ section('the seam at abscission');
   const recs = [];
   for (let i = 0; i < 12000 && recs.length < 24; i++) {
     for (const a of P.axes) for (const o of a.organs) {
-      if (o.shed || !o.flapSt) continue;
-      pre.set(o, { z: [...o.frame.z], x: [...o.frame.x], om: o.flapSt.om });
+      // Snapshot every attached organ, not only the ones carrying a flap state. This
+      // used to gate on `o.flapSt`, which was fine while the flap was on and silently
+      // emptied the whole section when it shipped off — and the two things this
+      // measures, how far the drawn chord and the long axis jump at release, are
+      // properties of the FRAME and have nothing to do with the flap.
+      if (o.shed || !o.frame) continue;
+      pre.set(o, { z: [...o.frame.z], x: [...o.frame.x], om: o.flapSt ? o.flapSt.om : 0 });
     }
     P.step(1);
     for (const a of P.axes) for (const o of a.organs) {
@@ -442,7 +522,8 @@ section('the seam at abscission');
   console.log(`  long-axis jump at release   med ${(med('dx') * DEG).toFixed(2)} deg`
     + `   max ${(worstOf('dx') * DEG).toFixed(2)}`
     + '   <- the fall levels the axis; see JOURNAL');
-  console.log(`  rock rate carried over      med ${med('om').toExponential(2)} rad/pt`);
+  console.log(`  rock rate carried over      med ${med('om').toExponential(2)} rad/pt`
+    + (FLAP_DEFAULTS.enabled ? '' : '   <- zero: the flap ships off, see 40_plant.js'));
   ok(recs.length > 4, 'the specimen shed enough blades to measure the seam', recs.length);
   // The rate is continuous by construction now — `startFall` reads it off the attached
   // rock — so what is asserted is that the handover happened at all, not a tolerance

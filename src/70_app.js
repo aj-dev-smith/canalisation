@@ -7,7 +7,7 @@ import { MERISTEM_DEFAULTS } from './20_meristem.js';
 import { Leaf, LEAF_DEFAULTS } from './30_leaf.js';
 import { Plant, SPECIES_DEFAULTS } from './40_plant.js';
 import { windField, WIND_DEFAULTS } from './37_wind.js';
-import { fallFrame, drawnBladeLen, BLADE_DRAWN } from './39_fall.js';
+import { fallFrame, drawnBladeLen, petioleOf, BLADE_DRAWN } from './39_fall.js';
 import {
   Buffers, tube, blade, laminaCells, meristemDome, fruitShell, setView, senesceTint,
 } from './50_geom.js';
@@ -39,7 +39,7 @@ export const SPECIES = {
     prm: { T: 40, D: 6.0, mu: 0.30, rho: 0.60, b: 3.0 },
     mo: { R: 10, rCZ: 2.4, rPZ: 6.8, G: 0.0042 },
     sp: {
-      elongation: 0.0044, organLen: 4.3, organTilt: 0.86, droop: 0.5,
+      elongation: 0.0044, organLen: 4.3, organTilt: 0.86,
       maxOrgans: 52, branching: 0.5, maxAxes: 5,
       leafOpts: { fenestrate: 0 },
       marginBias: { ay: 0.86, g1: 1.10 },
@@ -63,7 +63,7 @@ export const SPECIES = {
     prm: { T: 52, D: 6.5, mu: 0.30, rho: 0.60, b: 3.4 },
     mo: { R: 10, rCZ: 2.2, rPZ: 6.4, G: 0.0042 },
     sp: {
-      elongation: 0.0036, organLen: 3.2, organTilt: 0.66, droop: 0.24,
+      elongation: 0.0036, organLen: 3.2, organTilt: 0.66,
       maxOrgans: 60, branching: 0.30, maxAxes: 3,
       leafOpts: { fenestrate: 0 },
       marginBias: { ay: 0.62, g1: 1.25, D: 0.80 },
@@ -87,7 +87,7 @@ export const SPECIES = {
     prm: { T: 34, D: 5.4, mu: 0.30, rho: 0.60, b: 2.7 },
     mo: { R: 11, rCZ: 2.8, rPZ: 7.4, G: 0.0034 },
     sp: {
-      elongation: 0.0050, organLen: 5.0, organTilt: 1.02, droop: 0.95,
+      elongation: 0.0050, organLen: 5.0, organTilt: 1.02,
       maxOrgans: 44, branching: 0.62, maxAxes: 6,
       leafOpts: { fenestrate: 0.052 },
       marginBias: { ay: 1.12, D: 1.15 },
@@ -111,7 +111,7 @@ export const SPECIES = {
     prm: { T: 46, D: 7.2, mu: 0.30, rho: 0.60, b: 3.2 },
     mo: { R: 9.5, rCZ: 2.0, rPZ: 6.2, G: 0.005 },
     sp: {
-      elongation: 0.0032, organLen: 3.0, organTilt: 0.5, droop: 0.15,
+      elongation: 0.0032, organLen: 3.0, organTilt: 0.5,
       maxOrgans: 64, branching: 0.72, maxAxes: 7, maxGen: 3,
       leafOpts: { fenestrate: 0.040 },
       marginBias: { ay: 1.20, g1: 0.90 },
@@ -138,8 +138,7 @@ export const SPECIES = {
     prm: { T: 44, D: 5.0, mu: 0.30, rho: 0.60, b: 3.4 },
     mo: { R: 9.0, rCZ: 2.0, rPZ: 5.8, G: 0.0046 },
     sp: {
-      elongation: 0.0022, internode: 0.0032, organLen: 2.6, organTilt: 0.62,
-      droop: 0.10, maxOrgans: 34, branching: 0.92, maxAxes: 9, maxGen: 3,
+      elongation: 0.0022, internode: 0.0032, organLen: 2.6, organTilt: 0.62, maxOrgans: 34, branching: 0.92, maxAxes: 9, maxGen: 3,
       budRelease: 210, dominance: 3.2, nutation: 0.024, nutAmp: 0.42,
       wander: 0.62, tropism: 0.016, tipRadius: 0.042,
       leafOpts: { fenestrate: 0 },
@@ -168,7 +167,7 @@ export const SPECIES = {
     mo: { R: 10.5, rCZ: 2.6, rPZ: 7.0, G: 0.0038 },
     sp: {
       elongation: 0.0058, internode: 0.0090, internodeSpan: 3.6,
-      organLen: 3.6, organTilt: 1.16, droop: 0.62, maxOrgans: 30,
+      organLen: 3.6, organTilt: 1.16, maxOrgans: 30,
       branching: 0.22, maxAxes: 3, wander: 0.55, nutation: 0.030,
       nutAmp: 0.52, tropism: 0.030, florigenThresh: 8, maxFlowers: 8,
       fruitScale: 0.78,
@@ -201,7 +200,7 @@ export const SPECIES = {
     mo: { R: 10, rCZ: 2.4, rPZ: 6.8, G: 0.0034 },
     sp: {
       elongation: 0.0016, internode: 0.0011, internodeSpan: 1.4,
-      minInternode: 0.015, organLen: 2.6, organTilt: 1.34, droop: 0.18,
+      minInternode: 0.015, organLen: 2.6, organTilt: 1.34,
       maxOrgans: 78, organBudget: 84,
       branching: 0.0, maxAxes: 1, nutation: 0.006, nutAmp: 0.05,
       wander: 0.10, florigenThresh: 46, floralOrgans: 12, organRoll: 0.20,
@@ -233,8 +232,7 @@ export const SPECIES = {
     prm: { T: 38, D: 6.4, mu: 0.30, rho: 0.60, b: 2.8 },
     mo: { R: 11.5, rCZ: 2.8, rPZ: 7.8, G: 0.0030 },
     sp: {
-      elongation: 0.0040, internode: 0.0052, organLen: 6.8, organTilt: 1.06,
-      droop: 0.30, maxOrgans: 24, branching: 0.12, maxAxes: 2,
+      elongation: 0.0040, internode: 0.0052, organLen: 6.8, organTilt: 1.06, maxOrgans: 24, branching: 0.12, maxAxes: 2,
       internodeSpan: 3.4, radiusScale: 1.45, thicken: 0.00048, organFlow: 0.00050,
       florigenThresh: 4, floralOrgans: 6, fruitScale: 0.70,
       leafOpts: { fenestrate: 0.100 },
@@ -832,7 +830,7 @@ export class App {
       if (w) {
         const bl = w.org.len * BLADE_DRAWN;
         const f = w.org.frame.o, fx = w.org.frame.x;
-        const pet = w.org.len * 0.34 + w.org.radius * 1.8;
+        const pet = petioleOf(w.org).len;
         // aim at the middle of the blade, not at where it joins the stalk
         const mid = 0.45 * bl;
         aimX = f[0] + fx[0] * (pet + mid);
@@ -940,7 +938,7 @@ export class App {
       }
     } else if (this.focus === 'leaf' && this._watch) {
       const org = this._watch.org;
-      const pet = org.len * 0.34 + org.radius * 1.8, bl = org.len * BLADE_DRAWN;
+      const pet = petioleOf(org).len, bl = org.len * BLADE_DRAWN;
       const d = pet + bl * 0.45;
       const at = [org.frame.o[0] + org.frame.x[0] * d,
         org.frame.o[1] + org.frame.x[1] * d,
@@ -1065,7 +1063,8 @@ export class App {
         // petiole
         const a = oFr.o;
         // a longer stalk carries the blade clear of the shoot and its neighbours
-        const pet = org.len * 0.34 + org.radius * 1.8;
+        const pt = petioleOf(org);
+        const pet = pt.len;
         const b = v3(a[0] + oFr.x[0] * pet,
           a[1] + oFr.x[1] * pet,
           a[2] + oFr.x[2] * pet);
@@ -1077,7 +1076,12 @@ export class App {
           _petC[0] *= vis; _petC[1] *= vis; _petC[2] *= vis;
           petC = _petC;
         }
-        tube(B, [a, b], [org.radius * 0.5, org.radius * 0.30], 5, () => ({ c: petC, e: 0 }));
+        // THE STALK ON SCREEN IS THE STALK IN THE SOLVER. These were `org.radius *
+        // 0.5` and `* 0.30` — the stem's radius, halved, written down here and again in
+        // `39_fall.js`, so the drawn petiole and the sprung one were only equal by
+        // coincidence. `petioleOf` is the one definition now, and the pipe model gives a
+        // prismatic stalk, so there is one radius rather than two (ROADMAP 5).
+        tube(B, [a, b], [pt.r0, pt.r1], 5, () => ({ c: petC, e: 0 }));
         if (!L || !L.margin || !L.margin.mature) continue;
         const fr = { o: b, x: oFr.x, y: oFr.y, z: oFr.z };
         // blades unfurl rather than appearing at full size

@@ -14,7 +14,8 @@ import { windField, windAt, WORLD } from './37_wind.js';
 import { Bend, stemScales, STEM_DEFAULTS } from './39a_stem.js';
 import {
   plateOf, fallState, fallStep, fallAxis, drawnBladeLen, bladeSection,
-  petioleOf, flapOf, flapState, flapStep, fallScales, FALL_DEFAULTS,
+  petioleOf, flapOf, flapState, flapStep, fallScales, bendOf, bendAngle,
+  bladeAreaOf, FALL_DEFAULTS, FLAP_DEFAULTS,
 } from './39_fall.js';
 import {
   v3, v3set, v3copy, v3add, v3sub, v3scale, v3addScaled, v3dot, v3cross,
@@ -31,10 +32,32 @@ class Organ {
     this.rnd = mulberry32(seed);
     this.len = 0;
     this.maxLen = 0;
-    this.droop = 0;
+    // How far the petiole bends under the blade — ROADMAP 7b. `bendH` is what a
+    // horizontal stalk would do; `bend` is the balance resolved against the angle the
+    // organ actually grew at, and it is filled in with the frame. Both start at zero,
+    // which is what a leaf that does not exist yet weighs.
+    this.bendH = 0;
+    this.bend = 0;
     this.tilt = 0;
     this.frame = { o: v3(), x: v3(), y: v3(), z: v3() };
   }
+}
+
+// HOW OFTEN THE BALANCE IS RE-SOLVED, and why it is not every step.
+//
+// `bendOf` integrates the grown margin twice — once for the blade's area and once for
+// where along its own length that area sits — and a specimen carries up to 119 organs.
+// The inputs only move as the organ grows, so it is recomputed when the blade's length
+// or its state of drainage has actually shifted, on the same reasoning `stepFlaps`
+// rebuilds its plate. A 2% band is well under a degree of hang.
+function updateBend(org) {
+  const sen = org.sen || 0;
+  if (org._bendAt !== undefined
+    && Math.abs(org.len - org._bendAt) < 0.02 * Math.max(1e-6, org.len)
+    && Math.abs(sen - org._bendSen) < 0.02) return;
+  org._bendAt = org.len;
+  org._bendSen = sen;
+  org.bendH = bendOf(org).thetaH;
 }
 
 class Axis {
@@ -101,7 +124,7 @@ class Axis {
         const f2 = smoothstep(0, sp.organGrow, org.age);
         org.dev = f2;
         org.len = org.maxLen * (0.04 + 0.96 * f2);
-        org.droop = sp.droop * smoothstep(0, sp.organGrow * 1.7, org.age);
+        updateBend(org);
         if (!org.leaf) { org.leaf = org.petal ? this.plant.leaves.requestPetal(org.seed) : this.plant.leaves.request(org.seed); if (org.leaf) org.leafAt = org.age; }
       }
       this.updateRadii(sp);
@@ -199,7 +222,7 @@ class Axis {
       const f = smoothstep(0, sp.organGrow, org.age);
       org.dev = f;
       org.len = org.maxLen * (0.04 + 0.96 * f);
-      org.droop = sp.droop * smoothstep(0, sp.organGrow * 1.7, org.age);
+      updateBend(org);
       if (!org.leaf) { org.leaf = org.petal ? this.plant.leaves.requestPetal(org.seed) : this.plant.leaves.request(org.seed); if (org.leaf) org.leafAt = org.age; }
     }
 
@@ -333,7 +356,12 @@ class Axis {
     org.maxLen = sp.organLen * (0.75 + 0.5 * org.rnd()) * (this.gen === 0 ? 1 : 0.7);
     org.tilt = sp.organTilt * (0.8 + 0.4 * org.rnd());
     // a little roll and pitch scatter so neighbouring blades do not lie in the
-    // same plane and saw through each other
+    // same plane and saw through each other. `lift` is now in RADIANS about the
+    // hang the force balance works out (ROADMAP 7b) rather than a nudge to the
+    // vertical component of a direction, which is what it used to be — same
+    // magnitude, and it stays because real leaves on one stem do not hang alike for
+    // reasons beyond how heavy they are. It is scatter, in the same category as
+    // `roll`, not a shape.
     org.roll = (org.rnd() - 0.5) * sp.organRoll;
     org.lift = (org.rnd() - 0.5) * 0.22;
     org.leafAt = 0;
@@ -354,7 +382,11 @@ class Axis {
       org.tilt = org.petal ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
         : sp.organTilt * 0.30;
       org.roll *= 0.25;
-      org.droopScale = org.petal ? 0.12 : 0.05;
+      // `droopScale` was here — 0.12 for a petal and 0.05 for anything inside it,
+      // holding floral organs up because the leaf's droop was far too much for them.
+      // It is gone: a petal is a short stalk carrying a small light blade, so the
+      // balance in `bendOf` already gives it almost nothing to hang by. That is the
+      // check ROADMAP 5 wanted from the flower close-up, arriving for free.
       this.lastFloralAt = this.age;
       this.consumeApex();
     }
@@ -440,13 +472,12 @@ class Axis {
 
   _tagOrgan(org, S) {
     if (org.shed) { org.bendArea = 0; org.bendMass = 0; return; }
-    const len = org.len || 0;
-    // The blade the renderer draws, at 0.80 of the organ (39_fall.js), and its area
-    // from the silhouette the margin grew rather than from a rectangle.
-    const bl = drawnBladeLen(len, org.sen || 0) * (org.dev || 0);
-    const sec = org.leaf && org.leaf.margin && org.leaf.margin.mature
-      ? bladeSection(org.leaf) : null;
-    const area = sec ? sec.area * bl * bl : bl * bl * 0.5;
+    // The blade the renderer draws, at 0.80 of the organ, and its area from the
+    // silhouette the margin grew rather than from a rectangle. `bladeAreaOf` is that
+    // definition and it lives in `39_fall.js` because three things read it now: the
+    // stem's load, the stem's mass, and — since ROADMAP 5 — the thickness of the
+    // organ's own stalk.
+    const area = bladeAreaOf(org);
     org.bendArea = area;
     // lamina mass plus the petiole's, which is small but is the only mass a bare
     // stalk has once its blade has gone
@@ -524,8 +555,26 @@ class Axis {
       // young organs are pressed against the axis and swing out as they fill
       const tl = org.tilt * (0.12 + 0.88 * smoothstep(0.04, 0.72, org.dev || 0));
       v3lerp(_zd, _zax, dir, tl);
-      _zd[1] -= (org.droop * (org.droopScale === undefined ? 1 : org.droopScale) - org.lift) * (org.dev || 0);
       v3norm(_zd, _zd);
+      // ...and then it hangs. This line used to subtract `sp.droop` from the vertical
+      // component and renormalise, which is a rotation wearing a translation's clothes
+      // and was eight stated numbers in the species table. It is a force balance now
+      // (ROADMAP 7b): the tip slope of the petiole under the weight of the blade it
+      // carries, resolved against the elevation the organ grew at, because only the
+      // component of weight ACROSS a stalk bends it. Rotating in the vertical plane the
+      // organ already points in keeps the direction a unit vector exactly, which the
+      // old subtract-and-renormalise did not — it shortened every organ's azimuth
+      // slightly, more for the ones that hung furthest.
+      const elev = Math.asin(clamp(_zd[1], -1, 1));
+      // the balance itself is kept clean of the scatter, because that is the number
+      // `test/petiole.mjs` checks against a cantilever worked out on paper
+      org.bend = bendAngle(org.bendH || 0, elev);
+      const th = org.bend - (org.lift || 0) * (org.dev || 0);
+      const hl = Math.hypot(_zd[0], _zd[2]);
+      if (Math.abs(th) > 1e-5 && hl > 1e-6) {
+        const e2 = elev - th, c = Math.cos(e2) / hl;
+        _zd[0] *= c; _zd[2] *= c; _zd[1] = Math.sin(e2);
+      }
       v3copy(org.frame.o, _zp);
       v3copy(org.frame.x, _zd);
       v3norm(_zside, v3cross(_zside, _zd, _zax));
@@ -680,7 +729,6 @@ export const SPECIES_DEFAULTS = {
   organLen: 1.35,
   organTilt: 0.85,
   organGrow: 190,
-  droop: 0.55,
   maxOrgans: 60,
   organBudget: 96,   // across the whole specimen, not per shoot
   tipRadius: 0.05,
@@ -821,20 +869,49 @@ export class Plant {
   // wind's own clock is plant time too (`37_wind.js`), which is the trap that file
   // warns about — the old shader sway ran on wall-clock milliseconds, so it did not.
   //
-  // WHAT THE NUMBERS SAY, because it is not what was expected. On the petiole radii
-  // this plant grows, the rock is quasi-static and TINY: 0.002 degrees rms at the
-  // shipped weather, at natural frequencies of 374-4040 Hz. Torsional stiffness goes
-  // as the fourth power of the radius, and the petiole is drawn at half the STEM's
-  // radius — a fat rubber rod, 8mm through and 6cm long, holding a 20cm2 blade. So
-  // this is a mechanism that is correct, continuous at abscission, and invisible. The
-  // measurement, and the three candidate ways out of it, are in the JOURNAL entry for
-  // 2026-07-26; the short version is that the compliance that ought to dominate is
-  // the blade's own midrib, which the leaf HAS canalised a width for, and that the
-  // visible response to wind was always going to be the stem (step 3) and the
-  // force-balance droop (7b) rather than this.
+  // AND IT SHIPS OFF. This is a falsified mechanism kept runnable, in the same
+  // category as the second inhibitor at `rhoI: 0` and the whole-plant stream in
+  // `38_shoot.js` — a negative result you cannot re-measure is just a story.
+  //
+  // THE HISTORY, because the two halves of it point opposite ways and only the second
+  // one is a verdict. When step 2 landed, the rock measured 0.002 degrees rms at
+  // natural frequencies of 374-4040 Hz: correct, continuous at abscission, and
+  // invisible. The diagnosis was the petiole, drawn at half the STEM's radius — a
+  // rubber rod 8 mm through holding a 20 cm2 blade — and ROADMAP 5 fixed exactly that.
+  //
+  // On a pipe-model petiole the same mechanism does not become visible, it becomes
+  // WRONG, and three independent measurements agree:
+  //
+  //   * `test/wind.mjs`: 69 degrees rms twist at the shipped weather, and 31% of the
+  //     time within a whisker of the stop.
+  //   * `tools/jitter.mjs`: blades at 10-25 Hz with peak slew two orders above the
+  //     stem's. The one-word verdict is READS AS JITTER.
+  //   * the wind's own spectrum: its highest gust mode is 1.78 Hz, so NOTHING is
+  //     driving 25 Hz. The blade is not resonating — it is SNAPPING between the two
+  //     face-on attitudes as the wind wanders across it.
+  //
+  // That last one is the finding. A plate hinged along its own midrib is statically
+  // unstable in twist — the aerodynamic centre sits ahead of a mid-chord pivot, which
+  // is why weather vanes are built the other way round — and the ROADMAP 5 pre-flight
+  // predicted precisely this before the radius was touched. It is not a bug in the
+  // integrator, it is not the damping (measured: the effective ratio sits at its
+  // structural 0.12 and goes negative only 6% of the time), and it is not a constant
+  // that wants turning. It is a one-degree-of-freedom rigid blade being asked to stand
+  // in for a lamina that in reality twists progressively, gives, and reconfigures.
+  //
+  // DO NOT SWITCH IT BACK ON BY WIDENING `kappa`. That would work, and it is exactly
+  // the move the pre-flight forbids: the twist spans invisible-to-pinned across
+  // `kappa`'s published error bar, so tuning it until it looks right is tuning, not
+  // measuring — and `kappa` has an independent confirmation from the petiole-to-chord
+  // ratio of a real broadleaf that agrees with where it sits now. What has to change
+  // is the model, and ROADMAP 5 says what.
+  //
+  // Nothing visible is lost by this. The rock it replaces was 0.002 degrees. The
+  // motion a viewer reads is the stem (step 3) and now the hang (7b).
   stepFlaps(dt) {
     const w = this.wind;
     if (!w || w.o.uRef <= 0) return;      // a dead calm costs nothing at all
+    if (!FLAP_DEFAULTS.enabled && !(this.sp.fallOpts && this.sp.fallOpts.enabled)) return;
     for (const a of this.axes) {
       for (const o of a.organs) {
         if (o.shed || !o.leaf || !o.leaf.margin || !o.leaf.margin.mature) continue;

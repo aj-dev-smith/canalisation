@@ -618,53 +618,125 @@ bound but quantising the baked frequencies onto a common fundamental, so the fie
 exactly periodic and the shader can be handed `mod(t, T)`. Shifting them by a fraction
 of a percent is physically meaningless: the spectrum is one random realisation of many.
 
-## The attached blade (`39_fall.js`, ROADMAP 7 step 2, 2026-07-26)
+## The petiole (`39_fall.js`, ROADMAP 5, 2026-07-28)
+
+The stalk is the load-bearing geometry in this whole file, and until 2026-07-28 it was
+the one piece of it nobody had derived. It came off the STEM's radius at the node —
+half of it — and both bending and torsional stiffness go as **r⁴**, so a stalk ten times
+too thick was ten thousand times too stiff. It is the pipe model now.
+
+```
+kappa       4.5e-4  -   petiole conducting area per unit blade area
+ofOrganLen  0.34    -   stalk length as a fraction of the organ (drawn, unchanged)
+ofRadius    1.8     -   plus this much of the stem's radius, to clear the shoot
+```
+
+**`kappa` is measured twice, from two directions, and that is why it is not a dial.**
+Published petiole-area-per-blade-area across broadleaf species runs 2e-4 to 1e-3, and
+this is the geometric centre of it. Independently: take an ordinary broadleaf and the
+petiole diameter runs about 1 mm on a 4 cm blade, 1.5 on 6 cm, 2.5 on 10 — r/chord ≈
+0.0125 in all three, which is `kappa` ≈ 4.6e-4 on the same leaf. `test/wind.mjs` asserts
+the shipped stalks land in that band, and they do: 0.010-0.013.
+
+**Do NOT choose `kappa` by what the twist looks like.** The ROADMAP 5 pre-flight
+established, before any of this was built, that the blade's twist runs from invisible
+through plausible to pinned across `kappa`'s own error bar. A quantity that spans every
+behaviour over a borrowed constant's uncertainty cannot be used to pick that constant.
+`test/petiole.mjs` section 5 prints all four corners so the sensitivity stays measured.
+
+**And it does not taper**, which deleted the second old constant. A stem tapers because
+organs join it along its length; nothing joins a petiole between the node and the blade,
+so the pipe model says it is prismatic. `torsionK` is exact for `r0 === r1`.
+
+## The attached blade (`39_fall.js`, ROADMAP 7 step 2 — SHIPS OFF, 2026-07-28)
 
 Read this the way you read the fall's section: there is nothing here to sweep for
-appearance. There is, however, a number in it that IS arbitrary and turns out to
-dominate everything, and that is the point of this section.
+appearance. Read it also knowing that **the mechanism it describes is switched off**,
+and that the reason is in JOURNAL.md and above `stepFlaps` in `40_plant.js`.
 
 ```
-eModulus   60e6   Pa   Young's modulus. THE pre-flight's one material constant
+enabled    false  -    a falsified mechanism, kept runnable
+eModulus   300e6  Pa   THE PETIOLE'S modulus, and NOT the stem's 60e6 — see below
 poisson    0.5    -    turgid parenchyma is nearly incompressible -> G = E/3
 zeta       0.10   -    structural damping ratio. Measured range 0.05-0.2 in plant stems
+rhoTissue  800    kg/m3  hydrated plant tissue. `39a_stem.js` imports this one
 sub        12     -    substeps per period of the FORCING (the response is exact)
-maxFlap    1.2    rad  a stop, not a shape
+maxFlap    1.75   rad  a stop, and it has to sit outside the equilibrium
 ```
 
+**`eModulus` is the one place two parts of this plant are given different material, so
+it needs an argument.** It was the stem's 60 MPa, which was defensible while only the
+twist read it. Then ROADMAP 7b made the same number decide how far every leaf hangs, and
+60 MPa turned out to be a claim rather than a default: it puts a horizontally-held
+Cathedral Fern blade **83°** down, which is a rag, not a leaf. 60 MPa is right for the
+stem for a stated reason — fleshy, parenchyma-rich, stout-radius axes, and a column in
+compression can be built that way. A petiole cannot: it is a cantilever whose entire job
+is holding a blade out sideways, and real ones are reinforced for it with peripheral
+collenchyma. Herbaceous petiole flexural moduli measure about 0.1-1 GPa (Niklas, *Plant
+Biomechanics*); 300 MPa is the geometric centre, chosen the same way `kappa` was. The
+check that it is not a dial: at this value the solver reproduces **both** bands the
+ROADMAP 5 pre-flight published before it existed — 4.8-13.2° of hang and 6.3-9.5 Hz of
+flap — and neither was used to choose it.
+
+**`maxFlap` moved from 1.2 to 1.75 rad, and that is a correction rather than a taste.**
+The added-mass torque turns a plate face-on; face-on is a quarter turn from edge-on;
+1.2 rad is 69°, which is *inside* 90. On the old petiole that never mattered, because the
+blade rocked by a quarter of a degree and the stop was decorative. On a real stalk the
+blade reaches its equilibrium, and a stop placed short of it does not bound the model, it
+replaces it — every blade parks against the clip and the harness reports the stop's value
+back as physics. `test/wind.mjs` had already noticed for its own free-blade check, where
+it opens the stop to 3 rad and says why in a comment.
+
 `zeta` is a **third** material constant, which the pre-flight said should make you
-re-read rather than reach for it. The argument for it is a measurement, not a
+re-read rather than reach for it. (It is now joined by a fourth, `rhoTissue`, which is
+not new to the project — `39a_stem.js` used to state it separately and now imports it
+from here, because the droop balance needs the stalk's own weight and one number with
+two homes is one number too many.) The argument for it is a measurement, not a
 preference: aerodynamic rotational damping (`cRot`) is *quadratic* in the rate, so at
 the microradian amplitudes this geometry produces it does essentially nothing, and a
 blade struck by a gust rings undamped forever. Material damping is linear and is what
 stops a real petiole. At these stiffnesses 0.1 means the ring is gone within a quarter
 of a plant-time unit and the blade simply follows the wind.
 
-### What the petiole works out to, and why it is the whole story
+### What the petiole works out to, now that it is a petiole
 
-Torsional stiffness goes as **r⁴**, and the petiole's radius is currently `0.5` of the
-STEM's radius at the node — a number nobody derived. Measured on a Cathedral Fern at
-6000 steps:
+Measured across all eight species at 6000 steps, medians over every mature blade
+(`node test/petiole.mjs`):
 
-| | value |
+| species | blades | area cm² | r mm | flap Hz | hang |
+|---|---|---|---|---|---|
+| Cathedral Fern | 90 | 65 | 0.97 | 8.7 | 12.4° |
+| Spiral Ossuary | 90 | 42 | 0.77 | 10.4 | 21.3° |
+| Abyssal Frond | 119 | 102 | 1.21 | 7.6 | 10.2° |
+| Sun Coral | 96 | 39 | 0.75 | 9.8 | 10.9° |
+| Hoarfrost Thicket | 96 | 24 | 0.59 | 11.3 | 20.0° |
+| Ember Creeper | 25 | 28 | 0.63 | 9.4 | 9.1° |
+| Sulphur Rosette | 29 | 43 | 0.78 | 9.5 | 14.1° |
+| Nightglass Parasol | 6 | 108 | 1.24 | 6.8 | 8.6° |
+
+The radius was **6.2-9.5 mm** before and is **0.59-1.24** now; the pre-flight predicted
+0.57-1.21 without a solver, which is as close as that kind of arithmetic gets. Blade
+areas span 4.5× and the flap frequency spans 1.66×, because stiffness goes as `(kappa·A)²`
+while the inertia goes as the area, so the two nearly cancel — the same shape of result
+as the stem pre-flight, and the strongest argument that the pipe model is the right law.
+
+**What it did NOT fix is the twist**, and that is the whole reason `enabled: false` is at
+the top of `FLAP_DEFAULTS`. On a physical stalk the aerodynamic torque and the spring are
+within a factor of two of each other, so the blade reaches face-on and then snaps between
+the two face-on attitudes as the wind wanders. Three measurements, all agreeing:
+
+| | |
 |---|---|
-| petiole length | 0.82-1.02 world units (5-6 cm) |
-| petiole base radius | 0.118-0.131 (7.4-8.2 mm) |
-| radius as a fraction of the blade's own chord | 0.14-0.27 — **a real leaf is nearer 0.02** |
-| torsional stiffness `k` | 30-108 world torque/rad |
-| first torsional frequency | **374-4040 Hz** |
-| rock at the shipped 2.5 m/s, all 110 blades | 0.097° rms, 0.93° peak |
-| rock at 1.25 / 5.0 m/s | 0.024° / 0.38° rms — quadratic, as it must be |
+| twist at the shipped weather | **69° rms**, against 0.10° on the old stalk |
+| time within a whisker of the stop | **31%** |
+| `tools/jitter.mjs` verdict | blades at 10-25 Hz, peak slew 100× the stem's — **READS AS JITTER** |
+| the wind's own highest gust mode | **1.78 Hz** — so nothing is driving 25 Hz |
 
-So the mechanism is correct — quadratic in wind speed, zero in still air, larger for a
-bigger blade on the same stalk, all asserted — and it is **quasi-static and nearly
-invisible**, because the blade is hanging off a fat rubber rod. Turning the weather down
-to force 2 made it a tenth of a degree instead of a quarter, which changes nothing about
-the diagnosis: at either speed this is the defect, and it is the reason the blade does
-not move on its own stalk even when the stem it hangs from is swaying visibly. An order of magnitude
-in radius is four orders in stiffness. Do not tune `eModulus` down to compensate: that
-is the compensation the pre-flight already spent once, and doing it twice would make a
-petiole out of jelly. **The number to fix is the radius**, and it is ROADMAP 5.
+That last row is the finding. It is not resonance and it is not the integrator: a plate
+hinged along its own midrib is statically *unstable* in twist, the aerodynamic centre
+sits ahead of a mid-chord pivot, and the pre-flight predicted exactly this. The effective
+damping ratio was measured too and sits at its structural 0.12, going negative only 6% of
+the time, so it is not a damping problem either. See JOURNAL.md.
 
 ### The integrator is exact in the linear part, and that is not an optimisation
 
@@ -696,6 +768,61 @@ pitch tumbles, 32-39 of 40 blades take the long axis past 90° with median excur
 600-900°, because two independently-solved 2D planes do not exchange angular momentum.
 Full reasoning in JOURNAL.md. **Do not switch it on to see if it looks better** — it
 manufactures energy, which is not a thing to ship whatever it looks like.
+
+## How far a leaf hangs (`39_fall.js` `bendOf`, ROADMAP 7b, 2026-07-28)
+
+**There is nothing in this section to tune, and that is the entire point of it.** What
+was here was `sp.droop`: one constant in `40_plant.js` and eight values in the species
+table (0.10-0.95), which were the answer to "how far down does a leaf point". They are
+gone. The answer is the tip slope of the petiole under the weight of the blade it
+carries, and every input is physics or something the plant already grew.
+
+    theta_horizontal = W L (L/2 + d) / (EI)          W  the blade's weight
+                                                     L  the stalk the renderer draws
+    theta = theta_horizontal * cos(elevation - theta) d  where the blade's area sits
+
+`d` is the span centroid of the silhouette the margin grew (`bladeArm`), so a blade
+carrying its area out near the tip pulls its stalk down further and nothing said it
+should. The second line is what makes it a *balance* rather than a formula — only the
+component of weight across a stalk bends it, so a leaf held out horizontally hangs the
+full amount and one already pointing steeply down barely moves. Four fixed-point
+iterations. `BEND_MAX` (1.05 rad) is a stop of the same kind as `maxFlap` and `maxTilt`:
+reaching it means the load has left the regime a linear beam describes.
+
+Shipped result: **8.6-21.3° across the eight species**, off no per-species number. The
+elevation of a blade's own axis moved from a p50 spanning -35° to +26° (eight tuned
+values) to one spanning -34° to -1°. So the catalogue's spread in *hang* narrowed; the
+spread in silhouette that remains comes from `organTilt`, `organLen` and the margins,
+which were always there.
+
+**Why the petiole is allowed to sag when the stem is not.** `39a_stem.js` argues at
+length that a beam's static sag and its first natural frequency are the same
+stiffness-to-mass group and cannot be picked independently — at a plant-like sway period
+a Cathedral Fern's tip would hang 27 cm low. That is still true here. What differs is
+what the plant does about it: a stem is continuously remodelled toward vertical by
+gravitropic growth, so the shape it grew into already *is* its loaded equilibrium and its
+sag is spent, while a petiole is not, and a leaf hanging below its node is not a defect,
+it is the most obvious thing a leaf does. Same arithmetic, opposite conclusion, and the
+numbers agree: 27 cm of stem is not a plant and 5-13° of leaf is.
+
+### The scaling reverses across a specimen, and the roadmap expected the other sign
+
+ROADMAP 7b asked for one check: *does a bigger blade on the same stalk hang lower without
+anyone saying it should?* It does — 0.5×/1×/2× the area on the stalk the organ actually
+grew gives, on a Cathedral Fern, 9.6° / 23.3° / 58.2°. `test/petiole.mjs` section 4
+asserts it for every species.
+
+Across the organs of one specimen the answer is the opposite, and it is not a bug:
+
+    W ~ A,  I ~ r^4 ~ (kappa A)^2,   so   theta ~ A / A^2 ~ 1/A
+
+because the pipe model grows a *thicker* stalk for a bigger blade and r⁴ beats the extra
+weight. Measured: Cathedral Fern's smallest quartile hangs 21.6° and its largest 11.8°.
+This is a known over-compensation — real petioles scale nearer elastic similarity
+(r ~ M^(3/8)) than area proportionality, precisely because area proportionality stiffens
+faster than it loads — and it is the strongest argument for the successor law ROADMAP 5
+records: sizing the stalk off the traffic the midrib actually canalises, which is under
+no obligation to go as the area.
 
 ## The stem as a beam (`39a_stem.js`, ROADMAP 7 step 3, 2026-07-26)
 

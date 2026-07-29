@@ -662,14 +662,37 @@ export function fallFrame(st, frame, axis, out) {
 // error. It is two lines of algebra and it is exact for a linear taper.
 
 export const FLAP_DEFAULTS = {
-  // THE ONE MATERIAL CONSTANT, and it is not new. The ROADMAP 7 pre-flight measured
-  // the plant's own emergent radii against a cantilever frequency and found that
-  // `E ~ 60 MPa` puts seven of eight species in 0.49-4.6 Hz off nothing per-species.
-  // 60 MPa is turgid, parenchyma-rich, succulent-like tissue — NOT wood, which is
-  // 1-10 GPa. These stems are genuinely fleshy: slenderness runs 16-99 where a real
-  // herbaceous stem is nearer 200. Do not reach for a woody `E` and then wonder why
-  // everything buzzes. See TUNING.md, "the air", and ROADMAP 7's pre-flight table.
-  eModulus: 60e6,   // Pa
+  // SHIPS OFF — see the long note above `stepFlaps` in `40_plant.js` for the three
+  // measurements that turned it off and for why the answer is not to widen `kappa`.
+  // Everything below is still live and still exercised: `test/wind.mjs` and
+  // `test/petiole.mjs` both build flaps directly, which is the point of keeping a
+  // falsified mechanism runnable rather than deleting it.
+  enabled: false,
+  // THE PETIOLE'S OWN MODULUS, and it is NOT the stem's — this is the one place in the
+  // mechanics where two parts of the same plant are given different material, so it
+  // needs an argument rather than a value.
+  //
+  // It shipped at the stem's 60 MPa, because when only the TWIST read it that was the
+  // cheapest defensible answer and `39a_stem.js` had already argued for it. Then
+  // ROADMAP 7b made the same number decide how far every leaf hangs, and 60 MPa turned
+  // out to be a statement rather than a default: it puts a horizontally-held Cathedral
+  // Fern blade **83 degrees** down, which is not a leaf, it is a rag. Every species
+  // saturated against the geometry — see the JOURNAL entry, where the saturation also
+  // briefly faked a scaling result.
+  //
+  // 60 MPa is right for the stem for a stated reason: these are fleshy, parenchyma-rich,
+  // stout-radius axes, and a column in compression can be built that way. A PETIOLE
+  // cannot. It is a cantilever whose entire job is to hold a blade out horizontally,
+  // and real ones are built for it — peripheral collenchyma strands and vascular
+  // bundles rather than uniform parenchyma. Measured flexural moduli for herbaceous
+  // petioles run about 0.1-1 GPa (Niklas, *Plant Biomechanics*); this is the geometric
+  // centre of that range, chosen the same way `PETIOLE.kappa` is and for the same
+  // reason — a range's centre is a citation, and its edges are a dial.
+  //
+  // The check that it is not a dial: at this value the solver independently reproduces
+  // BOTH bands the ROADMAP 5 pre-flight published before it existed — 4.8-13.2 degrees
+  // of hang, and 6.3-9.5 Hz of flap. Neither was used to choose it.
+  eModulus: 300e6,  // Pa
   // Turgid parenchyma is mostly water and nearly incompressible, so 0.5 rather than
   // a metal's 0.3. It only enters as `G = E/(2(1+nu))`, so this is the difference
   // between dividing by 3 and dividing by 2.6.
@@ -692,32 +715,108 @@ export const FLAP_DEFAULTS = {
   sub: 12,          // integrator substeps per period of the FORCING (the response is
                     // solved exactly, so nothing here has to resolve the spring)
   subCap: 96,
-  // A stop, not a shape: no torsional spring on a real petiole is linear out to a
-  // quarter turn, and a blade that has rotated this far has left the regime the
-  // quasi-steady model describes anyway.
-  maxFlap: 1.2,     // rad
+  // A stop, not a shape. It has to sit OUTSIDE the model's own stable equilibrium, and
+  // that is what moved it: the added-mass torque turns a plate face-on, face-on is a
+  // quarter turn from edge-on, and this used to be 1.2 rad — sixty-nine degrees, which
+  // is INSIDE ninety. On the petiole this project used to draw that never mattered,
+  // because the blade rocked by a quarter of a degree and the stop was decorative. On a
+  // pipe-model petiole the blade reaches its equilibrium, and a stop placed short of it
+  // does not bound the model, it replaces it: every blade parks against the clip and
+  // `test/wind.mjs` reported the stop's value back as the physics. That harness had
+  // already noticed for its own free-blade check, where it opens the stop to 3 rad and
+  // says why in a comment — this is the same correction applied to the shipped value.
+  //
+  // 1.75 rad is a hundred degrees: past face-on from any attitude the plant grew, and
+  // well short of the half turn where a blade is inverted and the quasi-steady plate
+  // genuinely has stopped describing it. THAT is what the stop is for.
+  maxFlap: 1.75,    // rad
+  // Hydrated plant tissue. Stated HERE and imported by `39a_stem.js` rather than
+  // written down twice: a petiole and a stem are the same tissue, and the stalk's own
+  // weight is now part of the droop balance, so both files need it.
+  rhoTissue: 800,   // kg/m^3
 };
 
 // THE PETIOLE THE RENDERER DRAWS IS THE PETIOLE THAT HOLDS THE BLADE.
 //
-// These three numbers were in `70_app.js` and are here now, for exactly the reason
-// `BLADE_DRAWN` is: the mechanics has to be about the stalk on the screen. If the
-// drawn petiole and the sprung one disagree, a blade rocks on a spring nobody can
-// see. One definition, read by both — `70_app.js` calls `petioleOf` now.
+// These numbers were in `70_app.js` and are here for exactly the reason `BLADE_DRAWN`
+// is: the mechanics has to be about the stalk on the screen. If the drawn petiole and
+// the sprung one disagree, a blade rocks on a spring nobody can see. One definition,
+// read by both — `70_app.js` calls `petioleOf` now, and so does the renderer.
 //
-// The numbers themselves are still arbitrary, and this is the honest weak point of
-// step 2 rather than something it fixed: the radius comes off the STEM's radius at
-// the node, not off the blade the petiole carries, which is already ROADMAP 5's
-// complaint about flower close-ups. Stiffness goes as r^4, so that arbitrariness is
-// now load-bearing — see the JOURNAL entry for the measurement and what it implies.
-export const PETIOLE = { ofOrganLen: 0.34, ofRadius: 1.8, rBase: 0.5, rTip: 0.30 };
+// THE RADIUS COMES OFF THE BLADE, NOT OFF THE STEM — ROADMAP 5.
+//
+// It used to be half the STEM's radius at the node, which nobody derived and which
+// nothing depended on until an attached blade was hung off it. Then it did: bending and
+// torsional stiffness both go as r^4, so a stalk ten times too thick is ten thousand
+// times too stiff, and the measurement was a blade rocking by a quarter of a degree on
+// a rubber rod 8 mm through. Two independent routes arrived at the same defect — the
+// mechanics above, and the flower close-ups where the stalks read as scaffolding.
+//
+// The law is the PIPE MODEL: a petiole's conducting cross-section is proportional to
+// the leaf area it supplies, `A_pet = kappa * A_blade`. That is the same reasoning the
+// stem taper already runs on — a conduit is as thick as the traffic it carries — so it
+// needs no new mechanism, only a measured proportionality, and `kappa` being
+// dimensionless means it survives any later change to `unitM`.
+//
+// AND IT DOES NOT TAPER, which deletes the second of the two old constants. A stem
+// tapers because organs join it along its length; nothing joins a petiole between the
+// node and the blade, so it carries the same traffic from end to end and the pipe model
+// says it is prismatic. `torsionK` handles r0 === r1 exactly, so this is a simpler
+// answer rather than a special case.
+//
+// WHAT KAPPA IS, AND WHY IT IS NOT TUNED. Measured petiole-area-per-blade-area across
+// broadleaf species runs 2e-4 to 1e-3. This is the geometric centre of that range —
+// picked before anything downstream was looked at, and deliberately NOT afterwards,
+// because the ROADMAP 5 pre-flight established that the blade's TWIST swings from
+// invisible through plausible to pinned across that same range. A quantity that spans
+// every behaviour over the error bar of a borrowed constant must not be used to choose
+// the constant. `test/petiole.mjs` section 5 prints the sensitivity at all four corners
+// so it stays measured rather than remembered.
+//
+// The way to get `kappa` out of the codebase entirely is written up in ROADMAP 5: the
+// conducting area of a petiole is something this leaf already canalises, in the trunk
+// of its own vein hierarchy. That is a better law with the same one free number, so it
+// did not block this.
+export const PETIOLE = {
+  ofOrganLen: 0.34,   // stalk length: unchanged, and still the drawn one
+  ofRadius: 1.8,
+  kappa: 4.5e-4,      // petiole conducting area per unit blade area
+};
 
-export function petioleOf(org) {
+// The area of the blade this organ carries, in world units, from the silhouette the
+// margin grew rather than from a rectangle. One definition, because three places need
+// it now — the stalk's radius, the stem's load, and the stem's mass.
+export function bladeAreaOf(org, sen) {
+  const bl = drawnBladeLen(org.len || 0, sen === undefined ? (org.sen || 0) : sen)
+    * (org.dev === undefined ? 1 : org.dev);
+  const sec = org.leaf && org.leaf.margin && org.leaf.margin.mature
+    ? bladeSection(org.leaf) : null;
+  return sec ? sec.area * bl * bl : bl * bl * 0.5;
+}
+
+export function petioleOf(org, opt) {
+  const p = opt || PETIOLE;
+  const r = Math.max(1e-5, Math.sqrt(p.kappa * bladeAreaOf(org) / Math.PI));
   return {
-    len: Math.max(1e-4, org.len * PETIOLE.ofOrganLen + org.radius * PETIOLE.ofRadius),
-    r0: Math.max(1e-5, org.radius * PETIOLE.rBase),
-    r1: Math.max(1e-5, org.radius * PETIOLE.rTip),
+    len: Math.max(1e-4, org.len * p.ofOrganLen + org.radius * p.ofRadius),
+    r0: r,
+    r1: r,
   };
+}
+
+// Where along its own length a blade's weight acts: the span centroid of the
+// silhouette the margin grew, as a fraction of the drawn blade length. A blade whose
+// widest point is out near the tip hangs its stalk harder than one that is broadest at
+// the base, and neither of those is stated anywhere — the margin decided it.
+export function bladeArm(leaf, samples = 24) {
+  if (!leaf || !leaf.margin || !leaf.margin.mature) return 0.5;
+  let a = 0, mom = 0;
+  for (let i = 1; i < samples; i++) {
+    const u = i / samples;
+    const w = leaf.margin.half(u, -1) + leaf.margin.half(u, 1);
+    a += w; mom += u * w;
+  }
+  return a > 1e-9 ? mom / a : 0.5;
 }
 
 // Young's modulus in world units. Stress has the dimensions of density times
@@ -727,7 +826,7 @@ export function petioleOf(org) {
 export function stiffScales(o) {
   const vs = o.unitM * o.ptPerSec;
   const E = o.eModulus / (o.rhoAir * vs * vs);
-  return { E, G: E / (2 * (1 + o.poisson)) };
+  return { E, G: E / (2 * (1 + o.poisson)), rho: o.rhoTissue / o.rhoAir };
 }
 
 // Torsional stiffness of the tapered petiole: k = G / integral(dx / J(x)), with
@@ -739,6 +838,76 @@ export function torsionK(pet, G) {
     ? len / jOf(r0)
     : (2 / Math.PI) * (len / (3 * (r1 - r0))) * (1 / (r0 * r0 * r0) - 1 / (r1 * r1 * r1));
   return G / Math.max(1e-12, comp);
+}
+
+// ===========================================================================
+// HOW FAR A LEAF HANGS — ROADMAP 7b
+//
+// This replaces `sp.droop`: one stated constant in `40_plant.js` and eight values in
+// the species table, which were the answer to "how far down does a leaf point". It is
+// a force balance now — the tip slope of the petiole under the weight of the blade it
+// carries — and every input is either physics or something the plant already grew.
+//
+// WHY THE PETIOLE IS ALLOWED TO SAG WHEN THE STEM IS NOT, because `39a_stem.js` argues
+// at length that a beam's static sag and its first natural frequency are the same
+// stiffness-to-mass group and cannot be chosen independently. That is still true here.
+// The difference is what the plant does about it. A stem is continuously remodelled
+// toward vertical by gravitropic growth, so the shape it grew into already IS its
+// loaded equilibrium and its sag is spent; a petiole is not, and a leaf hanging below
+// its node is not a defect in the plant, it is the single most obvious thing a leaf
+// does. So for the stem the sag belongs in the rest shape, and for the petiole the sag
+// IS the observable. Same arithmetic, opposite conclusion, and it is worth stating
+// because the numbers agree: the rigid link gives a stem tip 27 cm low and a blade
+// 5-13 degrees down, and only one of those is a plant.
+//
+// THE MODEL. A prismatic cantilever of length L carrying its blade as a point load `W`
+// at the tip plus the moment of that load acting `d` further out along the blade:
+//
+//     theta = integral_0^L M(x)/(EI) dx  with  M(x) = W (L + d - x)
+//           = W L (L/2 + d) / (EI)
+//
+// `d` is the span centroid of the silhouette the margin grew (`bladeArm`), so a blade
+// that carries its area out near the tip pulls its own stalk down further, and nothing
+// said it should. `W` is the blade's mass at the same areal density the fall uses.
+//
+// AND IT IS SOLVED, NOT EVALUATED. Only the component of weight across the stalk
+// bends it, so a stalk that has already drooped is loaded less than one that has not:
+//
+//     theta = theta_horizontal * cos(elevation - theta)
+//
+// Four fixed-point iterations from zero. This is what makes it a balance rather than
+// a formula — a leaf held out horizontally hangs the full amount, one already pointing
+// steeply down barely moves, and neither case needed a rule.
+export function bendOf(org, opt) {
+  const o = { ...FALL_DEFAULTS, ...FLAP_DEFAULTS, ...(opt || {}) };
+  const S = fallScales(o);
+  const St = stiffScales(o);
+  const pet = petioleOf(org, o.petiole);
+  const sen = clamp(org.sen || 0, 0, 1);
+  const sigma = S.sigmaFresh + sen * (S.sigmaDry - S.sigmaFresh);
+  const area = bladeAreaOf(org);
+  const bl = drawnBladeLen(org.len || 0, sen) * (org.dev === undefined ? 1 : org.dev);
+  // the stalk's own mass acts at its middle, and on a bare senesced stalk it is all
+  // there is left to bend it
+  const mPet = St.rho * Math.PI * pet.r0 * pet.r0 * pet.len;
+  const d = bladeArm(org.leaf) * bl;
+  const EI = St.E * Math.PI * Math.pow(pet.r0, 4) / 4;
+  const W = sigma * area * S.g;
+  const M = W * pet.len * (pet.len * 0.5 + d) + mPet * S.g * pet.len * pet.len / 3;
+  return { pet, thetaH: M / Math.max(1e-30, EI), arm: d, mass: sigma * area + mPet };
+}
+
+export const BEND_MAX = 1.05;   // rad, a stop rather than a shape
+
+// Resolve the balance. `elev` is the elevation of the stalk as it grew, in radians
+// above horizontal; the answer is how far below that the blade ends up.
+export function bendAngle(thetaH, elev) {
+  let th = 0;
+  for (let i = 0; i < 4; i++) th = thetaH * Math.cos(clamp(elev - th, -1.5, 1.5));
+  // A linear beam stops describing a stalk that has folded in half, and this is the
+  // same kind of stop as `maxFlap` and `maxTilt`: reaching it means the load has left
+  // the regime, not that the number needs adjusting.
+  return clamp(th, -BEND_MAX, BEND_MAX);
 }
 
 // Everything an attached blade needs, worked out once. `len` is the DRAWN blade
@@ -802,7 +971,42 @@ export function flapTerms(f, wz, wy, om) {
   // so linearised at the current rate: exact here, always dissipative, and vanishing
   // at small amplitude, which is why it cannot be the only damping (see `zeta`).
   const cRotL = p.cRot * o.rhoF * p.c * p.c * p.c * p.c * Math.abs(om) / 64;
-  return { tq0, cAero: cCirc + cRotL, sp };
+  // (4) QUASI-STEADY PITCH DAMPING, and it was missing. This is the term the FALL gets
+  // for free and the attached blade threw away, which is a difference in the boundary
+  // condition rather than in the plate.
+  //
+  // A falling plate's `vPar`/`vPerp` are its own velocity, so when it rotates, the flow
+  // it sees rotates with it and the coupling damps it. An attached blade's are the
+  // WIND, which knows nothing about how fast the blade is turning — so the only thing
+  // left resisting rotation was `cRot`, a form drag quadratic in the rate, which at the
+  // amplitudes the old stiff petiole produced was documented as contributing
+  // "essentially nothing". It was true, and it stayed true for the wrong reason: `zeta`
+  // was carrying all the damping, and on a pipe-model petiole (ROADMAP 5) that leaves a
+  // blade ringing at 10-24 Hz. `tools/jitter.mjs` said so in one word.
+  //
+  // The fix is not a coefficient, it is the strip integral the model already implies.
+  // Rotating at `om`, the station at chordwise offset x sees an extra normal velocity
+  // `x*om`, so the local incidence — and with it the circulatory normal force — varies
+  // along the chord. Taking the moment of that about the pivot:
+  //
+  //     M = -integral_(-c/2)^(c/2)  x * (1/2 rho cT |vPar| (vPerp + x om))  dx
+  //       = -(rho cT |vPar| c^3 / 24) * om
+  //
+  // The `vPerp` half integrates to zero about a mid-chord pivot, which is why this term
+  // is invisible until you ask about the rate. It is linear in the rate and in the
+  // speed, always dissipative, and it has no new constant in it — `cT` is the plate's
+  // own lift slope, already carrying its aspect-ratio correction.
+  //
+  // It vanishes at face-on, where there is no flow along the chord to be turned into
+  // circulation, and that is correct rather than a hole: at face-on `cRotL` is the term
+  // that is large. The two are complementary and always have been.
+  //
+  // THE FALL IS DELIBERATELY NOT GIVEN THIS. Its rotational damping is the published
+  // model's `mu_rot |om| om`, `test/fall.mjs` validates it against the published
+  // flutter/tumble ordering, and adding a term to a validated model to fix a different
+  // model's problem is how you end up with neither.
+  const cPitch = o.rhoF * p.cT * Math.abs(vPar) * p.c * p.c * p.c / 24;
+  return { tq0, cAero: cCirc + cRotL + cPitch, sp };
 }
 
 // The whole aerodynamic torque, per unit span. Nothing in the simulation calls this —
