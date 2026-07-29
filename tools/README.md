@@ -47,6 +47,24 @@ inside **single** quotes, so it never interpolated.
   `node_modules` into it, and run *this* copy of the tool with the worktree as cwd — the
   page URL comes from `process.cwd()` and the playwright import resolves from the script.
   For a *weather* comparison you do not need any of that: pass `uRef` and record twice.
+- `veinlod_shot.mjs OUTDIR [species] [seed] [waitMs]` — **before/after for the vein
+  level of detail**, on the hero specimen at the shipped camera, which is the frame that
+  change puts at risk. Flips `app.veinLOD`, which is the whole switch: `false` restores
+  the pre-LOD renderer exactly (every vein of every blade at the scene-wide floor).
+
+  It forces its own wide framing and takes the camera off the director, for a reason
+  worth knowing before trusting any capture here: left alone the director picks a
+  close-up, and the first run of this tool produced two frames of the inside of a single
+  petal. It also re-asserts `cam.dist` immediately before each shutter, because the
+  camera damps toward the specimen's bounding box every frame and a distance set once at
+  the top of the run is quietly pulled back in.
+
+  **Pick the distance deliberately.** The cull law is anchored to the camera's own
+  framing, so a lone specimen filling the frame is barely culled however far away it is
+  in absolute terms — at `VEINLOD_DIST=26` only 3% of ribbons go and the comparison
+  proves nothing. The informative shot is from *inside* the canopy (9 or so), where the
+  back of the plant is well beyond the framing distance and 31% of the ribbons go.
+
 - `jitter.mjs [species] [seed] [waitSeconds] [uRef]` — **where is the movement's energy?**
   Samples the drawn state at frame rate — the tip of the main axis and individual blade
   normals — and reports a dominant rate per signal, plus a verdict at about 4 Hz, which

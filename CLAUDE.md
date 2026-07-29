@@ -59,10 +59,11 @@ node test/fall.mjs                                 # a shed blade: is the fall a
 node test/wind.mjs '{"uRef":3}'                    # the wind field: profile, gusts, spectrum, divergence, GLSL round trip
 node test/stem.mjs                                 # the stem as a beam: ringdown vs the pre-flight, sway per species, convergence
 node test/petiole.mjs                              # the stalk as a pipe, and the hang as a force balance
+node test/veinlod.mjs                              # vein level of detail: what it saves, and the light it must conserve
 ```
 
-**Four of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
-`petiole.mjs`.** The
+**Five of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+`petiole.mjs`, `veinlod.mjs`.** The
 rest print and never fail. That split is the project's epistemics in miniature — an
 *emergent* quantity must not be pinned down in a test, because that would convert it
 into an imposed one, while a *physical* claim can be checked against a number worked

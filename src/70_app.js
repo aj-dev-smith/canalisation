@@ -908,7 +908,17 @@ export class App {
     // sixty fronds gets a coarser surface than one with six
     // vein ribbons face the camera and never get thinner than a pixel or so
     const px = 2 * Math.tan(this.cam.fov / 2) / Math.max(1, this.renderer.H);
-    setView(this.cam.eye, this.cam.dist * px * 1.5);
+    // The third number is the ANGULAR pixel size, so a blade can work out its
+    // own scale from its own distance rather than inheriting the one measured
+    // at the camera's orbit radius. Passing it alongside the second rather than
+    // replacing it keeps every non-blade caller on the scene-wide value.
+    //
+    // Passing ZERO instead is the pre-LOD renderer, exactly — every vein of
+    // every blade at the scene-wide floor. It is here so the change stays
+    // re-measurable from a browser rather than only from a harness
+    // (`tools/veinlod_shot.mjs`), the same reason `FALL_DEFAULTS.tiltPlane` and
+    // `shootOpts.enabled` are still in the tree.
+    setView(this.cam.eye, this.cam.dist * px * 1.5, this.veinLOD === false ? 0 : px);
     this.detail = 0;
     // when the camera has gone in to look at a growing tip, anything between it
     // and that tip is in the way — drop it rather than let a leaf fill the frame
