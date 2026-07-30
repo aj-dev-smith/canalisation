@@ -663,3 +663,35 @@ Leaf and margin simulations dominate. Grow a small **library** and share it —
 never one simulation per organ (thirty tissue sims at once will crawl).
 Retire spent meristems (`this.meristem = null`) and finished fruits (`done` flag);
 an arrested shoot should cost nothing.
+
+## `updateRadii` does two jobs, and only one of them may see the pose
+
+`Plant.stepBend` calls `Axis.updateRadii` a second time, after the bend has been
+applied, so that organ frames ride the stem that will actually be drawn. That is
+correct and deliberate — the comment at `40_plant.js` says so.
+
+The trap is that the same function also **sizes the stem**, and it does that by
+walking `arc` against `org.birthLen`. `birthLen` is an odometer reading taken on
+the shape *growth* produced; `arc` was measured off `this.pts`, which after the
+bend is the *deflected* shape. Two rulers.
+
+Bending is near-inextensible so they agree to about **1.5 ppm** — which sounds
+like nothing and is not, because the comparison they feed is **discrete**. An
+organ within a few times 1e-5 of a station boundary crosses it as the stem sways,
+and that station's radius steps by one organ's worth of flow. Measured at 1.87%
+on one station of one species and exactly 0.000% on the other seven: it is a
+coincidence of where an organ landed, so it will move as the catalogue moves.
+
+A stem whose thickness depends on how hard the wind is blowing is not a stem.
+`arc` now comes off `this.rest` when its length matches; frames still come off
+`this.pts`.
+
+**The general form, worth carrying:** when one function computes both a material
+property and a pose-dependent one, the material half must read the material
+coordinate. It will not announce itself, because an inextensible deflection
+preserves arc length almost exactly — the error only becomes visible where a
+continuous quantity is compared against a threshold.
+
+It surfaced as a single species missing a closed form by 2.8% while seven hit it
+to 4e-16. A tolerance of 2% — which is what was written first, and which looks
+generous — would have passed it.

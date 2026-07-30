@@ -4809,8 +4809,19 @@ class Axis {
     arc.length = n;
     while (tan.length < n) { tan.push(v3()); fu.push(v3()); }
 
+    // ARC IS A MATERIAL COORDINATE AND MUST COME OFF THE GROWN SHAPE, NOT THE
+    // POSE. `stepBend` calls this a second time so the frames below ride the
+    // bent stem — but `org.birthLen` is an odometer reading on the shape growth
+    // produced, so comparing it against a bent arc measures two different
+    // rulers. Bending is near-inextensible, so the two agree to about 1.5 ppm;
+    // that is still enough to flip an organ from one side of a station to the
+    // other and step that station's radius by one organ's worth of flow. It was
+    // 1.87% on one station of one species, flickering with the wind. See
+    // PITFALLS.md. Frames still come from `pts`, which is the whole point of the
+    // second call.
+    const mat = (this.rest && this.rest.length === n) ? this.rest : this.pts;
     arc[0] = 0;
-    for (let i = 1; i < n; i++) arc[i] = arc[i - 1] + v3len(v3sub(_zs0, this.pts[i], this.pts[i - 1]));
+    for (let i = 1; i < n; i++) arc[i] = arc[i - 1] + v3len(v3sub(_zs0, mat[i], mat[i - 1]));
     for (let i = 0; i < n; i++) {
       v3sub(_zs0, this.pts[Math.min(n - 1, i + 1)], this.pts[Math.max(0, i - 1)]);
       if (v3len(_zs0) < 1e-7) v3set(_zs0, 0, 1, 0);
@@ -4836,14 +4847,26 @@ class Axis {
     bl.length = 0;
     for (const org of this.organs) bl.push(org.birthLen);
     bl.sort((a, b) => a - b);
+    // The exponent is Murray's law's, and Murray's law is measured to hold only
+    // "as long as they do not function additionally as supports for the plant
+    // body" (McCulloh, Sperry & Adler 2003, Nature 421:939-942). Every axis here
+    // does hold the plant up, so `radiusExp` is a knob and not a constant. See
+    // ROADMAP 14 and `test/taper.mjs`; `docs/TUNING.md` has the sweep.
+    //
+    // `conv` re-expresses the flow terms, which are all stated in units of r^3,
+    // for whatever exponent is in force. It is exactly 1 at p = 3, so this line
+    // reproduces the pre-2026-07-30 bundle radius for radius.
+    const p = sp.radiusExp;
+    const tp = Math.pow(sp.tipRadius, p);
+    const conv = Math.pow(sp.tipRadius, p - 3);
     let above = bl.length, k = 0;
     for (let i = 0; i < n; i++) {
       while (k < bl.length && bl[k] <= arc[i]) { k++; above--; }
       const below = total - arc[i];
       this.radii[i] = Math.pow(
-        Math.pow(sp.tipRadius, 3) + sp.organFlow * above + sp.thicken * below
-        + (this.fruit ? sp.fruitFlow : 0),
-        1 / 3) * sp.radiusScale;
+        tp + (sp.organFlow * above + sp.thicken * below
+          + (this.fruit ? sp.fruitFlow : 0)) * conv,
+        1 / p) * sp.radiusScale;
     }
 
     for (const org of this.organs) {
@@ -5041,6 +5064,10 @@ const SPECIES_DEFAULTS = {
   tipRadius: 0.05,
   organFlow: 0.00035,
   radiusScale: 1.0,
+  // How radius answers traffic. 3 is Murray's law and is measured only in
+  // conduits that do NOT also support the plant; a self-supporting axis reverts
+  // toward the pipe model. ROADMAP 14, and the sweep in `test/taper.mjs`.
+  radiusExp: 3.0,
   branching: 0.55,
   budRelease: 300,
   dominance: 6.0,

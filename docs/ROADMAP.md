@@ -1000,7 +1000,44 @@ Kept because the ranking is the useful part, not the list:
 - **Dichotomous branching** — liverworts, clubmosses, algae. The most alien body plan
   available, and blocked by the same fixed-`rCZ` limit noted in 12b.
 
-## 14. Murray's law is wrong for self-supporting axes — CHEAPEST FIX AVAILABLE
+## 14. Murray's law is wrong for self-supporting axes — DONE, AND IT WAS A MINOR TERM
+
+> **Built, measured and landed 2026-07-30. Read this box before the entry below it,
+> which was written from the literature sweep and is wrong in one place and
+> mis-sized in another.** The harness is `test/taper.mjs`, the write-up is the
+> 2026-07-30 JOURNAL entry, the sweep is in TUNING.md.
+>
+> **The correction is real and it is small.** `radiusExp` now exists, documented with
+> the McCulloh exception quoted at the line, and it **ships at 3** — moving it was
+> measured and not done.
+>
+> 1. **"We are over-tapering every trunk" is backwards.** Leader taper `r0/rTip` is
+>    **1.33-1.63 over the whole height**, against 5-8 for a real 1 m stem. The trunks
+>    are barrels. The *direction* of the fix survives; the reason for it does not.
+> 2. **The exponent cannot bend the profile, only rescale it.** Reparameterised as
+>    `r = tipRadius·(1 + X/tipRadius³)^(1/p)·radiusScale` — identical to the shipped
+>    line at `p = 3` — the normalised log-profile is provably independent of `p`, and
+>    the solver reproduces that to **4e-16**. No exponent turns a barrel into a stem.
+> 3. **`p = 2` buys 23%** (taper 1.50 → 1.84) and costs a `radiusScale` re-anchor of
+>    0.410-0.440 to hold `EI`, and so the sway. A small lever, not free.
+> 4. **⚠ THE TAPER BELONGS TO `fruitFlow`.** Setting it to zero moves the taper
+>    **+173%** (1.50 → 4.10) against the exponent's +23%. It is 48x the tip's own
+>    baseline, added at every station of a fruiting axis, and it has **no sweep in
+>    TUNING.md and never had one**. Seven of eight species taper 3.9-4.8 before fruit
+>    set and become barrels in the step that sets it, permanently.
+> 5. **Greenhill says the stems are fine.** Shipped leaders stand at `S = 0.98 .. 1.74
+>    .. 5.57` against 2-5 in real trees. Self-support was never the problem.
+>
+> **So this was not the cheapest fix available.** The cheap fix it was standing in
+> front of is `fruitFlow` — but that is a magnitude-and-look question rather than a
+> correctness one (a terminal fruit really is drawn through every station below it),
+> so it wants its own branch and a person watching. That is the follow-on.
+>
+> **One bug shipped out of it**, found because one species missed the closed form by
+> 2.8% while seven hit it exactly: `updateRadii` was sizing the stem off the **bent**
+> polyline against a **rest**-shape ruler, so stem thickness depended on the wind.
+> 1.87% on one station, 0.000% elsewhere, now 0.000% everywhere. See PITFALLS.md — a
+> 2% tolerance, which is what was written first, would have passed it.
 
 Independent of the conifer and of everything else in this file. Found in the 2026-07-30
 literature sweep ([research_7_30_26.md](research_7_30_26.md) §1.8), ranked first there,

@@ -72,6 +72,7 @@ node test/veinlod.mjs                              # vein level of detail: what 
 node test/views.mjs                                # render views: cost, cull laws, cell table; the other CI gate
 node test/conifer.mjs                              # ROADMAP 13 pre-flight: does a taper fall out of apical dominance?
 node test/plagio.mjs                               # ROADMAP 13 pre-flight: can gravity hold a branch out? (no)
+node test/taper.mjs                                # ROADMAP 14: what sizes a stem, swept and drawn (~3min)
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -91,17 +92,30 @@ script in `tools/` passed — they all navigate, wait, and screenshot, so a froz
 tab and a busy one are the same script. It measures the gap between animation
 frames and exits non-zero past 250ms.
 
-**Eight of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
-`petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`, `plagio.mjs`.** Only **two of the eight are
-wired into CI** and therefore gate a merge — `smoke.mjs` and `views.mjs`. The other six
-assert locally and *nothing runs them for you*, which is worth knowing before treating a
-green PR as evidence about the stem or the air. The rest print and never fail.
+**Nine of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+`petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`, `plagio.mjs`, `taper.mjs`.** Only
+**two of the nine are wired into CI** and therefore gate a merge — `smoke.mjs` and
+`views.mjs`. The other seven assert locally and *nothing runs them for you*, which is worth
+knowing before treating a green PR as evidence about the stem or the air. The rest print
+and never fail.
 
 `test/plagio.mjs` is the ROADMAP 13 blocker-2 pre-flight and its answer is **no**: on the
 radii the engine actually grew, a lateral held horizontal has a tip slope of 16-268°, so
 gravity does not hold a branch out, it collapses it. The hidden variable is that
 `E = 60 MPa` is a **herbaceous** modulus and a conifer is woody (8-11 GPa). Read it before
 proposing any force-balance route to branch angle.
+
+`test/taper.mjs` is ROADMAP 14, and its result is that **the literature was right about the
+mechanism and it was a minor term.** Murray's `r³` really is measured only in conduits that
+do not support the plant, so `radiusExp` now exists — but it **ships at 3**, because moving
+it buys 23% of a taper that is 4x off, and the thing actually setting the taper is
+`fruitFlow`, an unswept constant 48x the tip's baseline that turns a properly tapered stem
+into a barrel in the single step that sets fruit (+173% against the exponent's +23%). Its
+section 2 is the reason: the exponent provably **rescales the log-profile and cannot bend
+it**, so no exponent turns a barrel into a stem. Read it before proposing any change to
+`updateRadii`, and note it also found a live bug — stem thickness depended on how hard the
+wind was blowing. **Do not lower a tolerance to make this file pass**; 2% was written first
+and 2% is exactly the band the bug lived in.
 
 `test/conifer.mjs` is the ROADMAP 13 pre-flight and it is the derivation, not the solver:
 branch length against bud position worked out on paper first, then checked. ~95s, five
@@ -571,16 +585,21 @@ short version, in order:
    Grass was asked for first and came back **falsified** — see ROADMAP 12b, though note
    the sweep's §3.1 argues our conclusion was right about the growth phase and wrong
    about where patterning happens.
-0b. **MURRAY'S LAW IS WRONG FOR SELF-SUPPORTING AXES (ROADMAP 14)** — the cheapest fix
-   available, independent of everything else, and a claim about code that ships today.
-   `Axis.updateRadii` applies `r³` to **every** axis, but the measured law holds only
-   *"as long as they do not function additionally as supports for the plant body"*
-   (McCulloh, Sperry & Adler 2003, Nature 421:939-942, quote verified). Right for
-   petioles and slender twigs — so #7b stays correct — and wrong for trunks and scaffold
-   branches, which revert toward the pipe model. **We are over-tapering every trunk in
-   the garden.** ⚠ The exception is verified; the replacement exponent is not, so sweep
-   it rather than taking `r²` on faith. `EI` is built on these radii and `r⁴` is
-   unforgiving, so **`node test/stem.mjs` is not optional here.**
+0b. ~~**MURRAY'S LAW IS WRONG FOR SELF-SUPPORTING AXES (ROADMAP 14)**~~ — **DONE
+   2026-07-30, and it was a minor term.** The literature was right about the mechanism
+   and wrong about the size: `radiusExp` exists and ships at 3, because the exponent
+   provably rescales the radius profile without bending it, and `p = 2` buys 23% of a
+   taper that is 4x off. "We are over-tapering every trunk" was backwards — they are
+   **barrels**, 1.33-1.63 over the whole height. What supersedes it:
+
+   **`fruitFlow` IS THE TAPER (the follow-on, and it is cheap).** Zeroing it moves the
+   taper **+173%** against the exponent's +23%. It is 48x the tip's own baseline, added
+   at every station of a fruiting axis, and it has **no sweep in TUNING.md and never had
+   one**. Seven of eight species taper 3.9-4.8 before fruit set and become barrels in
+   the single step that sets it, permanently. ⚠ It is not obviously *wrong* — a terminal
+   fruit is drawn through every station below it — so this is a magnitude-and-look
+   question and **wants a person watching**, not a sweep alone. `EI` is built on these
+   radii and `r⁴` is unforgiving, so **`node test/stem.mjs` is not optional here.**
 1. **What the garden owes (ROADMAP 10b)** — the cheapest interesting work here, and
    none of it is research. The simulation cost of stepping eight specimens is the real
    one: a grown background plant pays full `stepAuxin` cost to pattern tissue that will

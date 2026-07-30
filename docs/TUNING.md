@@ -1159,3 +1159,80 @@ enough but whether the *field* of them is sampled well enough to read as
 directions. See JOURNAL. **Do not narrow this to buy frames** — it is the same
 mistake as widening the vein cull, and it makes `cells` and `flux` the same
 picture.
+
+## The radius exponent, and what actually sets a stem's taper
+
+`radiusExp` (ROADMAP 14, `test/taper.mjs`). Murray's law — `r³` proportional to the
+traffic an axis carries — is measured to hold only *"as long as they do not function
+additionally as supports for the plant body"* (McCulloh, Sperry & Adler 2003, Nature
+421:939-942). Every axis here supports the plant, so the exponent is a knob. **The
+paper's statement of the exception is verified; the replacement exponent is not**, which
+is why this is a sweep and not a substitution.
+
+Shipped catalogue, seed 21, 5200 steps, leader axis:
+
+```
+  p      r0 mean   rTip mean   taper    lat taper   f1 mean   Greenhill S   rescale
+  3.0    18.33mm    12.24mm    1.499      2.50       3.43 Hz     2.23        1.000x
+  2.5    25.93mm    15.93mm    1.630      3.60       4.88 Hz     2.82        0.705x
+  2.0    43.64mm    23.73mm    1.844      6.66       8.28 Hz     3.99        0.418x
+```
+
+`rescale` is the factor `radiusScale` would need to hold the basal radius where `p = 3`
+put it — and so to hold `EI`, and so to hold the sway. It clusters at 0.410-0.440, a 7%
+spread, so a single global re-anchor would leave species within ±4% of their present
+radius, which is ±17% in `EI` and ±8% in `f1`. Not free.
+
+**`radiusExp` ships at 3 and moving it is not recommended on this evidence.** Two reasons,
+both measured rather than argued:
+
+**1. The exponent cannot change the profile's shape, only its scale.** After the
+reparameterisation `r(s) = tipRadius·(1 + X(s)/tipRadius³)^(1/p)·radiusScale`, the
+normalised log-profile is independent of `p` — asserted in `test/taper.mjs` §2 and holding
+to 4e-16. Lowering `p` makes a barrel a slightly narrower barrel. It cannot make it a
+stem.
+
+**2. The taper is set by `fruitFlow`, by a factor of three over the exponent.**
+
+```
+  leader taper r0/rTip                                        MEAN
+  shipped                    p=3                              1.50
+  p=2                                                         1.84    (+23%)
+  fruitFlow = 0              p=3                              4.10   (+173%)
+  fruitFlow = 0              p=2                              8.47
+  fruitFlow = 0, thicken = 0 p=3                              3.54
+```
+
+`fruitFlow: 0.0060` sits against a `tipRadius³` of 1.25e-4 — a floor **48x** the tip's own
+baseline, added at every station of a fruiting axis. Adding a constant to both ends of a
+ratio compresses it toward 1, so the sink flattens the stem arithmetically.
+
+Against age it is a step change, not a drift:
+
+```
+  leader taper, steps:        800    1600    2400    3200    4000    5200
+  Cathedral Fern             4.55   1.54*   1.54*   1.54*   1.54*   1.54*
+  Spiral Ossuary             3.87   1.41*   1.41*   1.41*   1.41*   1.41*
+  Sulphur Rosette            3.88   5.00    1.63*   1.63*   1.63*   1.63*
+  Nightglass Parasol         1.48*  1.48*   1.48*   1.48*   1.48*   1.48*
+                                                        (* = axis is fruiting)
+```
+
+Seven of eight species taper 3.9-4.8 before fruit set — a plausible stem — and become
+barrels in the step that sets fruit, permanently, because the leader stops growing so
+`X(s)` never changes again.
+
+**`fruitFlow` has no sweep anywhere in this file and never had one.** It is currently the
+single largest determinant of the silhouette of every mature stem in the garden. Before
+touching it, note that it is not obviously *wrong* — a terminal fruit is drawn through
+every station below it, and a stem under a heavy terminal load is genuinely more
+cylindrical — so this is a question about magnitude and about what the piece should look
+like, not about correctness. Which makes it a different kind of change from this one.
+
+**Greenhill, for scale.** `L_crit = 1.959·(E r²/4ρg)^(1/3)`; real trees carry a safety
+factor of 2-5 against self-buckling. The shipped leaders sit at **S = 0.98 .. 1.74 ..
+5.57**, so the median is within a factor of two of a real tree — better than this engine
+had any right to be, and not the thing ROADMAP 14 was worried about. Lowering `p` raises
+`S` by making everything thicker and raises `f1` with it, which is the trade
+`39a_stem.js:49-69` already names: a stem stiff enough not to fall over does not sway like
+a plant.
