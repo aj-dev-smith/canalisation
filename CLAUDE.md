@@ -62,6 +62,7 @@ node test/petiole.mjs                              # the stalk as a pipe, and th
 node test/veinlod.mjs                              # vein level of detail: what it saves, and the light it must conserve
 node test/views.mjs                                # render views: cost, cull laws, cell table; the other CI gate
 node test/conifer.mjs                              # ROADMAP 13 pre-flight: does a taper fall out of apical dominance?
+node test/plagio.mjs                               # ROADMAP 13 pre-flight: can gravity hold a branch out? (no)
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -81,11 +82,17 @@ script in `tools/` passed — they all navigate, wait, and screenshot, so a froz
 tab and a busy one are the same script. It measures the gap between animation
 frames and exits non-zero past 250ms.
 
-**Seven of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
-`petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`.** Only **two of the seven are
-wired into CI** and therefore gate a merge — `smoke.mjs` and `views.mjs`. The other five
+**Eight of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+`petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`, `plagio.mjs`.** Only **two of the eight are
+wired into CI** and therefore gate a merge — `smoke.mjs` and `views.mjs`. The other six
 assert locally and *nothing runs them for you*, which is worth knowing before treating a
 green PR as evidence about the stem or the air. The rest print and never fail.
+
+`test/plagio.mjs` is the ROADMAP 13 blocker-2 pre-flight and its answer is **no**: on the
+radii the engine actually grew, a lateral held horizontal has a tip slope of 16-268°, so
+gravity does not hold a branch out, it collapses it. The hidden variable is that
+`E = 60 MPa` is a **herbaceous** modulus and a conifer is woody (8-11 GPa). Read it before
+proposing any force-balance route to branch angle.
 
 `test/conifer.mjs` is the ROADMAP 13 pre-flight and it is the derivation, not the solver:
 branch length against bud position worked out on paper first, then checked. ~95s, five

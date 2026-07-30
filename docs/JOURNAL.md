@@ -2227,3 +2227,104 @@ neither of which the entry names:
 
 The ordering matters: fixing `k` alone makes a narrower vase, and fixing plagiotropy
 alone makes a wide flat cone the right way up. Neither on its own is a conifer.
+
+## Falsified: gravity cannot hold a branch out, and the hidden variable is the wood (2026-07-30)
+
+ROADMAP 13 names the route to plagiotropy: *"Do not add `sp.branchAngle` — a branch's
+angle is where its own weight balances its stiffness, and `39a_stem.js` already computes
+that."* Pre-flighted in `test/plagio.mjs` on the radii the engine actually grew, before
+writing anything. **It does not work, and it fails in the opposite direction to the one
+expected.**
+
+### Gravity does not hold a branch out. It collapses it.
+
+For each vegetative lateral on the shipped catalogue, the cantilever tip slope **held
+horizontal** — the only honest way to ask the question, because evaluating at the grown
+angle is circular when `sin θ → 0` *is* what vertical means:
+
+| species | L (m) | r (mm) | f1 (Hz) | φ at horizontal |
+|---|---|---|---|---|
+| Hoarfrost Thicket | 0.66–1.20 | 9.6–16.3 | 0.87–1.67 | 16–33° |
+| Sun Coral | 1.69–1.72 | 16.9–17.4 | 0.45 | 85–86° |
+| Cathedral Fern | 1.80–1.82 | 17.2–17.3 | 0.40 | 100–106° |
+| Spiral Ossuary | 2.52–2.61 | 18.6–19.1 | 0.21 | 233–249° |
+| Abyssal Frond | 2.56–2.59 | 18.3 | 0.21 | 260–268° |
+
+Median **100°**, and 8 of 11 past 45°. Linear beam theory is an upper bound past 0.45 rad
+so those are not literal angles — but even the stiffest branch in the catalogue is at 16°,
+which is nowhere near "gravity is a restoring term you can balance against". **There is no
+equilibrium near horizontal to find.** A branch released at any angle folds down.
+
+Checked before believing it, because φ goes as L³ and the conifer pre-flight had already
+been bitten once by an arc/height confusion: **arc/chord is 1.06–1.15**, so the branches
+are not coiling and the lengths are real. They are also startling on their own — a lateral
+runs 1.7–2.6 m on a plant 0.5–1.5 m tall, i.e. **longer than the whole plant**, because
+the leader arrests at flowering while laterals keep going. That is the same k ≈ 0.94 from
+the taper pre-flight seen from the other end.
+
+The parameter-free form was kept as a cross-check on two independent expressions and they
+agree to **0.00%**:
+
+```
+phi_self = 0.05219 * g * sin(theta) / (f1^2 * L)
+```
+
+No material constant survives in it, exactly as `delta = 1.545 g/omega^2` does not for the
+whole-stem sag. That is the same trap one level down — and here it is what makes the
+result inescapable rather than tunable.
+
+### The hidden variable was never the geometry. It is the wood.
+
+`E = 60 MPa` is a **herbaceous** modulus — a soft green stem — and it is correct for all
+eight shipped species. A conifer is **woody**: softwood along the grain is 8–11 GPa, some
+150x stiffer. φ goes as 1/E and f1 as √E, so stiffening buys droop against sway at a fixed
+exchange rate:
+
+| E | φ at horizontal | f1 | |
+|---|---|---|---|
+| 60 MPa (shipped) | 100° | 0.41 Hz | collapses |
+| 300 MPa | 20° | 0.92 Hz | holds out, sways like a plant |
+| **1200 MPa** | **5.0°** | **1.84 Hz** | **holds out, sways like a plant** |
+| 6000 MPa | 1.0° | 4.11 Hz | holds out, sways like a plant |
+| 10 GPa (real softwood) | 0.6° | 5.31 Hz | holds out, but vibrates |
+
+**There is a window around 1–2 GPa** where a lateral both supports itself and still sways
+at a plant-like rate. And `sp.stemOpts` already reaches `eModulus` — Bend is constructed
+with it — so this needs no engine change at all, only a species entry.
+
+### What this does and does not solve
+
+Stiffness lets a branch *hold* an angle. It does not *set* one, and that is the part with
+no derivation behind it:
+
+- **`want` is vertical for every axis** (`40_plant.js:141`), leader and lateral alike, and
+  `tropism` drags laterals up at a 50-step time constant regardless of stiffness. Woody E
+  changes nothing about that.
+- **One constant here is deletable and worth deleting anyway.** The launch direction is
+  `v3lerp(dir, org.frame.x, v3(0,1,0), 0.45)` — the subtending organ's own frame, lerped
+  45% toward vertical. `org.frame.x` is *emergent* (phyllotaxis and `organTilt` grew it);
+  the 0.45 is not. Setting it to zero means a branch launches along the leaf in whose axil
+  it arose, which is both real and one fewer stated number.
+- **But a set point is still a set point.** Real plagiotropy is gravitropic set-point
+  angle, and GSA is a genuine, tabulated, species-level biological quantity, not a shape
+  dial. There is no way to derive it from anything in this tree — four routes were
+  considered and all of them either collapse (the force balance, above), invert the taper
+  (continuous apical control, the 2026-07-30 conifer entry), or reduce to the same set
+  point wearing a different name.
+
+So the honest position: **a conifer needs GSA, and GSA is an imposition.** The argument for
+paying it is `39_fall.js`'s precedent — a hand-picked constant was replaced by *looked-up
+leaf mass per area*, and the measured value was better than the chosen one. GSA is the
+same kind of number. But it is an addition to SCIENCE.md's "what is imposed" list, and
+that list is supposed to be argued for rather than slipped in. **That decision is not the
+harness's to make.**
+
+### The smaller finding, which is real regardless
+
+`39a_stem.js:66-69` says the grown shape *is* the static equilibrium, so the rest shape
+"carries gravity" and the solver need only handle deviations. **Nothing ever put gravity
+into the grown shape.** Growth is purely tropic — `want` is vertical and weight appears
+nowhere in `40_plant.js`. For the leader that is harmless, because a vertical beam has no
+bending moment from its own weight and `sin θ ≈ 0` does the work. For a lateral at any
+angle at all it is not harmless, and this measurement puts a number on how not: the term
+that was assumed spent is the dominant one.

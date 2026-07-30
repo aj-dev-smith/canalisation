@@ -810,6 +810,34 @@ by asking what else the engine could grow after the monocot came back negative.
 > Fixing k alone gives a narrower vase; fixing plagiotropy alone gives a wide flat cone
 > the right way up. **Neither on its own is a conifer.** Step 2, the needle, is untouched
 > by all of this and is still cheap.
+>
+> **Blocker 2 has now been pre-flighted too (`test/plagio.mjs`), and this entry's proposed
+> route to it is FALSIFIED.** "A branch's angle is where its own weight balances its
+> stiffness" does not hold: on the radii the engine actually grew, a lateral held
+> horizontal has a linear tip slope of **16-268°, median 100°**. Gravity does not hold a
+> branch out, it **collapses** it, and there is no equilibrium near horizontal to find.
+> Arc/chord is 1.06-1.15 so the lengths are real, and two independent expressions for the
+> slope agree to 0.00%.
+>
+> **The hidden variable is the wood.** `E = 60 MPa` is herbaceous and right for all eight
+> shipped species; softwood is 8-11 GPa. Since φ ∝ 1/E and f1 ∝ √E there is a **window
+> around 1-2 GPa** where a lateral both supports itself and sways at a plant-like rate
+> (1200 MPa → φ 5.0°, f1 1.84 Hz). `sp.stemOpts` already reaches `eModulus`, so that half
+> costs a species entry and no engine change.
+>
+> **But stiffness lets a branch hold an angle; it does not set one.** Four routes to
+> setting it have now been considered and all fail — the force balance collapses, apical
+> control inverts the taper, and the rest reduce to a set point under another name. Real
+> plagiotropy is **gravitropic set-point angle**, GSA is a tabulated species-level
+> biological quantity, and there is nothing in this tree to derive it from. So a conifer
+> needs an **addition to SCIENCE.md's "what is imposed" list** — argued for on
+> `39_fall.js`'s precedent (a looked-up constant beat a chosen one), but argued for, not
+> slipped in. **That is a decision, not a measurement, and it is the next thing to make.**
+>
+> One constant is deletable regardless and should go either way: the launch direction
+> `v3lerp(dir, org.frame.x, v3(0,1,0), 0.45)` lerps 45% toward vertical, and `org.frame.x`
+> is already emergent. Zero means a branch launches along the leaf in whose axil it arose,
+> which is real and one fewer stated number.
 
 The framing that makes it worth doing rather than cosmetic: **a conifer is mostly a
 branching-architecture project wearing a leaf-shaped hat.** The needles are the cheap,
