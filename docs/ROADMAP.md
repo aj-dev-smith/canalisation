@@ -6,6 +6,13 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
+0. **[#13, a conifer](#13-a-conifer-not-started)** — **START HERE. This is the next
+   thing to build**, and it is a direction rather than a debt: AJ asked what else the
+   engine could grow, and a ninth species that is a *different body plan* is worth more
+   right now than any of the polishing below. The needles are already proven (see #13
+   for the numbers); the interesting claim is that a conifer's conical silhouette
+   should fall out of apical dominance the engine already has, and the cone should
+   **delete** the ovary path rather than add anything. Do the pre-flight first.
 1. **[#10b, what the garden still owes](#10-a-garden-2026-07-29)** — a stand of plants
    ships, and it left three things behind: the simulation cost of stepping eight
    specimens, a species picker that samples with replacement, and a director whose
@@ -35,7 +42,8 @@ priority.** The list below is the priority.
    garden of it.
 
 #1, #2, #4b, #5, #7, #7b, #8, #10 and #12 are **done**; their entries are kept for what
-they record.
+they record. **#12b is falsified** and its entry is the one to read before anyone asks
+about grass, palms, or any other monocot.
 
 ## 1. Life cycle and senescence — DONE (2026-07-26)
 Both halves, simulated and drawn, in one day and two branches.
@@ -719,3 +727,158 @@ camera work. The stage bar at the bottom tells you where it has got to.
 At the default speed a Cathedral Fern reaches `senescing` around 19s and `spent`
 around 73s; the time slider goes to 4x if you want it sooner. `tools/senesce_shot.mjs`
 does the same run headlessly and dumps the state at each mark.
+
+## 12b. A monocot — FALSIFIED (2026-07-30)
+
+The full write-up, with the numbers and the two metric traps, is in
+[JOURNAL.md](JOURNAL.md) under 2026-07-30, and `test/venation.mjs` keeps it
+re-measurable. The short version, because someone will ask about grass again:
+
+**The strap silhouette is nearly free.** `ay` is already a species knob; at 0.03 with a
+shorter margin wavelength the outline goes from aspect 0.47 to **0.07 (~14:1) with 128
+fine teeth against 39 coarse ones.** No new code.
+
+**The venation is not.** Over eight seeds a strap and a dicot control have the same
+hierarchy — n50 2.9 vs 2.5, top-strand share 0.286 vs 0.288 once the dicot's single
+outlier is set aside. The blade canalises **once, on tissue already at its final
+shape**, sources ringing the margin and the sink at the base; a radially convergent
+problem has a midrib at any aspect ratio.
+
+**And stretching provably cannot rescue it.** `n50` and `top` are statistics of
+*traffic*, and traffic is invariant under a coordinate stretch, so canalising short and
+then extending changes the look and not the hierarchy. That line is here to save an
+afternoon.
+
+Real parallel venation is strands laid down early and extended by an **intercalary
+meristem at the base**. This engine has no basal growth zone — `baseGuard` explicitly
+holds the base still. That conclusion arrived from two independent directions in one
+sitting (a strap is extruded not expanded; bundles are stretched not patterned narrow),
+which is a better reason to believe it than either alone.
+
+It is not a spatial prior if built — it is a boundary condition on where tissue is
+inserted. But **the phyllotaxis half is the real risk**: grass is distichous, strict
+180°, and four apex sizes were swept with the spread staying near 90°. A monocot would
+wear this project's headline limitation more visibly than any current species.
+
+**Note the shared ceiling:** an intercalary meristem and the apex-splitting a
+dichotomous body plan needs (liverworts, clubmosses) are the same class of work — the
+central zone is a fixed radius `rCZ` from the apex centre (`20_meristem.js:50`), so it
+cannot split by construction. Building either gets you closer to the other.
+
+## 13. A conifer — NOT STARTED
+
+**The next thing to build.** A ninth species that is a different body plan, arrived at
+by asking what else the engine could grow after the monocot came back negative.
+
+The framing that makes it worth doing rather than cosmetic: **a conifer is mostly a
+branching-architecture project wearing a leaf-shaped hat.** The needles are the cheap,
+already-proven part. Two claims are what would make it a result.
+
+### The needle is already proven, and one line is in the way
+
+The strap work from 12b lands correctly here. At `nv: 5` on a narrow blade the venation
+comes out **one bundle carrying 80% of mid-blade traffic, n50 = 1** — a needle's single
+unbranched midvein, which is what *Picea* has and *Pinus* doubles.
+
+`30_leaf.js:192` clamps blade aspect to `Math.max(0.12, margin.aspect)`. Probed by
+making the floor overridable: at 0.05 the margin's own **0.073** takes over and the
+lattice still builds — 103 cells against 64, canalising normally. **So the floor is
+over-conservative rather than load-bearing.** It is shared with all eight existing
+species, so it wants to become a leaf option, not a global change. (The probe was
+reverted; nothing is in the tree.)
+
+### Claim 1: the conical silhouette should be emergent
+
+`Axis.step` already carries apical dominance:
+
+```js
+const suppressed = Math.exp(-d / sp.dominance);
+if (suppressed > sp.branching) continue;
+```
+
+A bud escapes once the leader has climbed far enough above it — so **lower buds escape
+earlier and have had longer to elongate, and the taper of a conifer falls out of
+dominance plus elapsed time with nothing drawing a cone.** That is the claim, and it is
+the reason to do this.
+
+**Pre-flight it before writing anything.** Predict branch length against height from
+`dominance`, `branching` and time, on paper, for the parameters being proposed — then
+check the solver reproduces it. That is the norm that caught three bugs in the stem
+solver and it applies exactly here, because this is a mechanical claim rather than a
+chemical one. If the taper does not fall out of the existing term, this becomes much
+bigger than a day and that is worth knowing on day zero.
+
+Two obstacles, both honest:
+
+- **`maxAxes: 5` is a hard cap** and a spruce wants tens of branches. That is a budget
+  number, and raising it walks into the simulation ceiling #10b is about — so a conifer
+  doubles as the stress test for per-plant axis count. Expect these two to be done
+  together or for this one to be gated by it.
+- **`v3lerp(dir, org.frame.x, v3(0,1,0), 0.45)`** in the branching escape lerps a new
+  axis 45% toward vertical, hardcoded and undocumented. Conifer laterals are near
+  horizontal, so it has to move. **Do not add `sp.branchAngle`** — the right move is to
+  ask what sets it, and there is a strong candidate: the same force balance that
+  deleted `droop` in #7b. A branch's angle is where its own weight balances its
+  stiffness, and `39a_stem.js` already computes that. **That route deletes a constant
+  instead of adding eight**, which is the accounting this project runs on.
+
+### Claim 2: the cone is a REMOVAL, not an addition
+
+Conifers have no flowers and no fruit — a gymnosperm seed is naked, with no ovary wall.
+`35_fruit.js` is "the ovary wall as icosphere shell", and a cone does not need it.
+
+A cone is a short determinate axis bearing spirally arranged scales, which is what the
+meristem already does. The floral machinery gives determinate axes that consume
+themselves (#4b) with a continuous organ identity `q`. **A cone is plausibly a floral
+axis where `q` stays in one band and the arrangement never goes whorled** — so the
+conifer subtracts a code path rather than adding one, and shows the reproductive
+machinery generalises across a 300-million-year split rather than being quietly tuned
+to angiosperms. Do this last, after the silhouette is real.
+
+### What to watch for, none of it blocking
+
+- **Fascicles** — pines bear 2-5 needles from a dwarf shoot. Probably near-zero
+  `elongation` on a determinate lateral, but that is a guess and not a measurement.
+- **Needle count.** A real conifer has thousands; `maxOrgans` runs 44-60. Thousands of
+  needles through the cell table is the garden's ceiling again.
+- **Evergreen against the senescence wave.** Conifers do not shed everything at once.
+  The wave is already imposed (SCIENCE.md item 6), so a conifer either lives with it or
+  exposes it as angiosperm-shaped. Interesting either way.
+- **Phyllotaxis is a non-issue here, and that is the point.** Conifer phyllotaxis is
+  spiral and genuinely variable, so the engine's wandering divergence stops being a
+  limitation and becomes correct. A conifer dodges both of the things that killed the
+  monocot — no intercalary growth, no distichy.
+
+### The order
+
+1. **Pre-flight the silhouette on paper.** Nothing else starts until this predicts a
+   taper.
+2. Needle: aspect floor as a leaf option, species entry, confirm `test/venation.mjs`
+   gives n50 = 1 on the shipped species rather than on a hand-passed config.
+3. **Watch it in a real browser.** The silhouette is composition and the eye is the
+   instrument — the two times a genuine modelling error was caught fastest here, that
+   is how.
+4. Cone last, framed as deleting the ovary path.
+
+### Other body plans considered at the same time, ranked
+
+Kept because the ranking is the useful part, not the list:
+
+- **Compound leaves — "a leaf whose teeth became leaves."** The most on-thesis idea
+  available and the one to do after the conifer. The margin already breaks into evenly
+  spaced convergence points; in real plants leaflet initiation *is* that same auxin
+  convergence, differing in degree rather than kind (Barkoulas/Tsiantis on *Cardamine*,
+  sibling to the Bilsborough paper `25_margin.js` already follows). `Margin`'s
+  constructor takes only `(prm, opts, seed)` — nothing plant-level — **so it recurses
+  as it stands.** And the venation should work *better* than the strap did, because
+  drainage stays convergent at every level: leaflet to rachis to petiole. One mechanism
+  buys ferns, rowan, walnut, mimosa, jacaranda.
+- **Cactus and succulent ribs.** Phyllotaxis expressed on the *stem surface* instead of
+  as organs. The meristem already computes the field; the stem is a tube of revolution
+  that ignores it. No new solver — a new geometry path reading a channel already being
+  computed, which is the same shape as #12.
+- **Tendrils and climbers.** An organ whose margin never expands into a lamina, plus
+  coiling on contact. Coiling is environment-response, which #7 already decided is
+  allowed.
+- **Dichotomous branching** — liverworts, clubmosses, algae. The most alien body plan
+  available, and blocked by the same fixed-`rCZ` limit noted in 12b.

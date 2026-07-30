@@ -504,6 +504,30 @@ what would have to change instead.
 [docs/ROADMAP.md](docs/ROADMAP.md) is the ranked list and has the reasoning; the
 short version, in order:
 
+0. **A CONIFER (ROADMAP 13) — START HERE.** Picked deliberately over everything below:
+   AJ asked what else the engine could grow, and a ninth species that is a *different
+   body plan* is worth more right now than polishing. **Read ROADMAP 13 before writing
+   anything** — it has the measurements, the two claims and the order.
+
+   The needles are already proven: a narrow blade canalises **one bundle carrying 80% of
+   mid-blade traffic, n50 = 1**, which is a needle's single unbranched midvein. The one
+   line in the way is the aspect floor at `30_leaf.js:192`, probed and found
+   over-conservative rather than load-bearing.
+
+   The two things that would make it a *result* rather than a reskin: a conifer's
+   conical silhouette should **fall out of the apical dominance already in `Axis.step`**
+   — lower buds escape earlier, so they have had longer to elongate, and nothing draws a
+   cone; and the cone should **delete** the ovary path (`35_fruit.js`) rather than add
+   anything, because a gymnosperm seed is naked. **Pre-flight the taper on paper before
+   writing a solver** — that is a mechanical claim, and it is the norm that caught three
+   bugs in the stem.
+
+   Two traps named in the entry: `maxAxes: 5` caps a spruce and ties this to 10b, and
+   the hardcoded `0.45` lerp toward vertical in the branching escape wants **deriving
+   from the force balance that deleted `droop`, not a new `sp.branchAngle`.**
+
+   Grass was asked for first and came back **falsified** — see ROADMAP 12b and the
+   2026-07-30 JOURNAL entry before anyone re-opens monocots.
 1. **What the garden owes (ROADMAP 10b)** — the cheapest interesting work here, and
    none of it is research. The simulation cost of stepping eight specimens is the real
    one: a grown background plant pays full `stepAuxin` cost to pattern tissue that will
