@@ -1947,3 +1947,109 @@ Every one of these four was a claim that had drifted from what the code did, and
 three of the four were caught by writing the claim down as an assertion or a
 count rather than by looking at a picture. The fourth could only have been caught
 by looking.
+
+## Falsified: a narrow blade does not canalise parallel venation (2026-07-30)
+
+The question was whether the piece could grow **grass** — and grass is worth asking
+about for a reason better than wanting a lawn. Grass is a **monocot**, so it is the
+sharpest available test of the claim README leads with: one engine, `stepAuxin()` on
+any topology. If reticulate and parallel venation are the same solver under two
+boundary conditions, that is a real result. If they are not, that is a limit on the
+claim and worth knowing.
+
+**The cheap hypothesis was that narrowness does it.** A monocot leaf is a strap; a
+strap has no room for a net; therefore canalisation on a narrow blade should give
+co-equal longitudinal bundles. It costs nothing to test, because slenderness is
+already a species knob.
+
+### Getting a strap at all was the easy half
+
+`ay` — mediolateral growth, `25_margin.js` — is already in the species table at
+0.62–1.12. At 0.03, with the margin's own wavelength shortened (`D` 7.0 → 1.2,
+`T` 26 → 52) so the teeth come out fine rather than coarse, the margin grows to
+**aspect 0.47 → 0.07, about 14:1, with 128 teeth against 39.** No new code.
+
+One thing that fell out on the way and is worth keeping: **outgrowth in this engine
+IS convergence.** The obvious way to get a grass's smooth edge is to turn down `g1`,
+the extra outgrowth where auxin has converged. Do that and the blade does not become
+smooth, it *does not grow* — 17 points, length 0.08, against 618 and 5.64. `g0` alone
+is not a blade. So an entire margin has to come from making the wavelength short
+enough that the teeth merge, which is the same "however many fit" argument the lobe
+count already runs on. The rule survives; it just constrains the route.
+
+### The venation is where it died
+
+`test/venation.mjs` was written for this and is kept. It measures the thing that
+actually separates a monocot from a dicot, which is not the silhouette:
+
+- **axial** — traffic-weighted share of vein running up the blade rather than across.
+- **n50 / top** — how many walls crossing mid-blade carry half the traffic crossing
+  it, and the largest one's share. A midrib is one strand doing most of the work.
+
+Eight seeds, dicot control against strap:
+
+| | dicot n50 | dicot top | strap n50 | strap top |
+|---|---|---|---|---|
+| mean | 2.5 | 0.35 | 2.9 | 0.286 |
+| range | 1–4 | 0.197–0.789 | 2–4 | 0.21–0.39 |
+
+**No effect.** The dicot's higher mean is one outlier (seed 41, top 0.789); without
+it the dicot sits at 0.288 against the strap's 0.286. A narrow blade makes the same
+reticulate hierarchy with fewer bundles in it.
+
+### Two traps on the way, both caught by a control
+
+**The first metric was unreachable by construction.** "Fraction of vein within 20° of
+the long axis", measured in material coordinates, reported 0.00–0.03 for every dicot
+ever grown — which looked like a strong reticulate signal and was arithmetic.
+`_link` joins each cell to (same row, next col) and to two diagonals; there is **no
+pure along-blade link**, so the most axial segment a vein can be made of is already
+~40° off axis. Measured in lattice units instead, where a diagonal is 26.6° and a
+cross-link is 90°, the same dicots read 0.59–0.79. *A metric with no reachable
+maximum will happily report a result.*
+
+**The second nearly shipped as a discovery.** `domin` — fattest crossing vein over
+the median — came back **1.34 and 1.25 for straps against 3.42 and 6.52 for dicots**,
+which is exactly what parallel venation would look like. It does not survive. It is
+computed on the baked vein list, so it inherits `veinFrac`, `veinFloor` and
+`veinMax`; both morphologies were clipped at `veinMax: 260`, and the strap's network
+is proportionally denser (0.98 veins per cell against 0.65), which flattens the ratio
+for free. Asked of raw wall traffic with no threshold, the difference is gone — and
+two more seeds put the strap at 2.69 and 2.12, inside the dicot range. Two seeds and
+a threshold-dependent statistic is not a finding.
+
+### Why it fails, and what that says about grass
+
+The blade canalises **once, on tissue that is already its final shape**, with sources
+ringing the margin and the sink at the base. That is a radially convergent problem,
+and a radially convergent problem has a midrib at any aspect ratio. Narrowness
+changes how many bundles fit, not what kind of network forms.
+
+And **stretching cannot rescue it.** The tempting next move is to canalise on a short
+blade and then extend it, since material coordinates are normalised and the drawn
+aspect is just a map. But `n50` and `top` are statistics of *traffic*, and traffic is
+invariant under a coordinate stretch. Stretching would change `axial` — the look —
+and provably not the hierarchy. If you want co-equal bundles you have to change the
+patterning, not the drawing. Worth writing down because it kills an afternoon's work
+in one line.
+
+Real parallel venation is not a different patterning event. The strands are laid down
+early and then **extended by an intercalary meristem at the base** — tissue inserted
+low and pushed upward, which is why mowing works. This engine has no basal growth
+zone; `baseGuard` explicitly *holds* the base still while the margin expands along
+its normals.
+
+**So grass needs the intercalary meristem, and that conclusion arrived from two
+independent directions in one sitting** — from the silhouette (a strap is extruded,
+not expanded) and from the venation (bundles are stretched, not patterned narrow).
+Two unrelated lines landing on the same missing mechanism is a much better reason to
+believe it than either alone.
+
+That is not a small piece of work, but it is not a spatial prior either: it is a
+boundary condition on where tissue is inserted, which is the same `stepAuxin` on a
+different topology. Whether it is worth it is a scope question rather than a research
+one — and the phyllotaxis half is the real risk, because grass is **distichous**,
+strict 180° alternation, and four apex sizes were swept here with the spread staying
+near 90°. A grass would wear this project's headline limitation more visibly than any
+current species, since two-ranked leaves are an instantly recognisable signature and
+random angles read as wrong rather than as variation.

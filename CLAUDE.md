@@ -129,17 +129,34 @@ that will eventually test a different program than the one you are running.**
 plane for the falling blade, which closes the abscission seam exactly and then pumps
 itself end over end whenever the pitch tumbles. Ships off. Nothing reads it.
 
-Two more files are **archived experiments** in whole, not live checks. They are the code that
+Three more files are **archived experiments** in whole, not live checks. They are the code that
 produced the negative results in [docs/JOURNAL.md](docs/JOURNAL.md), kept so those
-results stay reproducible. Both still run; neither should be read as a current
+results stay reproducible. All three still run; none should be read as a current
 diagnostic:
 
 ```bash
 node test/inhib.mjs 0 1     # falsified: a second inhibitor with its own length scale
 node test/ring2.mjs 0 1     # falsified: confining initiation to a thin generative ring
+node test/venation.mjs      # falsified: a narrow blade canalising PARALLEL venation
 ```
 
-Both take `<shard> <nshard>` so a long sweep can be split across processes.
+The first two take `<shard> <nshard>` so a long sweep can be split across processes.
+
+`test/venation.mjs` is the one to read before anyone asks about **grass**, or any other
+monocot. The strap silhouette is nearly free — `ay` is already a species knob — but the
+venation stays reticulate at every aspect ratio, because the blade canalises once on
+tissue that is already its final shape and a radially convergent problem has a midrib
+whatever its width. **Stretching cannot fix it**: `n50` and `top` are statistics of
+traffic and traffic is invariant under a coordinate stretch, so extending a blade
+changes the look and provably not the hierarchy. Grass needs an intercalary meristem,
+which the 2026-07-30 JOURNAL entry argues from two independent directions.
+
+It also carries two metric traps worth knowing before writing any harness here: a
+first metric whose maximum was **unreachable by construction** and therefore reported a
+strong result that was arithmetic, and a threshold-dependent statistic that showed a
+clean 3x effect on two seeds and none at all on eight. Both were caught by running a
+control first. **`domin` is kept in the output purely so that second trap stays
+visible** — do not draw conclusions from it.
 
 `test/shoot.mjs` is both kinds at once. It checks the shipped senescence, and it
 also reproduces a falsified hypothesis — abscission driven by auxin transport — by
