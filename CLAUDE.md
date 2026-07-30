@@ -21,6 +21,15 @@ Adding to it is a real cost and should be argued for, not slipped in.
 | [docs/PITFALLS.md](docs/PITFALLS.md) | Bugs that cost hours. Several will bite you again if you do not know them |
 | [docs/JOURNAL.md](docs/JOURNAL.md) | Negative results, design forks and why they went the way they did |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is unfinished, ranked, with my recommendation |
+| [docs/research_7_30_26.md](docs/research_7_30_26.md) | **Literature sweep on branch vigour and branch angle.** Answers, with citations, what sets a lateral's growth rate and its angle. Read before touching branching, `updateRadii`, or anything gravitropic — it corrects two of our own results and names one live bug |
+
+`research_7_30_26.md` is a different kind of document from the rest: it is **outside
+evidence**, not our own findings, and it is flagged throughout with `[D]` demonstrated,
+`[I]` inferred, `[OURS]` their construction, and `⚠` contested. Treat those flags as load
+bearing — several of its most useful claims are explicitly marked as unverified or as
+things nobody has published, and one citation's author line is flagged as unresolved.
+Its Part 5 is the list of things it argues are **genuinely** parameters, with the reason
+each is irreducible; that is the shortest honest answer to "what would we have to impose".
 
 ## Build and run
 
@@ -527,30 +536,51 @@ what would have to change instead.
 [docs/ROADMAP.md](docs/ROADMAP.md) is the ranked list and has the reasoning; the
 short version, in order:
 
-0. **A CONIFER (ROADMAP 13) — START HERE.** Picked deliberately over everything below:
-   AJ asked what else the engine could grow, and a ninth species that is a *different
-   body plan* is worth more right now than polishing. **Read ROADMAP 13 before writing
-   anything** — it has the measurements, the two claims and the order.
+0. **A CONIFER (ROADMAP 13) — BOTH BLOCKERS ARE NOW UNDERSTOOD, AND THE WORK IS
+   BUILDABLE.** Picked deliberately over everything below: AJ asked what else the engine
+   could grow, and a ninth species that is a *different body plan* is worth more than
+   polishing. **Read the box at the top of ROADMAP 13 first** — the entry below it was
+   written before any of the measurements and is wrong in two places.
 
    The needles are already proven: a narrow blade canalises **one bundle carrying 80% of
-   mid-blade traffic, n50 = 1**, which is a needle's single unbranched midvein. The one
-   line in the way is the aspect floor at `30_leaf.js:192`, probed and found
-   over-conservative rather than load-bearing.
+   mid-blade traffic, n50 = 1**, a needle's single unbranched midvein. The one line in
+   the way is the aspect floor at `30_leaf.js:192`, probed and found over-conservative
+   rather than load-bearing. **That half is still cheap and is untouched by everything
+   below.**
 
-   The two things that would make it a *result* rather than a reskin: a conifer's
-   conical silhouette should **fall out of the apical dominance already in `Axis.step`**
-   — lower buds escape earlier, so they have had longer to elongate, and nothing draws a
-   cone; and the cone should **delete** the ovary path (`35_fruit.js`) rather than add
-   anything, because a gymnosperm seed is naked. **Pre-flight the taper on paper before
-   writing a solver** — that is a mechanical claim, and it is the norm that caught three
-   bugs in the stem.
+   Two pre-flights and a literature sweep since. **The length taper is emergent and
+   confirmed** (linear in bud position, R2 0.9988) — but the silhouette is a **vase, and
+   upside down**, because `tropism` pulls every axis vertical with no generation term.
+   Two blockers, and both now have named mechanisms:
 
-   Two traps named in the entry: `maxAxes: 5` caps a spruce and ties this to 10b, and
-   the hardcoded `0.45` lerp toward vertical in the branching escape wants **deriving
-   from the force balance that deleted `droop`, not a new `sp.branchAngle`.**
+   - **Vigour.** The taper slope is floored at a hardcoded `0.72`. Worse, *any* multiplier
+     reading only distance-below-apex gives a cylinder or a straight cone and never a
+     taper — there is a closed-form proof of this. And **measured conifer crowns are
+     parabolic, not conical**, so the cone was the wrong target. Auxin gives apical
+     *dominance* for free and does **not** give apical *control*.
+   - **Angle.** `39_fall.js`-style force balance does **not** set it: at woody stiffness a
+     lateral held horizontal is near equilibrium, so mechanics *preserves* horizontal and
+     cannot *supply* it. But the antigravitropic offset **is auxin-dependent and resolves
+     to per-wall PIN polarity**, which this engine already has — so branch angle is a
+     **derivation, not an imposition**. ⚠ **More auxin → more vertical**; get that
+     backwards and the silhouette inverts.
 
-   Grass was asked for first and came back **falsified** — see ROADMAP 12b and the
-   2026-07-30 JOURNAL entry before anyone re-opens monocots.
+   Ranked runway with citations: ROADMAP 13's "the runway" section and
+   [docs/research_7_30_26.md](docs/research_7_30_26.md) Part 4.
+
+   Grass was asked for first and came back **falsified** — see ROADMAP 12b, though note
+   the sweep's §3.1 argues our conclusion was right about the growth phase and wrong
+   about where patterning happens.
+0b. **MURRAY'S LAW IS WRONG FOR SELF-SUPPORTING AXES (ROADMAP 14)** — the cheapest fix
+   available, independent of everything else, and a claim about code that ships today.
+   `Axis.updateRadii` applies `r³` to **every** axis, but the measured law holds only
+   *"as long as they do not function additionally as supports for the plant body"*
+   (McCulloh, Sperry & Adler 2003, Nature 421:939-942, quote verified). Right for
+   petioles and slender twigs — so #7b stays correct — and wrong for trunks and scaffold
+   branches, which revert toward the pipe model. **We are over-tapering every trunk in
+   the garden.** ⚠ The exception is verified; the replacement exponent is not, so sweep
+   it rather than taking `r²` on faith. `EI` is built on these radii and `r⁴` is
+   unforgiving, so **`node test/stem.mjs` is not optional here.**
 1. **What the garden owes (ROADMAP 10b)** — the cheapest interesting work here, and
    none of it is research. The simulation cost of stepping eight specimens is the real
    one: a grown background plant pays full `stepAuxin` cost to pattern tissue that will

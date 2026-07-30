@@ -56,10 +56,51 @@
 //
 // CAVEAT, AND IT IS LOAD-BEARING: all of the above is linear beam theory, which
 // over-predicts once the tip slope leaves the small-deflection range. Past
-// about 0.4 rad the real cantilever's slope saturates and the linear number is
+// about 0.5 rad the real cantilever's slope saturates and the linear number is
 // an upper bound, not an answer. `39a_stem.js` puts its own stop at
-// `maxTilt: 0.45` rad for the same reason. So a linear phi of 80 degrees means
-// "the balance is comfortably strong enough", NOT "the branch sits at 80".
+// `maxTilt: 0.45` rad for the same reason.
+//
+// ---------------------------------------------------------------------------
+// CORRECTED 2026-07-30, AFTER THE LITERATURE SWEEP (docs/research_7_30_26.md
+// section 2.1). THE FIRST VERSION OF THIS FILE GOT TWO THINGS WRONG AND THE
+// CORRECTION INVERTS ITS REASONING, THOUGH NOT ITS CONCLUSION.
+//
+//  1. THE MODULUS. It ran only at E = 60 MPa, which is HERBACEOUS -- correct
+//     for all eight shipped species and wrong for a conifer. But conifer BRANCH
+//     wood is not stem wood either: whole living branch sections with bark are
+//     0.7-4.6 GPa against ~8.5 GPa for clear stem wood, because branch
+//     microfibril angle is 41-53 degrees against 10-20 and MFA dominates axial
+//     stiffness. Use 1-4 GPa, central 2. (Cannell & Morgan 1987, Tree Physiol
+//     3(4):355-364; Hartwig-Nair et al. 2024, Wood Sci Technol 58(3):887-906.)
+//
+//  2. "phi = 268 degrees" IS NOT AN ANGLE. Above about 30 degrees a
+//     small-deflection formula is no longer reporting a deflection, it is
+//     reporting how badly it has been violated. Published large-deflection
+//     elastica results for real conifer branches at E = 2 GPa give tip slopes
+//     of 16.8-26.6 degrees below horizontal WITH foliage, and 3.5 degrees for
+//     bare wood.
+//
+// SO THE CONCLUSION INVERTS. A woody conifer lateral held horizontal is NEAR
+// MECHANICAL EQUILIBRIUM: gravity does not overwhelm stiffness, it droops the
+// branch 10-45 degrees and the drooped shape is normal rather than a failure.
+// Mechanics PRESERVES the horizontal state -- which is exactly why it cannot
+// SUPPLY it. Remove the active set point and a branch does not find horizontal;
+// it sits wherever it was built, minus the droop.
+//
+// The original verdict -- "you still need an active set point" -- survives. The
+// reasoning behind it was backwards, and a framing error came with it: a
+// cantilever statics problem ALWAYS has an equilibrium. "Gravity overwhelms
+// stiffness" was never a coherent thing to conclude.
+//
+// WHAT TO CARRY INSTEAD: one dimensionless group,
+//
+//     Gamma = rho g L^3 / (E d^2),     theta_tip = (8/3) * Gamma   (bare, uniform)
+//
+// Gamma >~ 0.5 is the herbaceous regime -- no useful static set point, and a
+// DYNAMIC controller is the right model. Gamma <~ 0.1 is the woody regime, where
+// a static set point plus an elastic droop correction is the right
+// decomposition. One number decides the architecture, and neither regime is
+// "the truth".
 // ---------------------------------------------------------------------------
 
 import { SPECIES } from '../src/70_app.js';
@@ -119,6 +160,8 @@ function run(name) {
       blades.push({ m: area * LMA, s: Math.min(lM, (org.birthLen || 0) * U) });
     }
     const f1 = cantileverHz(rM, lM);
+    // the dimensionless group that decides which controller is right
+    const gamma = RHO * G * lM ** 3 / (E * (2 * rM) ** 2);
     const grown = tipSlope(rM, lM, blades, theta);
     // THE SCREENING NUMBER. Evaluated at theta = 90deg, because the question is
     // whether a branch could hold itself HORIZONTAL -- asking what droop a
@@ -129,7 +172,7 @@ function run(name) {
     // that coils rather than runs, every number here is inflated cubed. The
     // conifer pre-flight was bitten by exactly this confusion once already.
     const chord = Math.hypot(t[0] - b[0], t[1] - b[1], t[2] - b[2]) * U;
-    out.push({ lM, rM, theta, blades, f1, grown: grown.total, ...horiz, chord, tipY: t[1] * U });
+    out.push({ lM, rM, theta, blades, f1, gamma, grown: grown.total, ...horiz, chord, tipY: t[1] * U });
   }
   const lead = P.axes[0];
   return {
@@ -199,13 +242,22 @@ console.log('\n=== verdict ===\n');
   console.log('');
   check('branch frequencies are plant-like, not vibration',
     medF >= 0.2 && medF <= 6, `${medF.toFixed(2)} Hz`, '0.2-6 Hz');
-  check('a branch held horizontal could NOT support itself (median slope >= 45deg)',
-    deg(medPhi) >= 45, `${deg(medPhi).toFixed(0)} deg`, '>= 45deg -> gravity dominates');
+  const medG = rows.map(b => b.gamma).sort((a, c) => a - c)[rows.length >> 1];
+  console.log(`  median Gamma = rho g L^3/(E d^2)  ${medG.toFixed(3)}   (>~0.5 herbaceous, <~0.1 woody)`);
+  check('the shipped catalogue is squarely in the HERBACEOUS regime (Gamma >= 0.3)',
+    medG >= 0.3, medG.toFixed(3), '>= 0.3');
+  check('and therefore no static set point is available to it (median slope past 30deg)',
+    deg(medPhi) >= 30, `${deg(medPhi).toFixed(0)} deg`, '>= 30deg, i.e. small-deflection is void');
   console.log('\n  Read the CAVEAT at the top before reading a large phi as an angle:');
   console.log('  linear beam theory is an UPPER BOUND past about 0.45 rad (26deg).');
-  console.log('\n  So the force balance does NOT hold a branch out -- it collapses it. There is');
-  console.log('  no equilibrium near horizontal to find, and ROADMAP 13\'s proposed route to');
-  console.log('  plagiotropy is falsified BEFORE anything was written.');
+  console.log('\n  READ THE CORRECTION AT THE TOP. These are HERBACEOUS numbers, and anything');
+  console.log('  past ~30deg is a small-deflection formula reporting its own violation rather');
+  console.log('  than an angle. What they establish is the REGIME, not the droop.');
+  console.log('');
+  console.log('  ROADMAP 13\'s force-balance route to plagiotropy is falsified either way --');
+  console.log('  but for the OPPOSITE reason to the one this file first gave. At woody');
+  console.log('  stiffness a lateral held horizontal is near equilibrium and droops 10-45deg,');
+  console.log('  so mechanics PRESERVES horizontal and therefore cannot SUPPLY it.');
 }
 
 // --- what would have to change: the material, and what that costs ------------
@@ -229,10 +281,16 @@ console.log('\n=== what stiffness would hold a branch out, and what it does to s
     const tag = phi > 20 ? 'collapses' : (f > 5 ? 'holds out, but vibrates' : 'holds out, and sways like a plant');
     console.log(`  ${(eM / 1e6).toFixed(0).padStart(6)} MPa   ${phi.toFixed(1).padStart(10)}deg   ${f.toFixed(2).padStart(5)} Hz   ${tag}`);
   }
-  console.log('\n  softwood along the grain is 8000-11000 MPa; 60 MPa is a soft green stem.');
-  console.log('  There IS a window around 1-2 GPa where a branch both holds itself out and');
-  console.log('  still sways at a plant-like rate. That is the thing to pre-flight next, and');
-  console.log('  it is a species-level tissue property read off a table -- not a shape dial.');
+  console.log('\n  Clear conifer STEM wood is ~8500 MPa, but a whole living BRANCH with bark is');
+  console.log('  700-4600 MPa -- branch microfibril angle is 41-53deg against 10-20 in stem');
+  console.log('  wood, and MFA dominates axial stiffness. The right value is 1-4 GPa.');
+  console.log('  The 1-2 GPa window guessed above lands inside that range, which is luck');
+  console.log('  worth noting rather than a derivation.');
+  console.log('');
+  console.log('  Published large-deflection elastica, conifer branch at E = 2 GPa, tip slope');
+  console.log('  below horizontal: upper crown -16.8deg, mid -21.9deg, lower -26.6deg, and');
+  console.log('  BARE WOOD with no foliage -3.5deg. So the wood skeleton alone barely droops');
+  console.log('  and the droop is almost entirely foliage load. (research_7_30_26.md 2.1.)');
 }
 
 console.log(fails ? `\n${fails} CHECK(S) FAILED\n` : '\nall checks passed\n');

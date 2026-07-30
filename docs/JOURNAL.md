@@ -2230,6 +2230,43 @@ alone makes a wide flat cone the right way up. Neither on its own is a conifer.
 
 ## Falsified: gravity cannot hold a branch out, and the hidden variable is the wood (2026-07-30)
 
+> ### ⚠ CORRECTED THE SAME DAY — READ THIS BEFORE THE ENTRY
+>
+> A literature sweep ([research_7_30_26.md](research_7_30_26.md) §2.1, §2.3) came back a few
+> hours after this was written and corrects it in three places. **The conclusion survives;
+> the reasoning behind it was backwards, and the closing recommendation was wrong.**
+>
+> **1. "Gravity collapses a branch" is not what the numbers said.** They ran only at
+> `E = 60 MPa`, which is herbaceous. A whole living conifer *branch* with bark is
+> **0.7-4.6 GPa** — and note that is not stem wood either (~8.5 GPa), because branch
+> microfibril angle is 41-53° against 10-20° and MFA dominates axial stiffness. The
+> "8-11 GPa" quoted below is the wrong figure for a branch. Use 1-4 GPa, central 2.
+> (Cannell & Morgan 1987; Hartwig-Nair et al. 2024.)
+>
+> **2. "φ = 268°" was never an angle.** Past about 30° a small-deflection formula stops
+> reporting a deflection and starts reporting how badly it has been violated. The file
+> carried that caveat and the write-up then ignored it. Published large-deflection elastica
+> for real conifer branches at 2 GPa give **16.8-26.6° below horizontal with foliage, and
+> 3.5° for bare wood.**
+>
+> **3. So the sign of the argument inverts.** A woody lateral held horizontal is **near
+> mechanical equilibrium** — it droops, and the drooped shape is normal rather than a
+> failure. **Mechanics *preserves* horizontal, which is exactly why it cannot *supply* it.**
+> "Gravity overwhelms stiffness" was never a coherent thing to conclude: a cantilever
+> statics problem always has an equilibrium.
+>
+> **4. And the closing recommendation is falsified.** This entry ends by saying a conifer
+> needs GSA and that GSA is an imposition to be argued into SCIENCE.md. **It is not.** The
+> antigravitropic offset is auxin-dependent and resolves to per-wall PIN polarity — which
+> this engine already has — so branch angle is **derivable**. The direction is
+> counterintuitive: **more auxin → more vertical.** See §2.3, and ROADMAP 13.
+>
+> What survives intact: the force-balance route ROADMAP 13 proposed does not work, an
+> active set point is required, and the shipped catalogue is herbaceous. Carry
+> **Γ = ρgL³/(Ed²)** instead of a raw slope — measured 0.633 here, and Γ ≳ 0.5 (herbaceous,
+> needs a dynamic controller) versus Γ ≲ 0.1 (woody, static set point plus droop) is the
+> number that decides the architecture.
+
 ROADMAP 13 names the route to plagiotropy: *"Do not add `sp.branchAngle` — a branch's
 angle is where its own weight balances its stiffness, and `39a_stem.js` already computes
 that."* Pre-flighted in `test/plagio.mjs` on the radii the engine actually grew, before

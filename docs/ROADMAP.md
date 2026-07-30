@@ -825,14 +825,29 @@ by asking what else the engine could grow after the monocot came back negative.
 > (1200 MPa → φ 5.0°, f1 1.84 Hz). `sp.stemOpts` already reaches `eModulus`, so that half
 > costs a species entry and no engine change.
 >
-> **But stiffness lets a branch hold an angle; it does not set one.** Four routes to
-> setting it have now been considered and all fail — the force balance collapses, apical
-> control inverts the taper, and the rest reduce to a set point under another name. Real
-> plagiotropy is **gravitropic set-point angle**, GSA is a tabulated species-level
-> biological quantity, and there is nothing in this tree to derive it from. So a conifer
-> needs an **addition to SCIENCE.md's "what is imposed" list** — argued for on
-> `39_fall.js`'s precedent (a looked-up constant beat a chosen one), but argued for, not
-> slipped in. **That is a decision, not a measurement, and it is the next thing to make.**
+> **But stiffness lets a branch hold an angle; it does not set one.** The force balance
+> fails, and apical control inverts the taper, so an active set point is required.
+>
+> **⚠ AND THE SET POINT IS DERIVABLE — this reverses what this box said a few hours ago.**
+> A literature sweep ([research_7_30_26.md](research_7_30_26.md) §2.3) settles it: the
+> **antigravitropic offset is auxin-dependent**, and it resolves all the way down to
+> **per-wall PIN polarity**, which this engine already computes. So branch angle is a
+> derivation, not an imposition, and **no addition to SCIENCE.md's "what is imposed" list
+> is needed.** Two things to get right:
+>
+> - **The direction is counterintuitive: more auxin → MORE VERTICAL**, by diminishing the
+>   AGO. Get this backwards and the whole silhouette inverts.
+> - **Do not add a per-branch GSA parameter.** Add a statocyte layer per axis with a
+>   gravity-driven PIN-targeting bias plus an opposing constitutive one, and compute the AGO
+>   as the net PIN-mediated auxin flux antiparallel to gravity. GSA is where the
+>   angle-dependent gravitropic flux balances the angle-independent antigravitropic one.
+>
+> That correction also revises blocker 2's mechanics: at a woody branch modulus (1-4 GPa,
+> **not** the 8-11 GPa of stem wood — branch MFA is 41-53°) a lateral held horizontal is
+> **near equilibrium**, drooping 10-45° with foliage and 3.5° bare. Mechanics *preserves*
+> horizontal and therefore cannot *supply* it. Carry **Γ = ρgL³/(Ed²)**: measured 0.633 on
+> the shipped catalogue, and Γ ≳ 0.5 (herbaceous → dynamic controller) vs Γ ≲ 0.1 (woody →
+> static set point + droop) is the number that decides the architecture.
 >
 > One constant is deletable regardless and should go either way: the launch direction
 > `v3lerp(dir, org.frame.x, v3(0,1,0), 0.45)` lerps 45% toward vertical, and `org.frame.x`
@@ -931,6 +946,37 @@ to angiosperms. Do this last, after the silhouette is real.
    is how.
 4. Cone last, framed as deleting the ovary path.
 
+### The runway, after the 2026-07-30 literature sweep
+
+Both blockers now have named mechanisms and sourced numbers. Full ranking and citations
+are in [research_7_30_26.md](research_7_30_26.md) Part 4; the short version, in order:
+
+1. **Replace `exp(-d/λ)` with a sub-linear power law** `m(d) ∝ (d/d₀)^(-p)`, p ≈ ½. One
+   line, and it converts the bottlebrush into a paraboloid. Note it as a placeholder: it
+   is a hand-set exponent, so it is interim, not an answer. **Measured conifer crowns are
+   parabolic, not conical** — the cone was the wrong target all along.
+2. **Carry Γ = ρgL³/(Ed²) per organ** and branch the controller on it. Γ ≳ 0.5 herbaceous
+   → dynamic controller; Γ ≲ 0.1 woody → static set point plus droop. Measured 0.633 on
+   the shipped catalogue (`test/plagio.mjs`).
+3. **Borchert–Honda partition with Q ← subtree auxin flux, λ = 0.5.** The published
+   partition model, but with light — which we do not have — replaced by auxin flux, which
+   we do. **Nobody has tried this**, and every published crown form lives in λ ∈
+   [0.46, 0.54], so an unbiased 0.5 is not obviously wrong. An afternoon.
+4. **Compute the AGO from per-wall PIN** — the one genuine derivation in the whole sweep.
+   See the box at the top of this entry, and mind the sign.
+5. Then: canalised PIN field as persistent per-branch conductance (Nahas 2024, and note it
+   implies canalisation matters *less* for bud release and *more* for sustained growth,
+   which is backwards from how the engine uses it now); long/short shoot bimodality; an
+   abscission rule, because the vigour feedback runs away by construction and in real
+   trees the losing branch dies.
+
+**One warning carried over from the sweep:** auxin gives apical *dominance* for free and
+does **not** give apical *control* — three independent experiments say so, the cleanest
+being that auxin applied to an already-growing dominant shoot does not restore control at
+all. If a second currency is ever needed it is **carbon, and only locally**: the stem
+segment immediately below a branch drains the carbon that branch made, which needs the
+branch's own blade area and the segment basal to it, both of which we have.
+
 ### Other body plans considered at the same time, ranked
 
 Kept because the ranking is the useful part, not the list:
@@ -953,3 +999,40 @@ Kept because the ranking is the useful part, not the list:
   allowed.
 - **Dichotomous branching** — liverworts, clubmosses, algae. The most alien body plan
   available, and blocked by the same fixed-`rCZ` limit noted in 12b.
+
+## 14. Murray's law is wrong for self-supporting axes — CHEAPEST FIX AVAILABLE
+
+Independent of the conifer and of everything else in this file. Found in the 2026-07-30
+literature sweep ([research_7_30_26.md](research_7_30_26.md) §1.8), ranked first there,
+and it is a claim about **code that ships today**.
+
+`Axis.updateRadii` applies Murray's law — `r³`, "a stem is exactly as thick as the traffic
+it carries" — to **every** axis. The measured law does not apply that widely:
+
+> *"These conduits conform to the Murray's law optimum as long as they do not function
+> additionally as supports for the plant body."*
+>
+> McCulloh, Sperry & Adler 2003, *Water transport in plants obeys Murray's law*, Nature
+> 421(6926):939-942. **Quote verified verbatim against the paper.**
+
+So `r³` is well founded for petioles, petiolules, vines and slender distal twigs — which
+includes the petiole work from #7b, and that stays correct. It is **not** founded for
+trunks and load-bearing scaffold branches, which revert toward the pipe model. **We are
+over-tapering every trunk in the garden right now.**
+
+⚠ **Direction solid, exponent not.** The paper's statement of the *exception* is verified.
+That mechanically-loaded axes go to `r²`, with elastic-similarity arguments landing near
+2.5, is the sweep's reading of surrounding literature rather than a number quoted from
+McCulloh. **Sweep the exponent; do not take 2.0 on faith.** And note the pipe model has
+its own dissent — *"not valid as a universal rule"* (Lehnebach et al. 2018, Ann Bot
+121(5):773-795).
+
+Worth doing on its own terms: it is a handful of lines, it needs no new machinery, and it
+changes the silhouette of all eight shipped species. It also has a real interaction with
+the stem solver, because `EI` is built on these radii and `r⁴` is unforgiving — so
+**`node test/stem.mjs` is not optional here**, and the frequencies should be re-read
+against the pre-flight table rather than assumed to have survived.
+
+One framing note from the same section, worth keeping: the pipe model is a statement about
+**standing stocks, not rates**. It can say how thick an axis is; it cannot say how fast one
+extends. Do not reach for it to solve the taper.
