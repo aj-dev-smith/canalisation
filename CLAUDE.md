@@ -21,6 +21,15 @@ Adding to it is a real cost and should be argued for, not slipped in.
 | [docs/PITFALLS.md](docs/PITFALLS.md) | Bugs that cost hours. Several will bite you again if you do not know them |
 | [docs/JOURNAL.md](docs/JOURNAL.md) | Negative results, design forks and why they went the way they did |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is unfinished, ranked, with my recommendation |
+| [docs/research_7_30_26.md](docs/research_7_30_26.md) | **Literature sweep on branch vigour and branch angle.** Answers, with citations, what sets a lateral's growth rate and its angle. Read before touching branching, `updateRadii`, or anything gravitropic — it corrects two of our own results and names one live bug |
+
+`research_7_30_26.md` is a different kind of document from the rest: it is **outside
+evidence**, not our own findings, and it is flagged throughout with `[D]` demonstrated,
+`[I]` inferred, `[OURS]` their construction, and `⚠` contested. Treat those flags as load
+bearing — several of its most useful claims are explicitly marked as unverified or as
+things nobody has published, and one citation's author line is flagged as unresolved.
+Its Part 5 is the list of things it argues are **genuinely** parameters, with the reason
+each is irreducible; that is the shortest honest answer to "what would we have to impose".
 
 ## Build and run
 
@@ -61,6 +70,8 @@ node test/stem.mjs                                 # the stem as a beam: ringdow
 node test/petiole.mjs                              # the stalk as a pipe, and the hang as a force balance
 node test/veinlod.mjs                              # vein level of detail: what it saves, and the light it must conserve
 node test/views.mjs                                # render views: cost, cull laws, cell table; the other CI gate
+node test/conifer.mjs                              # ROADMAP 13 pre-flight: does a taper fall out of apical dominance?
+node test/plagio.mjs                               # ROADMAP 13 pre-flight: can gravity hold a branch out? (no)
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -80,11 +91,32 @@ script in `tools/` passed — they all navigate, wait, and screenshot, so a froz
 tab and a busy one are the same script. It measures the gap between animation
 frames and exits non-zero past 250ms.
 
-**Six of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
-`petiole.mjs`, `veinlod.mjs`, `views.mjs`.** Only **two of the six are wired into
-CI** and therefore gate a merge — `smoke.mjs` and `views.mjs`. The other four assert
-locally and *nothing runs them for you*, which is worth knowing before treating a
+**Eight of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+`petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`, `plagio.mjs`.** Only **two of the eight are
+wired into CI** and therefore gate a merge — `smoke.mjs` and `views.mjs`. The other six
+assert locally and *nothing runs them for you*, which is worth knowing before treating a
 green PR as evidence about the stem or the air. The rest print and never fail.
+
+`test/plagio.mjs` is the ROADMAP 13 blocker-2 pre-flight and its answer is **no**: on the
+radii the engine actually grew, a lateral held horizontal has a tip slope of 16-268°, so
+gravity does not hold a branch out, it collapses it. The hidden variable is that
+`E = 60 MPa` is a **herbaceous** modulus and a conifer is woody (8-11 GPa). Read it before
+proposing any force-balance route to branch angle.
+
+`test/conifer.mjs` is the ROADMAP 13 pre-flight and it is the derivation, not the solver:
+branch length against bud position worked out on paper first, then checked. ~95s, five
+specimens. Its verdict is that the **length taper is emergent and confirmed** (R2 0.9988)
+while the **silhouette is a vase, and upside down** — because `tropism` pulls every axis
+toward vertical with no generation term, so laterals curve up and the crown ends up
+widest at the top. Section 4 kills the obvious follow-up on paper rather than by building
+it. Read the box at the top of ROADMAP 13 before touching branching.
+
+**Its section 3b is the reason that file draws an ASCII crown.** Four numeric sections, a
+closed form and a 4x parameter sweep all agreed with each other while the specimen was
+the wrong shape *and the wrong way up*; ten lines of ASCII caught it immediately. That is
+the same argument as "get a person to watch it", applied to a harness — and the closed
+form it disagreed with had a 2-4° error that was too small to look wrong and was already
+written up. **Derive it, then measure it, then draw it, and let the three argue.**
 
 `views.mjs` runs **twice**, and both runs gate. The invariants job names a species,
 which skips the garden of eight and costs 5s; a separate concurrent job — **`render
@@ -504,6 +536,51 @@ what would have to change instead.
 [docs/ROADMAP.md](docs/ROADMAP.md) is the ranked list and has the reasoning; the
 short version, in order:
 
+0. **A CONIFER (ROADMAP 13) — BOTH BLOCKERS ARE NOW UNDERSTOOD, AND THE WORK IS
+   BUILDABLE.** Picked deliberately over everything below: AJ asked what else the engine
+   could grow, and a ninth species that is a *different body plan* is worth more than
+   polishing. **Read the box at the top of ROADMAP 13 first** — the entry below it was
+   written before any of the measurements and is wrong in two places.
+
+   The needles are already proven: a narrow blade canalises **one bundle carrying 80% of
+   mid-blade traffic, n50 = 1**, a needle's single unbranched midvein. The one line in
+   the way is the aspect floor at `30_leaf.js:192`, probed and found over-conservative
+   rather than load-bearing. **That half is still cheap and is untouched by everything
+   below.**
+
+   Two pre-flights and a literature sweep since. **The length taper is emergent and
+   confirmed** (linear in bud position, R2 0.9988) — but the silhouette is a **vase, and
+   upside down**, because `tropism` pulls every axis vertical with no generation term.
+   Two blockers, and both now have named mechanisms:
+
+   - **Vigour.** The taper slope is floored at a hardcoded `0.72`. Worse, *any* multiplier
+     reading only distance-below-apex gives a cylinder or a straight cone and never a
+     taper — there is a closed-form proof of this. And **measured conifer crowns are
+     parabolic, not conical**, so the cone was the wrong target. Auxin gives apical
+     *dominance* for free and does **not** give apical *control*.
+   - **Angle.** `39_fall.js`-style force balance does **not** set it: at woody stiffness a
+     lateral held horizontal is near equilibrium, so mechanics *preserves* horizontal and
+     cannot *supply* it. But the antigravitropic offset **is auxin-dependent and resolves
+     to per-wall PIN polarity**, which this engine already has — so branch angle is a
+     **derivation, not an imposition**. ⚠ **More auxin → more vertical**; get that
+     backwards and the silhouette inverts.
+
+   Ranked runway with citations: ROADMAP 13's "the runway" section and
+   [docs/research_7_30_26.md](docs/research_7_30_26.md) Part 4.
+
+   Grass was asked for first and came back **falsified** — see ROADMAP 12b, though note
+   the sweep's §3.1 argues our conclusion was right about the growth phase and wrong
+   about where patterning happens.
+0b. **MURRAY'S LAW IS WRONG FOR SELF-SUPPORTING AXES (ROADMAP 14)** — the cheapest fix
+   available, independent of everything else, and a claim about code that ships today.
+   `Axis.updateRadii` applies `r³` to **every** axis, but the measured law holds only
+   *"as long as they do not function additionally as supports for the plant body"*
+   (McCulloh, Sperry & Adler 2003, Nature 421:939-942, quote verified). Right for
+   petioles and slender twigs — so #7b stays correct — and wrong for trunks and scaffold
+   branches, which revert toward the pipe model. **We are over-tapering every trunk in
+   the garden.** ⚠ The exception is verified; the replacement exponent is not, so sweep
+   it rather than taking `r²` on faith. `EI` is built on these radii and `r⁴` is
+   unforgiving, so **`node test/stem.mjs` is not optional here.**
 1. **What the garden owes (ROADMAP 10b)** — the cheapest interesting work here, and
    none of it is research. The simulation cost of stepping eight specimens is the real
    one: a grown background plant pays full `stepAuxin` cost to pattern tissue that will

@@ -2053,3 +2053,315 @@ strict 180° alternation, and four apex sizes were swept here with the spread st
 near 90°. A grass would wear this project's headline limitation more visibly than any
 current species, since two-ranked leaves are an instantly recognisable signature and
 random angles read as wrong rather than as variation.
+
+## The conifer's cone is emergent in shape and 2-4x too fat in slope (2026-07-30)
+
+ROADMAP 13 step 1 says nothing else starts until the silhouette is pre-flighted on
+paper. It has been, and then checked against the solver in `test/conifer.mjs`. The
+answer is split, and the split is the useful part.
+
+**Claim 1's structure is confirmed.** A bud escapes at a fixed distance below the apex,
+so a bud at arc position `a` on the leader has been growing for exactly as long as the
+leader has taken to climb from `a + d_esc` to its present height. Branch length is
+
+```
+L = k * (A_fin - A_esc)
+```
+
+— **linear in the arc position of the bud, hitting zero a fixed distance below the
+apex.** That is a straight-sided cone and nothing draws it. Measured over 36 laterals on
+the shipped defaults: **R2 = 0.9988**, and R2 stays at 0.976-0.999 across a 4x sweep of
+`internode`. The lowest branch is 2.89x the middle one. Apical dominance really does
+produce a taper on its own, which is the thing worth knowing.
+
+**The slope is wrong, and it is not tunable.** The entry expected the `0.72` at
+`40_plant.js:138` to set the taper. It does not, because that penalty multiplies only
+`rate` — the tip's own extension — while `elongate()` stretches the subapical zone,
+carries no generation penalty at all, and **overwrites `this.length`**. A fixed window
+of arc stretching at `internode` and decaying over `internodeSpan` contributes
+`internode * internodeSpan` per unit time to leader and lateral alike, so
+
+```
+V0 = E + I*S          V1 = gamma*E + I*S          k = V1/V0
+```
+
+On the shipped defaults `I*S = 0.0187` against `E = 0.0052` — **stretching is 3.6x the
+tip's own extension** — so k = 0.939 rather than 0.72. Measured slope 0.904, and across
+`internode` 0 / 0.0018 / 0.0072 / 0.020 the formula tracks to within 4-6% every time.
+
+The consequence is the whole finding: **k is bounded in (gamma, 1) for any species.**
+`internode: 0` reaches the floor of 0.72 exactly and nothing reaches below it, because
+gamma is hardcoded and shared by all eight species. Converting that to a silhouette with
+the measured `zeta = H/A = 0.919` (a stem wanders, so its height is not its arc length):
+
+| | crown half-angle |
+|---|---|
+| **measured, off 36 branch tips** | **73.9°** |
+| closed form at measured k and θ | 75.3° |
+| closed form at floor k 0.72, same θ | 48.8° |
+| closed form at floor k 0.72, horizontal branch, straight stem | 35.8° |
+| **a Norway spruce** | **8-15°** |
+
+So the cone is emergent in shape and far too fat, with no parameter in reach of the
+difference. ROADMAP 13's own contingency applies: this is bigger than a day, and the
+gate is the slope rather than the shape.
+
+### Then it was drawn, and the drawing said something the numbers had not
+
+Four sections of numbers agreed with each other and with a closed form, and all of them
+missed this. An ASCII crown profile — the idiom `test/margin.mjs` and `test/fruit.mjs`
+already use — showed the crown is **widest at the top.** It is a vase, not a cone, and
+it is not even the right way up.
+
+The cause is a term that appears nowhere in the taper argument. Every axis is pulled
+toward vertical every step, with **no generation term anywhere in it**:
+
+```js
+40_plant.js:141   const want = v3(0, 1, 0);   // plus wander/nutation
+40_plant.js:150   v3lerp(this.dir, this.dir, want, clamp(sp.tropism * dt, 0, 1))
+```
+
+At `tropism: 0.02` a branch's initial direction decays with a time constant of **50
+steps**, and a branch then grows for thousands. So the hardcoded `0.45` lerp toward
+vertical is not a branch angle at all — it is an initial condition that is immediately
+forgotten. Measured: nominal 50.7°, actual mean **25.0°**, and the eight longest (oldest)
+branches sit at 26.8° against the eight shortest at 31.0° — the older the branch, the
+more completely it has been pulled up.
+
+That inverts the crown. A long lower branch curving toward vertical puts its tip near the
+**top** of the crown rather than out to the side, which is exactly what `ζ − k·cos θ`
+does as θ → 0: the denominator collapses (0.919 − 0.819 = 0.100 on the shipped numbers)
+and the envelope goes nearly flat-topped.
+
+**So there are two obstacles, and the entry names neither.** A conifer's laterals are
+**plagiotropic** — they hold a near-horizontal set point for life. Every axis in this
+engine is **orthotropic**. The length taper is real, confirmed, and emergent; it does not
+become a conical silhouette because nothing holds a branch out.
+
+This is also the clearest case yet for the project's own rule about looking at the thing.
+Four numeric sections, one closed form, a 4× parameter sweep and an R² of 0.9988 all
+passed while the specimen was the wrong shape *and upside down*. The drawing took about
+ten lines.
+
+### The obvious fix is a dead end, and it is killed on paper
+
+The first thing anyone reaches for next: `suppressed = exp(-d/dominance)` is already
+computed and used as a *binary* gate, so make it a *continuous* multiplier on lateral
+elongation. That is apical control rather than apical dominance, it is the textbook
+distinction, and it is the right biology for a conifer. It is also wrong here:
+
+```
+L(a) = integral V1 * exp(-(A(t) - a)/lambda) dt  =  k*lambda*[beta - exp(-(A_fin - a)/lambda)]
+```
+
+with `beta = exp(-d_esc/lambda)`. The exponential vanishes for any bud more than about
+`3*lambda` below the apex, so **L tends to the constant `k*lambda*beta`** — 1.70 on the
+shipped numbers. Every lower branch ends up the same length: a bottlebrush. The
+lowest/middle length ratio goes from 2.89 to **1.09**, so the mechanism reached for to
+steepen the taper removes it. Section 4 of `test/conifer.mjs` prints the profile. This
+one is derivation, not measurement, and is labelled as such in the file — but it is a
+closed form over an escape rule section 1 measured, so it is worth a day of not building
+it.
+
+### Four things found on the way, all of which cost time to see
+
+**The closed form for the crown angle was wrong, by a margin too small to notice.** It
+had the branch's own extension multiplied by `zeta` — the *leader's* arc-to-height
+factor, which has no business acting on a branch. Correct is
+
+```
+r = k*u*sin(theta),   z = z_top - u*(zeta - k*cos(theta))
+half-angle = atan( k*sin(theta) / (zeta - k*cos(theta)) )
+```
+
+against the shipped `zeta*(1 - k*cos(theta))`. The difference is **2-4°** — far too small
+to look wrong, big enough to be wrong, and it went into a written-up table before
+re-deriving caught it. The section now **measures** the envelope off 36 real branch tips
+and keeps the closed form as a cross-check that must agree within 6°. That ordering is
+the lesson: derive it, then measure it, and let them argue.
+
+**A harness that compares an arc length to a height is measuring `wander`.** The first
+run fitted `axis.length` (arc) against bud *height* and got a slope of 1.13 where the
+prediction was 0.94, and at `internode: 0.02` an **inverted** taper with R2 = 0.95 —
+long branches at the top. Both were the missing `zeta`, and the inversion also had the
+buffer bug below in it. Fitting arc against arc, the error went to 4%. A clean
+systematic error with a high R2 is the most convincing wrong answer available.
+
+**`pts` silently truncates and takes `length` with it.** `40_plant.js:168` drops the
+oldest point past 900, and `this.length` is recomputed as the arc of what is left — so
+past `900 * segLen` of growth **an axis's arc length stops being measured from its
+base**, and `org.birthLen` advection loses its floor with it. The harness now caps its
+step count under that limit and says so. This matters for ROADMAP 13 specifically: a
+conifer wants a tall leader carrying tens of branches, which is exactly the regime that
+crosses it.
+
+**Branches undershoot k by a systematic 4-5%,** in every sweep row, same sign. That is
+the subapical zone: a branch shorter than `internodeSpan` has less than a full window to
+stretch, so young laterals get less than `I*S` until they outgrow it. It is a transient,
+it decays, and it is not worth modelling — but it is why the tolerances are 10-12% and
+not 3%.
+
+### What this means for ROADMAP 13
+
+Step 2 (the needle) is untouched by any of this and is still cheap — it is a leaf
+option, and `test/venation.mjs` already showed `n50 = 1` on a narrow blade. Step 1 is
+what is blocked, and it turns out to be blocked **twice**, on two independent terms
+neither of which the entry names:
+
+1. **The taper slope.** `k` is floored at the hardcoded `0.72`, and a spruce needs about
+   0.2. The specific question is *what sets a lateral's elongation rate, if not a
+   hardcoded constant?* The entry's instinct is right that the answer should **delete** a
+   constant rather than add eight. The candidate worth pre-flighting next is supply: the
+   engine already grows every axis a radius by Murray's law, and the pipe model that
+   sized the petiole in #7b is the same argument one level up. That is a feedback loop —
+   a thinner branch grows slower, so bears less, so stays thinner — which is how a real
+   tree does it, and which is a research question and not an afternoon.
+2. **Orthotropy.** Nothing holds a branch out, so the crown inverts. This is the *larger*
+   of the two and it was invisible until the thing was drawn. It is also the one with a
+   clean route: plagiotropy is a set point on `want`, not a new constant on the escape,
+   and gravitropic set-point angle is real, well-documented biology with the
+   force-balance machinery from #7b already in the tree to hang it on. **Note this
+   supersedes the entry's second obstacle** — the hardcoded `0.45` lerp is not worth
+   deriving, because tropism forgets it in fifty steps. Deriving an initial condition
+   nothing remembers would have been a wasted day, and that was the entry's plan.
+
+The ordering matters: fixing `k` alone makes a narrower vase, and fixing plagiotropy
+alone makes a wide flat cone the right way up. Neither on its own is a conifer.
+
+## Falsified: gravity cannot hold a branch out, and the hidden variable is the wood (2026-07-30)
+
+> ### ⚠ CORRECTED THE SAME DAY — READ THIS BEFORE THE ENTRY
+>
+> A literature sweep ([research_7_30_26.md](research_7_30_26.md) §2.1, §2.3) came back a few
+> hours after this was written and corrects it in three places. **The conclusion survives;
+> the reasoning behind it was backwards, and the closing recommendation was wrong.**
+>
+> **1. "Gravity collapses a branch" is not what the numbers said.** They ran only at
+> `E = 60 MPa`, which is herbaceous. A whole living conifer *branch* with bark is
+> **0.7-4.6 GPa** — and note that is not stem wood either (~8.5 GPa), because branch
+> microfibril angle is 41-53° against 10-20° and MFA dominates axial stiffness. The
+> "8-11 GPa" quoted below is the wrong figure for a branch. Use 1-4 GPa, central 2.
+> (Cannell & Morgan 1987; Hartwig-Nair et al. 2024.)
+>
+> **2. "φ = 268°" was never an angle.** Past about 30° a small-deflection formula stops
+> reporting a deflection and starts reporting how badly it has been violated. The file
+> carried that caveat and the write-up then ignored it. Published large-deflection elastica
+> for real conifer branches at 2 GPa give **16.8-26.6° below horizontal with foliage, and
+> 3.5° for bare wood.**
+>
+> **3. So the sign of the argument inverts.** A woody lateral held horizontal is **near
+> mechanical equilibrium** — it droops, and the drooped shape is normal rather than a
+> failure. **Mechanics *preserves* horizontal, which is exactly why it cannot *supply* it.**
+> "Gravity overwhelms stiffness" was never a coherent thing to conclude: a cantilever
+> statics problem always has an equilibrium.
+>
+> **4. And the closing recommendation is falsified.** This entry ends by saying a conifer
+> needs GSA and that GSA is an imposition to be argued into SCIENCE.md. **It is not.** The
+> antigravitropic offset is auxin-dependent and resolves to per-wall PIN polarity — which
+> this engine already has — so branch angle is **derivable**. The direction is
+> counterintuitive: **more auxin → more vertical.** See §2.3, and ROADMAP 13.
+>
+> What survives intact: the force-balance route ROADMAP 13 proposed does not work, an
+> active set point is required, and the shipped catalogue is herbaceous. Carry
+> **Γ = ρgL³/(Ed²)** instead of a raw slope — measured 0.633 here, and Γ ≳ 0.5 (herbaceous,
+> needs a dynamic controller) versus Γ ≲ 0.1 (woody, static set point plus droop) is the
+> number that decides the architecture.
+
+ROADMAP 13 names the route to plagiotropy: *"Do not add `sp.branchAngle` — a branch's
+angle is where its own weight balances its stiffness, and `39a_stem.js` already computes
+that."* Pre-flighted in `test/plagio.mjs` on the radii the engine actually grew, before
+writing anything. **It does not work, and it fails in the opposite direction to the one
+expected.**
+
+### Gravity does not hold a branch out. It collapses it.
+
+For each vegetative lateral on the shipped catalogue, the cantilever tip slope **held
+horizontal** — the only honest way to ask the question, because evaluating at the grown
+angle is circular when `sin θ → 0` *is* what vertical means:
+
+| species | L (m) | r (mm) | f1 (Hz) | φ at horizontal |
+|---|---|---|---|---|
+| Hoarfrost Thicket | 0.66–1.20 | 9.6–16.3 | 0.87–1.67 | 16–33° |
+| Sun Coral | 1.69–1.72 | 16.9–17.4 | 0.45 | 85–86° |
+| Cathedral Fern | 1.80–1.82 | 17.2–17.3 | 0.40 | 100–106° |
+| Spiral Ossuary | 2.52–2.61 | 18.6–19.1 | 0.21 | 233–249° |
+| Abyssal Frond | 2.56–2.59 | 18.3 | 0.21 | 260–268° |
+
+Median **100°**, and 8 of 11 past 45°. Linear beam theory is an upper bound past 0.45 rad
+so those are not literal angles — but even the stiffest branch in the catalogue is at 16°,
+which is nowhere near "gravity is a restoring term you can balance against". **There is no
+equilibrium near horizontal to find.** A branch released at any angle folds down.
+
+Checked before believing it, because φ goes as L³ and the conifer pre-flight had already
+been bitten once by an arc/height confusion: **arc/chord is 1.06–1.15**, so the branches
+are not coiling and the lengths are real. They are also startling on their own — a lateral
+runs 1.7–2.6 m on a plant 0.5–1.5 m tall, i.e. **longer than the whole plant**, because
+the leader arrests at flowering while laterals keep going. That is the same k ≈ 0.94 from
+the taper pre-flight seen from the other end.
+
+The parameter-free form was kept as a cross-check on two independent expressions and they
+agree to **0.00%**:
+
+```
+phi_self = 0.05219 * g * sin(theta) / (f1^2 * L)
+```
+
+No material constant survives in it, exactly as `delta = 1.545 g/omega^2` does not for the
+whole-stem sag. That is the same trap one level down — and here it is what makes the
+result inescapable rather than tunable.
+
+### The hidden variable was never the geometry. It is the wood.
+
+`E = 60 MPa` is a **herbaceous** modulus — a soft green stem — and it is correct for all
+eight shipped species. A conifer is **woody**: softwood along the grain is 8–11 GPa, some
+150x stiffer. φ goes as 1/E and f1 as √E, so stiffening buys droop against sway at a fixed
+exchange rate:
+
+| E | φ at horizontal | f1 | |
+|---|---|---|---|
+| 60 MPa (shipped) | 100° | 0.41 Hz | collapses |
+| 300 MPa | 20° | 0.92 Hz | holds out, sways like a plant |
+| **1200 MPa** | **5.0°** | **1.84 Hz** | **holds out, sways like a plant** |
+| 6000 MPa | 1.0° | 4.11 Hz | holds out, sways like a plant |
+| 10 GPa (real softwood) | 0.6° | 5.31 Hz | holds out, but vibrates |
+
+**There is a window around 1–2 GPa** where a lateral both supports itself and still sways
+at a plant-like rate. And `sp.stemOpts` already reaches `eModulus` — Bend is constructed
+with it — so this needs no engine change at all, only a species entry.
+
+### What this does and does not solve
+
+Stiffness lets a branch *hold* an angle. It does not *set* one, and that is the part with
+no derivation behind it:
+
+- **`want` is vertical for every axis** (`40_plant.js:141`), leader and lateral alike, and
+  `tropism` drags laterals up at a 50-step time constant regardless of stiffness. Woody E
+  changes nothing about that.
+- **One constant here is deletable and worth deleting anyway.** The launch direction is
+  `v3lerp(dir, org.frame.x, v3(0,1,0), 0.45)` — the subtending organ's own frame, lerped
+  45% toward vertical. `org.frame.x` is *emergent* (phyllotaxis and `organTilt` grew it);
+  the 0.45 is not. Setting it to zero means a branch launches along the leaf in whose axil
+  it arose, which is both real and one fewer stated number.
+- **But a set point is still a set point.** Real plagiotropy is gravitropic set-point
+  angle, and GSA is a genuine, tabulated, species-level biological quantity, not a shape
+  dial. There is no way to derive it from anything in this tree — four routes were
+  considered and all of them either collapse (the force balance, above), invert the taper
+  (continuous apical control, the 2026-07-30 conifer entry), or reduce to the same set
+  point wearing a different name.
+
+So the honest position: **a conifer needs GSA, and GSA is an imposition.** The argument for
+paying it is `39_fall.js`'s precedent — a hand-picked constant was replaced by *looked-up
+leaf mass per area*, and the measured value was better than the chosen one. GSA is the
+same kind of number. But it is an addition to SCIENCE.md's "what is imposed" list, and
+that list is supposed to be argued for rather than slipped in. **That decision is not the
+harness's to make.**
+
+### The smaller finding, which is real regardless
+
+`39a_stem.js:66-69` says the grown shape *is* the static equilibrium, so the rest shape
+"carries gravity" and the solver need only handle deviations. **Nothing ever put gravity
+into the grown shape.** Growth is purely tropic — `want` is vertical and weight appears
+nowhere in `40_plant.js`. For the leader that is harmless, because a vertical beam has no
+bending moment from its own weight and `sin θ ≈ 0` does the work. For a lateral at any
+angle at all it is not harmless, and this measurement puts a number on how not: the term
+that was assumed spent is the dominant one.
