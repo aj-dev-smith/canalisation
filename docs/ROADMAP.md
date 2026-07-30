@@ -771,33 +771,45 @@ cannot split by construction. Building either gets you closer to the other.
 by asking what else the engine could grow after the monocot came back negative.
 
 > **Step 1 has been run — read this before the rest of the entry, which was written
-> before it.** The pre-flight is `test/conifer.mjs` and the write-up is the 2026-07-30
-> JOURNAL entry. Verdict: **the cone is emergent in shape and 2-4x too fat in slope.**
+> before it and is wrong in two places.** The pre-flight is `test/conifer.mjs` and the
+> write-up is the 2026-07-30 JOURNAL entry. Verdict: **the length taper is emergent and
+> confirmed; the silhouette is a vase, and it is upside down.**
 >
-> Branch length is linear in the arc position of its bud, zero a fixed distance below
-> the apex — R2 = 0.9988 over 36 laterals, and 0.976-0.999 across a 4x sweep. **Claim 1's
-> structure is confirmed and nothing draws a cone.**
+> Branch length is linear in the arc position of its bud, zero a fixed distance below the
+> apex — R2 = 0.9988 over 36 laterals, 0.976-0.999 across a 4x sweep, lowest branch 2.89x
+> the middle one. **Claim 1's structure is confirmed and nothing draws a cone.** Step 1 is
+> nonetheless **not passed**, because of two terms this entry does not name:
 >
-> But the taper slope is `k = (0.72*E + I*S)/(E + I*S)`, not `0.72`. The `0.72` at
-> `40_plant.js:138` multiplies only the tip's own extension, while `elongate()` stretches
-> the subapical zone with no generation penalty and **overwrites `this.length`**. On the
-> shipped defaults that stretching is **3.6x** the tip term, so k = 0.939 (measured
-> 0.904). **k is bounded in (0.72, 1) for every species**, giving a crown half-angle of
-> 36-63° against a Norway spruce's 8-15°. No parameter reaches the difference.
+> **1. The taper slope is floored.** It is `k = (0.72*E + I*S)/(E + I*S)`, not `0.72`. The
+> `0.72` at `40_plant.js:138` multiplies only the tip's own extension, while `elongate()`
+> stretches the subapical zone with no generation penalty and **overwrites `this.length`**
+> — 3.6x the tip term on shipped defaults, so k = 0.939 (measured 0.904). **k is bounded
+> in (0.72, 1) for every species.** A spruce needs about 0.2.
+>
+> **2. Nothing holds a branch out, and this is the bigger one.** `want` is vertical for
+> leader and lateral alike (`40_plant.js:141`) and `tropism` lerps toward it every step,
+> so a branch's initial direction decays with a time constant of **50 steps** and then
+> grows for thousands. Measured mean branch angle **25.0°** against the nominal 50.7°,
+> with the oldest branches pulled furthest up. Long lower branches therefore curve up and
+> put their tips at the **top** of the crown: measured crown half-angle **73.9°**, widest
+> at the top, against a Norway spruce's 8-15°. A conifer's laterals are **plagiotropic**;
+> every axis here is **orthotropic**. This was invisible to four numeric sections, a
+> closed form and a 4x sweep, and showed up the moment it was drawn (section 3b).
+>
+> **This supersedes the "two obstacles" below.** The hardcoded `0.45` lerp is **not worth
+> deriving** — tropism forgets it in fifty steps, so it is an initial condition, not a
+> branch angle. Plagiotropy is a set point on `want`, and gravitropic set-point angle is
+> real biology with #7b's force balance already in the tree to hang it on.
 >
 > Also settled: **`budRelease` binds the escape distance, not `dominance`** (7.18 against
-> 3.59), so the term the entry below expects to be shaping the crown is not the one in
-> charge. And the obvious next move — using the already-computed `exp(-d/dominance)` as a
-> continuous multiplier instead of a binary gate — is **killed on paper** in section 4 of
-> the harness: it drives every lower branch to the same length (ratio 2.89 → 1.09), which
-> is a bottlebrush. Do not build it to find out.
+> 3.59). And the obvious next move — using the already-computed `exp(-d/dominance)` as a
+> continuous multiplier instead of a binary gate — is **killed on paper** in section 4: it
+> drives every lower branch to the same length (ratio 2.89 → 1.09), a bottlebrush. Do not
+> build it to find out.
 >
-> **So step 1's gate is not passed, and the entry's own contingency applies: this is
-> bigger than a day.** The open question is now specific — *what sets a lateral's
-> elongation rate, if not a hardcoded 0.72?* — and the instinct below is right that the
-> answer should delete a constant. Best candidate to pre-flight next is supply, via the
-> Murray's-law radii every axis already grows and the pipe model that sized the petiole
-> in #7b. **Step 2, the needle, is untouched by any of this and is still cheap.**
+> Fixing k alone gives a narrower vase; fixing plagiotropy alone gives a wide flat cone
+> the right way up. **Neither on its own is a conifer.** Step 2, the needle, is untouched
+> by all of this and is still cheap.
 
 The framing that makes it worth doing rather than cosmetic: **a conifer is mostly a
 branching-architecture project wearing a leaf-shaped hat.** The needles are the cheap,

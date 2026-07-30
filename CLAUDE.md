@@ -87,12 +87,20 @@ wired into CI** and therefore gate a merge — `smoke.mjs` and `views.mjs`. The 
 assert locally and *nothing runs them for you*, which is worth knowing before treating a
 green PR as evidence about the stem or the air. The rest print and never fail.
 
-`test/conifer.mjs` is the ROADMAP 13 pre-flight and it is the derivation, not the
-solver: branch length against bud position worked out on paper first, then checked. It
-takes ~95s because it grows five specimens. Its verdict is that the conifer's taper is
-**emergent in shape and 2-4x too fat in slope**, and its section 4 kills the obvious
-follow-up on paper rather than by building it. Read the box at the top of ROADMAP 13
-before doing anything with branching.
+`test/conifer.mjs` is the ROADMAP 13 pre-flight and it is the derivation, not the solver:
+branch length against bud position worked out on paper first, then checked. ~95s, five
+specimens. Its verdict is that the **length taper is emergent and confirmed** (R2 0.9988)
+while the **silhouette is a vase, and upside down** — because `tropism` pulls every axis
+toward vertical with no generation term, so laterals curve up and the crown ends up
+widest at the top. Section 4 kills the obvious follow-up on paper rather than by building
+it. Read the box at the top of ROADMAP 13 before touching branching.
+
+**Its section 3b is the reason that file draws an ASCII crown.** Four numeric sections, a
+closed form and a 4x parameter sweep all agreed with each other while the specimen was
+the wrong shape *and the wrong way up*; ten lines of ASCII caught it immediately. That is
+the same argument as "get a person to watch it", applied to a harness — and the closed
+form it disagreed with had a 2-4° error that was too small to look wrong and was already
+written up. **Derive it, then measure it, then draw it, and let the three argue.**
 
 `views.mjs` runs **twice**, and both runs gate. The invariants job names a species,
 which skips the garden of eight and costs 5s; a separate concurrent job — **`render

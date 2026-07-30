@@ -2096,14 +2096,52 @@ the measured `zeta = H/A = 0.919` (a stem wanders, so its height is not its arc 
 
 | | crown half-angle |
 |---|---|
-| shipped k 0.939, shipped 0.45 lerp | 62.9° |
-| floor k 0.72, shipped 0.45 lerp | 48.1° |
-| floor k 0.72, horizontal branch, straight stem | 35.8° |
+| **measured, off 36 branch tips** | **73.9°** |
+| closed form at measured k and θ | 75.3° |
+| closed form at floor k 0.72, same θ | 48.8° |
+| closed form at floor k 0.72, horizontal branch, straight stem | 35.8° |
 | **a Norway spruce** | **8-15°** |
 
-So the cone is emergent and roughly **2-4x too fat**, with no parameter in reach of the
+So the cone is emergent in shape and far too fat, with no parameter in reach of the
 difference. ROADMAP 13's own contingency applies: this is bigger than a day, and the
 gate is the slope rather than the shape.
+
+### Then it was drawn, and the drawing said something the numbers had not
+
+Four sections of numbers agreed with each other and with a closed form, and all of them
+missed this. An ASCII crown profile — the idiom `test/margin.mjs` and `test/fruit.mjs`
+already use — showed the crown is **widest at the top.** It is a vase, not a cone, and
+it is not even the right way up.
+
+The cause is a term that appears nowhere in the taper argument. Every axis is pulled
+toward vertical every step, with **no generation term anywhere in it**:
+
+```js
+40_plant.js:141   const want = v3(0, 1, 0);   // plus wander/nutation
+40_plant.js:150   v3lerp(this.dir, this.dir, want, clamp(sp.tropism * dt, 0, 1))
+```
+
+At `tropism: 0.02` a branch's initial direction decays with a time constant of **50
+steps**, and a branch then grows for thousands. So the hardcoded `0.45` lerp toward
+vertical is not a branch angle at all — it is an initial condition that is immediately
+forgotten. Measured: nominal 50.7°, actual mean **25.0°**, and the eight longest (oldest)
+branches sit at 26.8° against the eight shortest at 31.0° — the older the branch, the
+more completely it has been pulled up.
+
+That inverts the crown. A long lower branch curving toward vertical puts its tip near the
+**top** of the crown rather than out to the side, which is exactly what `ζ − k·cos θ`
+does as θ → 0: the denominator collapses (0.919 − 0.819 = 0.100 on the shipped numbers)
+and the envelope goes nearly flat-topped.
+
+**So there are two obstacles, and the entry names neither.** A conifer's laterals are
+**plagiotropic** — they hold a near-horizontal set point for life. Every axis in this
+engine is **orthotropic**. The length taper is real, confirmed, and emergent; it does not
+become a conical silhouette because nothing holds a branch out.
+
+This is also the clearest case yet for the project's own rule about looking at the thing.
+Four numeric sections, one closed form, a 4× parameter sweep and an R² of 0.9988 all
+passed while the specimen was the wrong shape *and upside down*. The drawing took about
+ten lines.
 
 ### The obvious fix is a dead end, and it is killed on paper
 
@@ -2125,7 +2163,22 @@ one is derivation, not measurement, and is labelled as such in the file — but 
 closed form over an escape rule section 1 measured, so it is worth a day of not building
 it.
 
-### Three things found on the way, all of which cost time to see
+### Four things found on the way, all of which cost time to see
+
+**The closed form for the crown angle was wrong, by a margin too small to notice.** It
+had the branch's own extension multiplied by `zeta` — the *leader's* arc-to-height
+factor, which has no business acting on a branch. Correct is
+
+```
+r = k*u*sin(theta),   z = z_top - u*(zeta - k*cos(theta))
+half-angle = atan( k*sin(theta) / (zeta - k*cos(theta)) )
+```
+
+against the shipped `zeta*(1 - k*cos(theta))`. The difference is **2-4°** — far too small
+to look wrong, big enough to be wrong, and it went into a written-up table before
+re-deriving caught it. The section now **measures** the envelope off 36 real branch tips
+and keeps the closed form as a cross-check that must agree within 6°. That ordering is
+the lesson: derive it, then measure it, and let them argue.
 
 **A harness that compares an arc length to a height is measuring `wander`.** The first
 run fitted `axis.length` (arc) against bud *height* and got a slope of 1.13 where the
@@ -2152,11 +2205,25 @@ not 3%.
 
 Step 2 (the needle) is untouched by any of this and is still cheap — it is a leaf
 option, and `test/venation.mjs` already showed `n50 = 1` on a narrow blade. Step 1 is
-what is blocked, and it now has a specific question rather than a general one: **what
-sets a lateral's elongation rate, if not a hardcoded 0.72?** The entry's own instinct is
-right that the answer should *delete* a constant rather than add eight. The candidate
-worth pre-flighting next is supply: the engine already grows every axis a radius by
-Murray's law, and the pipe model that sized the petiole in #7b is the same argument one
-level up. That is a feedback loop — a thinner branch grows slower, so bears less, so
-stays thinner — which is how a real tree does it, and which is a research question and
-not an afternoon.
+what is blocked, and it turns out to be blocked **twice**, on two independent terms
+neither of which the entry names:
+
+1. **The taper slope.** `k` is floored at the hardcoded `0.72`, and a spruce needs about
+   0.2. The specific question is *what sets a lateral's elongation rate, if not a
+   hardcoded constant?* The entry's instinct is right that the answer should **delete** a
+   constant rather than add eight. The candidate worth pre-flighting next is supply: the
+   engine already grows every axis a radius by Murray's law, and the pipe model that
+   sized the petiole in #7b is the same argument one level up. That is a feedback loop —
+   a thinner branch grows slower, so bears less, so stays thinner — which is how a real
+   tree does it, and which is a research question and not an afternoon.
+2. **Orthotropy.** Nothing holds a branch out, so the crown inverts. This is the *larger*
+   of the two and it was invisible until the thing was drawn. It is also the one with a
+   clean route: plagiotropy is a set point on `want`, not a new constant on the escape,
+   and gravitropic set-point angle is real, well-documented biology with the
+   force-balance machinery from #7b already in the tree to hang it on. **Note this
+   supersedes the entry's second obstacle** — the hardcoded `0.45` lerp is not worth
+   deriving, because tropism forgets it in fifty steps. Deriving an initial condition
+   nothing remembers would have been a wasted day, and that was the entry's plan.
+
+The ordering matters: fixing `k` alone makes a narrower vase, and fixing plagiotropy
+alone makes a wide flat cone the right way up. Neither on its own is a conifer.
