@@ -765,10 +765,39 @@ dichotomous body plan needs (liverworts, clubmosses) are the same class of work 
 central zone is a fixed radius `rCZ` from the apex centre (`20_meristem.js:50`), so it
 cannot split by construction. Building either gets you closer to the other.
 
-## 13. A conifer — NOT STARTED
+## 13. A conifer — STEP 1 DONE, AND IT CAME BACK SPLIT
 
 **The next thing to build.** A ninth species that is a different body plan, arrived at
 by asking what else the engine could grow after the monocot came back negative.
+
+> **Step 1 has been run — read this before the rest of the entry, which was written
+> before it.** The pre-flight is `test/conifer.mjs` and the write-up is the 2026-07-30
+> JOURNAL entry. Verdict: **the cone is emergent in shape and 2-4x too fat in slope.**
+>
+> Branch length is linear in the arc position of its bud, zero a fixed distance below
+> the apex — R2 = 0.9988 over 36 laterals, and 0.976-0.999 across a 4x sweep. **Claim 1's
+> structure is confirmed and nothing draws a cone.**
+>
+> But the taper slope is `k = (0.72*E + I*S)/(E + I*S)`, not `0.72`. The `0.72` at
+> `40_plant.js:138` multiplies only the tip's own extension, while `elongate()` stretches
+> the subapical zone with no generation penalty and **overwrites `this.length`**. On the
+> shipped defaults that stretching is **3.6x** the tip term, so k = 0.939 (measured
+> 0.904). **k is bounded in (0.72, 1) for every species**, giving a crown half-angle of
+> 36-63° against a Norway spruce's 8-15°. No parameter reaches the difference.
+>
+> Also settled: **`budRelease` binds the escape distance, not `dominance`** (7.18 against
+> 3.59), so the term the entry below expects to be shaping the crown is not the one in
+> charge. And the obvious next move — using the already-computed `exp(-d/dominance)` as a
+> continuous multiplier instead of a binary gate — is **killed on paper** in section 4 of
+> the harness: it drives every lower branch to the same length (ratio 2.89 → 1.09), which
+> is a bottlebrush. Do not build it to find out.
+>
+> **So step 1's gate is not passed, and the entry's own contingency applies: this is
+> bigger than a day.** The open question is now specific — *what sets a lateral's
+> elongation rate, if not a hardcoded 0.72?* — and the instinct below is right that the
+> answer should delete a constant. Best candidate to pre-flight next is supply, via the
+> Murray's-law radii every axis already grows and the pipe model that sized the petiole
+> in #7b. **Step 2, the needle, is untouched by any of this and is still cheap.**
 
 The framing that makes it worth doing rather than cosmetic: **a conifer is mostly a
 branching-architecture project wearing a leaf-shaped hat.** The needles are the cheap,
@@ -851,8 +880,10 @@ to angiosperms. Do this last, after the silhouette is real.
 
 ### The order
 
-1. **Pre-flight the silhouette on paper.** Nothing else starts until this predicts a
-   taper.
+1. ~~**Pre-flight the silhouette on paper.** Nothing else starts until this predicts a
+   taper.~~ **Done — see the box at the top of this entry.** It predicts a taper of the
+   right *shape* and the wrong *slope*, and the slope is not reachable by any species
+   parameter. `test/conifer.mjs`.
 2. Needle: aspect floor as a leaf option, species entry, confirm `test/venation.mjs`
    gives n50 = 1 on the shipped species rather than on a hand-passed config.
 3. **Watch it in a real browser.** The silhouette is composition and the eye is the

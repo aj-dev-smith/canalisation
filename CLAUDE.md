@@ -61,6 +61,7 @@ node test/stem.mjs                                 # the stem as a beam: ringdow
 node test/petiole.mjs                              # the stalk as a pipe, and the hang as a force balance
 node test/veinlod.mjs                              # vein level of detail: what it saves, and the light it must conserve
 node test/views.mjs                                # render views: cost, cull laws, cell table; the other CI gate
+node test/conifer.mjs                              # ROADMAP 13 pre-flight: does a taper fall out of apical dominance?
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -80,11 +81,18 @@ script in `tools/` passed — they all navigate, wait, and screenshot, so a froz
 tab and a busy one are the same script. It measures the gap between animation
 frames and exits non-zero past 250ms.
 
-**Six of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
-`petiole.mjs`, `veinlod.mjs`, `views.mjs`.** Only **two of the six are wired into
-CI** and therefore gate a merge — `smoke.mjs` and `views.mjs`. The other four assert
-locally and *nothing runs them for you*, which is worth knowing before treating a
+**Seven of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+`petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`.** Only **two of the seven are
+wired into CI** and therefore gate a merge — `smoke.mjs` and `views.mjs`. The other five
+assert locally and *nothing runs them for you*, which is worth knowing before treating a
 green PR as evidence about the stem or the air. The rest print and never fail.
+
+`test/conifer.mjs` is the ROADMAP 13 pre-flight and it is the derivation, not the
+solver: branch length against bud position worked out on paper first, then checked. It
+takes ~95s because it grows five specimens. Its verdict is that the conifer's taper is
+**emergent in shape and 2-4x too fat in slope**, and its section 4 kills the obvious
+follow-up on paper rather than by building it. Read the box at the top of ROADMAP 13
+before doing anything with branching.
 
 `views.mjs` runs **twice**, and both runs gate. The invariants job names a species,
 which skips the garden of eight and costs 5s; a separate concurrent job — **`render

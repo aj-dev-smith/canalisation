@@ -2053,3 +2053,110 @@ strict 180° alternation, and four apex sizes were swept here with the spread st
 near 90°. A grass would wear this project's headline limitation more visibly than any
 current species, since two-ranked leaves are an instantly recognisable signature and
 random angles read as wrong rather than as variation.
+
+## The conifer's cone is emergent in shape and 2-4x too fat in slope (2026-07-30)
+
+ROADMAP 13 step 1 says nothing else starts until the silhouette is pre-flighted on
+paper. It has been, and then checked against the solver in `test/conifer.mjs`. The
+answer is split, and the split is the useful part.
+
+**Claim 1's structure is confirmed.** A bud escapes at a fixed distance below the apex,
+so a bud at arc position `a` on the leader has been growing for exactly as long as the
+leader has taken to climb from `a + d_esc` to its present height. Branch length is
+
+```
+L = k * (A_fin - A_esc)
+```
+
+— **linear in the arc position of the bud, hitting zero a fixed distance below the
+apex.** That is a straight-sided cone and nothing draws it. Measured over 36 laterals on
+the shipped defaults: **R2 = 0.9988**, and R2 stays at 0.976-0.999 across a 4x sweep of
+`internode`. The lowest branch is 2.89x the middle one. Apical dominance really does
+produce a taper on its own, which is the thing worth knowing.
+
+**The slope is wrong, and it is not tunable.** The entry expected the `0.72` at
+`40_plant.js:138` to set the taper. It does not, because that penalty multiplies only
+`rate` — the tip's own extension — while `elongate()` stretches the subapical zone,
+carries no generation penalty at all, and **overwrites `this.length`**. A fixed window
+of arc stretching at `internode` and decaying over `internodeSpan` contributes
+`internode * internodeSpan` per unit time to leader and lateral alike, so
+
+```
+V0 = E + I*S          V1 = gamma*E + I*S          k = V1/V0
+```
+
+On the shipped defaults `I*S = 0.0187` against `E = 0.0052` — **stretching is 3.6x the
+tip's own extension** — so k = 0.939 rather than 0.72. Measured slope 0.904, and across
+`internode` 0 / 0.0018 / 0.0072 / 0.020 the formula tracks to within 4-6% every time.
+
+The consequence is the whole finding: **k is bounded in (gamma, 1) for any species.**
+`internode: 0` reaches the floor of 0.72 exactly and nothing reaches below it, because
+gamma is hardcoded and shared by all eight species. Converting that to a silhouette with
+the measured `zeta = H/A = 0.919` (a stem wanders, so its height is not its arc length):
+
+| | crown half-angle |
+|---|---|
+| shipped k 0.939, shipped 0.45 lerp | 62.9° |
+| floor k 0.72, shipped 0.45 lerp | 48.1° |
+| floor k 0.72, horizontal branch, straight stem | 35.8° |
+| **a Norway spruce** | **8-15°** |
+
+So the cone is emergent and roughly **2-4x too fat**, with no parameter in reach of the
+difference. ROADMAP 13's own contingency applies: this is bigger than a day, and the
+gate is the slope rather than the shape.
+
+### The obvious fix is a dead end, and it is killed on paper
+
+The first thing anyone reaches for next: `suppressed = exp(-d/dominance)` is already
+computed and used as a *binary* gate, so make it a *continuous* multiplier on lateral
+elongation. That is apical control rather than apical dominance, it is the textbook
+distinction, and it is the right biology for a conifer. It is also wrong here:
+
+```
+L(a) = integral V1 * exp(-(A(t) - a)/lambda) dt  =  k*lambda*[beta - exp(-(A_fin - a)/lambda)]
+```
+
+with `beta = exp(-d_esc/lambda)`. The exponential vanishes for any bud more than about
+`3*lambda` below the apex, so **L tends to the constant `k*lambda*beta`** — 1.70 on the
+shipped numbers. Every lower branch ends up the same length: a bottlebrush. The
+lowest/middle length ratio goes from 2.89 to **1.09**, so the mechanism reached for to
+steepen the taper removes it. Section 4 of `test/conifer.mjs` prints the profile. This
+one is derivation, not measurement, and is labelled as such in the file — but it is a
+closed form over an escape rule section 1 measured, so it is worth a day of not building
+it.
+
+### Three things found on the way, all of which cost time to see
+
+**A harness that compares an arc length to a height is measuring `wander`.** The first
+run fitted `axis.length` (arc) against bud *height* and got a slope of 1.13 where the
+prediction was 0.94, and at `internode: 0.02` an **inverted** taper with R2 = 0.95 —
+long branches at the top. Both were the missing `zeta`, and the inversion also had the
+buffer bug below in it. Fitting arc against arc, the error went to 4%. A clean
+systematic error with a high R2 is the most convincing wrong answer available.
+
+**`pts` silently truncates and takes `length` with it.** `40_plant.js:168` drops the
+oldest point past 900, and `this.length` is recomputed as the arc of what is left — so
+past `900 * segLen` of growth **an axis's arc length stops being measured from its
+base**, and `org.birthLen` advection loses its floor with it. The harness now caps its
+step count under that limit and says so. This matters for ROADMAP 13 specifically: a
+conifer wants a tall leader carrying tens of branches, which is exactly the regime that
+crosses it.
+
+**Branches undershoot k by a systematic 4-5%,** in every sweep row, same sign. That is
+the subapical zone: a branch shorter than `internodeSpan` has less than a full window to
+stretch, so young laterals get less than `I*S` until they outgrow it. It is a transient,
+it decays, and it is not worth modelling — but it is why the tolerances are 10-12% and
+not 3%.
+
+### What this means for ROADMAP 13
+
+Step 2 (the needle) is untouched by any of this and is still cheap — it is a leaf
+option, and `test/venation.mjs` already showed `n50 = 1` on a narrow blade. Step 1 is
+what is blocked, and it now has a specific question rather than a general one: **what
+sets a lateral's elongation rate, if not a hardcoded 0.72?** The entry's own instinct is
+right that the answer should *delete* a constant rather than add eight. The candidate
+worth pre-flighting next is supply: the engine already grows every axis a radius by
+Murray's law, and the pipe model that sized the petiole in #7b is the same argument one
+level up. That is a feedback loop — a thinner branch grows slower, so bears less, so
+stays thinner — which is how a real tree does it, and which is a research question and
+not an afternoon.
