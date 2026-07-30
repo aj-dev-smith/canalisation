@@ -78,7 +78,8 @@ Nobody wrote any of these numbers:
   by the time it was founded)
 - When the plant flowers (when enough leaf area has made enough florigen)
 - Where branches appear (apical dominance = auxin competition)
-- Stem thickness (Murray's law on the traffic it carries)
+- Stem thickness (Murray's law on the traffic it carries) — but see the note below
+  on what sets its *taper*, which is less emergent than this line reads
 - How many seeds a fruit has, and therefore how lobed it is
 - Where the ripening wave starts and how it crosses
 - When a specimen is finished and begins to senesce — every growing point has
@@ -143,6 +144,21 @@ Keep this list short. Every entry is a debt.
    either physics, air, or something the margin grew. That is a debt paid off rather
    than a new one — see the 2026-07-26 JOURNAL entry, and the honest limitation it
    left behind, below.
+
+**Stem thickness is emergent; its taper is mostly one tuned constant, and the
+emergent list should not be read as claiming otherwise.** Radius answers traffic —
+that part is real and it is Murray's law. But two things measured on 2026-07-30
+(ROADMAP 14, `test/taper.mjs`) qualify it. The exponent is a *knob*, not a
+constant: Murray's `r³` is measured only in conduits that do not also support the
+plant (McCulloh, Sperry & Adler 2003), and every axis here supports the plant, so
+`radiusExp` sits at 3 because that is the measured value in the wrong regime, not
+because anything derives it. And the taper of every mature stem in the garden is
+set three times more strongly by `fruitFlow` — an unswept constant 48x the tip's
+own baseline — than by the traffic law: leaders taper 3.9-4.8 before fruit set and
+1.33-1.63 after it. That is not an imposed *shape*, so it does not belong on the
+numbered list above; nothing draws a stem. It is a stated *magnitude* doing more
+work on what a viewer sees than the mechanism it sits inside, and the honest place
+for that is here rather than nowhere. TUNING.md carries the sweep.
 
 **Render views add nothing to this list, and that is worth stating rather than
 assuming.** `VIEWS` in `70_app.js` decides which channels of the simulation reach

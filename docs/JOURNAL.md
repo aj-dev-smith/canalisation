@@ -2365,3 +2365,137 @@ nowhere in `40_plant.js`. For the leader that is harmless, because a vertical be
 bending moment from its own weight and `sin θ ≈ 0` does the work. For a lateral at any
 angle at all it is not harmless, and this measurement puts a number on how not: the term
 that was assumed spent is the dominant one.
+
+## The taper belongs to the fruit, not to Murray's exponent (2026-07-30)
+
+ROADMAP 14 arrived from the literature sweep as "the cheapest fix available": Murray's
+law is measured to hold only *"as long as they do not function additionally as supports
+for the plant body"* (McCulloh, Sperry & Adler 2003, Nature 421:939-942, quote verified),
+`Axis.updateRadii` applies `r³` to every axis, therefore **"we are over-tapering every
+trunk in the garden."** One line, no new machinery, changes all eight species.
+
+It was pre-flighted before it was written, per the norm, and the pre-flight came back with
+three things — one of which says the entry's premise is backwards, and one of which is a
+bug in code that ships.
+
+### 1. The trunks are barrels, not spikes
+
+Measured on the shipped catalogue at 5200 steps, the leader taper `r0/rTip` is **1.33 to
+1.63 across the whole height**. A real 1 m herbaceous stem tapers more like 5-8x. The
+defect is real and it is **under**-tapering; "over-tapering" describes the opposite plant.
+
+The *direction* of the proposed fix survives — lowering the exponent thickens the base
+relative to the tip — and the reason given for it does not. That distinction mattered,
+because the reason is what predicts the size of the effect, and the size turned out to be
+the whole question.
+
+### 2. The exponent rescales the profile and cannot bend it
+
+`updateRadii` was reparameterised so the exponent is the only thing that moves:
+
+```
+r(s) = tipRadius · (1 + X(s)/tipRadius³)^(1/p) · radiusScale
+```
+
+with `X(s)` the traffic in `r³` units. At `p = 3` this is algebraically identical to what
+shipped — `conv = tipRadius⁰ = 1` — so the change is a bit-for-bit no-op at the default,
+which is why the gate stayed green through it.
+
+Written that way, two things follow on paper and both were then measured:
+
+- `taper(p) = taper(p₀)^(p₀/p)`. A stem that tapers 1.54x under Murray tapers 1.91x at `p = 2`.
+- **The normalised log-profile does not depend on `p` at all.** Changing the exponent
+  rescales the profile in log-radius; it cannot change its shape.
+
+`test/taper.mjs` asserts both, and after the bug in §3 they hold to **4e-16** — floating
+point. The second is the load-bearing one: **no exponent turns a barrel into a stem.**
+Only the traffic field `X(s)` can, and that is a claim about what the plant carries rather
+than about what its wood is made of.
+
+Measured, `p = 2` moves the mean taper 1.50 → 1.84. It also inflates every radius ~2.4x,
+so holding `EI` — and so the sway the stem solver was tuned for — costs a `radiusScale`
+re-anchor of 0.410-0.440 per species. **A 23% lever, bought with a re-anchor, on a 4x
+problem.**
+
+### 3. And the traffic field is dominated by one tuned constant
+
+The thing that actually flattens the trunks:
+
+```
+leader taper r0/rTip                                        MEAN
+  shipped                    p=3                            1.50
+  p=2                                                       1.84
+  fruitFlow = 0              p=3                            4.10
+  fruitFlow = 0              p=2                            8.47
+  fruitFlow = 0, thicken = 0 p=3                            3.54
+```
+
+**Removing the fruit sink moves the taper 173%; the exponent moves it 23%.** `fruitFlow`
+is 0.0060 against a `tipRadius³` of 1.25e-4 — a floor **48x** the tip's own baseline,
+added at *every* station of a fruiting axis. Adding a constant to both ends of a ratio
+compresses it toward 1, so a large uniform sink flattens the stem by arithmetic.
+
+Against age, it is sharper still:
+
+```
+  leader taper, Cathedral Fern:   800 → 4.55     1600 → 1.54*    5200 → 1.54*
+                                                      (* = fruiting)
+```
+
+**The plant grows a properly tapered stem, sets fruit, and the stem becomes a barrel in
+one step and stays one.** Seven of eight species taper 3.9-4.8 before fruit set. The
+eighth (Nightglass Parasol) fruits before the first sample and is a barrel throughout.
+
+Is it *wrong*? Not obviously: a terminal fruit really is drawn through every station below
+it, so a uniform addition is the pipe-model-correct thing to do, and a stem under a heavy
+terminal load really is more cylindrical. What is wrong is that **`fruitFlow` has no
+provenance.** It is not in TUNING.md, it was never swept, and it is currently the single
+largest determinant of the silhouette of every mature stem in the garden. Murray's
+exponent — which has a paper behind it — is a minor term next to it.
+
+### Verdict
+
+`radiusExp` ships at **3**, its measured-in-non-supporting-conduits value, documented as a
+knob rather than a constant, with the McCulloh exception quoted at the line. Moving it was
+not done, because the measurement says it is a small lever on the wrong variable and it
+would have cost a re-anchor of the stem solver's inputs to buy 23%.
+
+So ROADMAP 14 is **not** the cheapest fix available. It is a real correction to a minor
+term. The cheap fix it was standing in front of is `fruitFlow`, and that is a tuning
+question with a look attached, which is a different kind of question and belongs to a
+different branch.
+
+The general shape of this is one the project keeps rediscovering: **a sourced correction
+to a named mechanism is not automatically the biggest term.** The literature said the
+exponent was wrong and the literature was right. It was also worth 23%.
+
+### The bug the pre-flight found, which is the part that shipped
+
+One species missed the closed form by 2.8% when every other species hit it exactly. Chased
+rather than tolerated, because a closed form that holds for seven of eight is not a closed
+form.
+
+`Plant.stepBend` calls `updateRadii` a **second** time, after the bend, and says why:
+*"rebuild the frames off the shape that will actually be drawn, so organs, blades and
+shed-blade snapshots all ride the bent stem."* That is right for the frames. But
+`updateRadii` does two jobs in one function, and the other job is sizing the stem — which
+it does by walking `arc`, measured off `this.pts`, against `org.birthLen`, which is an
+odometer reading on the shape **growth** produced.
+
+So the shipped radii were measured along the *bent* polyline against a *rest*-shape ruler.
+Bending is near-inextensible, so the two agree to about **1.5 ppm** — and that is still
+enough to carry an organ across a station boundary and step that station's radius by one
+organ's worth of flow. Measured at **1.87%** on the last station of Abyssal Frond and
+exactly 0.000% everywhere else: a knife-edge coincidence, not a bias.
+
+It is small and it was never going to be visible. It is also a stem whose **thickness
+depends on how hard the wind is blowing**, which is not a thing a stem does. `arc` now
+comes off `this.rest` when it is available; the frames still come off `this.pts`, which is
+the entire reason for the second call. Pose-dependence is 0.000% on all eight species
+afterwards, and the closed form went from 2.8% to 4e-16.
+
+**Two lessons, both already in this file in other clothes.** A tolerance loose enough to
+pass would have hidden it — the assertion was written at 2% first, and 2% is exactly the
+band the bug lived in. And it was only visible at all because the prediction was worked
+out *before* the solver ran: seven species agreeing with each other says nothing, seven
+species agreeing with arithmetic and one not is a bug report.
