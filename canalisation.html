@@ -7785,19 +7785,25 @@ const SPECIES = {
   //              paddle rather than the needle this comment used to claim. The
   //              VENATION is a needle's — one dominant bundle — and that is what
   //              `test/venation.mjs` measured. The SILHOUETTE is not.
-  //   marginBias.ay 0.16  AND THIS IS THE KNOB THAT FIXES IT — it is a pure
-  //              WIDTH knob, not a size knob. Over 0.16 -> 0.003 the margin's
-  //              length is flat (x0.66 to x1.07, no trend) while its half-width
-  //              falls 17x, so aspect runs 0.213 -> 0.0158 and a real spruce
-  //              needle's 0.02-0.05 sits at ay ~0.005-0.012. The lattice still
-  //              builds there (100 cells, 100 veins at 0.008).
+  //   marginBias.ay 0.012  AND THIS IS THE KNOB THAT FIXED IT — a pure WIDTH
+  //              knob, not a size knob. Over 0.16 -> 0.003 the margin's length
+  //              is flat (x0.66 to x1.07, no trend) while its half-width falls
+  //              17x. At 0.012 the margin grows aspect 0.040-0.058 over three
+  //              seeds, inside a Norway spruce's 0.02-0.05, holding n50 = 1 —
+  //              the single unbranched bundle a Picea needle has — on 78-87
+  //              cells. Rendered at arm's length it is unmistakably a needle:
+  //              one midvein, none of the reticulate scrawl a paddle carries.
   //
-  //              It is NOT shipped yet, and the reason is a genuine tension
-  //              rather than a doubt: a needle 4.5x narrower covers 4.5x less
-  //              crown, so the silhouette gets right and the crown goes thin
-  //              again. The fill ladder below was measured on PADDLES and does
-  //              not carry over — `organLen` saturating at 3.0 is a statement
-  //              about needles that already overlap. ROADMAP 13 item 0.
+  //              0.012 RATHER THAN 0.008, and the difference is not cosmetic.
+  //              Both sit in the spruce band and both give n50 = 1, so they are
+  //              the same needle by every venation statistic — but 0.008 holds
+  //              materially less crown (resolved fill 0.511 against 0.586 at
+  //              equal organLen). Sit at the wide end of the band.
+  //
+  //              THE CELL COUNT IS THE REAL FLOOR ON THIS KNOB, not the aspect:
+  //              55 cells at 0.005 and 44 at 0.003, where the blade is running
+  //              out of tissue to canalise. `aspectFloor: 0.04` never bites and
+  //              never did — the margin grows past it on its own.
   //
   // WHAT SETS HOW FULL THE CROWN IS, and it is three numbers rather than one.
   // Shipped, this specimen was a Charlie Brown tree — a bare pole with tufts —
@@ -7818,10 +7824,31 @@ const SPECIES = {
   //              budget goes into branches and not into a taller trunk: height
   //              stays at 46.1 to the digit while crown fill goes 0.56 -> 0.70.
   //
-  //   organLen 2.1  and this one is nearly free. Drawn area per organ, at no
-  //              extra organ: fill 0.70 -> 0.78 for 153.8k triangles against
-  //              153.6k. It does almost nothing on its own (0.561 -> 0.576) —
-  //              it is a multiplier on having branches to hang needles from.
+  //   organLen 5.4  and this one is nearly free, which is what pays for the
+  //              needle. On PADDLES it saturated at 3.0 (3.0 and 3.8 within
+  //              0.003 of each other) and that entry was a statement about
+  //              needles that already overlap. On needles it does not saturate:
+  //              every step still buys, +0.051, +0.041, +0.033, +0.029 of
+  //              resolved fill, at no extra organ. ROADMAP 13 item 0 predicted
+  //              exactly this and it is why the change costs no organ budget.
+  //
+  //   organTilt 0.92  left alone, and MEASURED rather than assumed. Spreading
+  //              the needles further off the axis is the other free axis and it
+  //              is nearly dead: 0.92 -> 1.40 moves resolved fill by 0.009.
+  //              Self-overlap is not what is limiting a needled crown.
+  //
+  // WHAT THE NEEDLE COST, AND WHAT PAID FOR IT (2026-07-31, ROADMAP 13 item 0).
+  // Setting `ay` ALONE would have been worse than the Charlie Brown tree — 0.419
+  // resolved fill against the pre-#32 specimen's 0.576 — because a needle 4.5x
+  // narrower covers 4.5x less crown. It is affordable only because the crown is
+  // heavily self-overlapping: over ay 0.16 -> 0.008 the blade TISSUE falls 4.85x
+  // while the drawn ink falls 1.41x, and that gap is redundant foliage. Spending
+  // `organLen` rather than organs recovers it: 0.618/0.567 resolved and
+  // 0.725/0.712 on screen with `organBudget` untouched at 1200.
+  //
+  // ORGANS ARE THE WORST OF THE THREE LEVERS and that matters for ROADMAP 10b:
+  // +50% of them buys +0.040 of resolved fill, where one step of `organLen`
+  // buys +0.05 for free. `test/crown.mjs` is the instrument for all of this.
   //
   // It has no florigen, so it never flowers and never sets fruit — which is the
   // right biology for a gymnosperm and is a code path REMOVED rather than added.
@@ -7831,7 +7858,7 @@ const SPECIES = {
     prm: { T: 40, D: 6.0, mu: 0.30, rho: 0.60, b: 3.0 },
     mo: { R: 10, rCZ: 2.4, rPZ: 6.8, G: 0.0042 },
     sp: {
-      elongation: 0.0034, organLen: 3.0, organTilt: 0.92, organRoll: 0.30,
+      elongation: 0.0034, organLen: 5.4, organTilt: 0.92, organRoll: 0.30,
       maxOrgans: 80, organBudget: 1200, maxAxes: 140, maxGen: 1,
       branching: 0.94, budRelease: 60, dominance: 6.0, budTake: 1.0,
       apicalControl: 0.80, agoGain: 1.0, agoK: 0.90,
@@ -7842,7 +7869,7 @@ const SPECIES = {
       tipRadius: 0.055, minInternode: 0.12,
       stemOpts: { eModulus: 1.2e9 },
       leafOpts: { fenestrate: 0, aspectFloor: 0.04, nv: 5 },
-      marginBias: { ay: 0.16, g1: 1.30, D: 0.70 },
+      marginBias: { ay: 0.012, g1: 1.30, D: 0.70 },
     },
     pal: {
       blade0: [0.05, 0.12, 0.11], blade1: [0.13, 0.28, 0.24],
