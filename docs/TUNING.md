@@ -1313,3 +1313,87 @@ auxin is its own apex plus every apex above it attenuated over `dominance`, so b
 near the leader stand up and branches far below it lie out flat, measured at 52.9deg in
 the top quarter against 63.3deg in the bottom. That is the same field that decides
 whether a bud escapes, read a second time.
+
+## How full a crown is (`70_app.js` Ashfall Spire, 2026-07-31)
+
+Prompted by a person watching: *"much too sparse... real charlie brown xmas trees."*
+Three knobs, and the reason no single one of them works is that they fight each other.
+
+**`budTake` — what fraction of escaped buds build a shoot.** New, and it was a hardcoded
+`0.35` in `40_plant.js` before. **Default 0.35, so every herb is unchanged.** The conifer
+ships at **1.0**, which removes the coin flip entirely and leaves branch count to
+`exp(-d/dominance) > branching`.
+
+    budTake   axes   organs   fill
+      0.35      30      702   0.546
+      0.45      39      898   0.604
+      0.60      51     1215   0.672
+      0.75      60     1429   0.714
+      1.0       77     1601   0.750     <- ships
+
+`fill` is ink over the crown's own rasterised outline, per row. **Do not use needle area
+over silhouette area**: both terms scale together and it returns ~0.28 for every variant
+including ones that plainly differ. That mistake cost two wrong diagnoses.
+
+**`organBudget` — and it is a POOL over the whole specimen.** This is the one that is not
+obvious. Raising `budTake` on its own divides the same 540 organs among three times as
+many branches and **the tree gets smaller**: 46.1 -> 35.3 units tall, crown radius
+7.9 -> 4.3. Ships at **1200**, up from 540.
+
+**`maxOrgans` stays at 80, deliberately.** It caps the **leader**, so the extra budget
+goes into branches rather than into a taller trunk. With it left alone the height stays
+at 46.1 to the digit while fill moves 0.559 -> 0.752. Raise it and you get a taller
+tree, not a fuller one.
+
+**`organLen` — nearly free, and it saturates.** 1.45 -> **3.0**. Drawn area per organ at
+no extra organ: 153.6k triangles against 153.8k. It saturates hard — 3.0 and 3.8 are
+within 0.003 of each other — and it does **almost nothing alone** (0.559 -> 0.570 at 540
+organs). It is a multiplier on having branches to hang needles from. Because of it, 1200
+organs at 3.0 reaches the same fill as 1600 at 2.1, which is where the 25% saving came
+from.
+
+**`maxGen` stays at 1.** Second-order branching is the obvious idea and it is
+**falsified**: fill 0.281 -> 0.268 for 4.8x the simulation cost, because sub-branches grow
+the silhouette as fast as they fill it. JOURNAL has it.
+
+**What it costs, and it is shipped knowingly.** A grown stand of seven with two conifers,
+both fully arrested: 48.1 -> 127.5 ms/frame, 20.8 -> 7.8 fps, 1349 -> 2672 organs. Linear
+in organs, so it is ROADMAP 10b and 11 rather than anything to tune here.
+
+**Two ways to measure this wrong, both of which produced confident nonsense first:**
+
+- **Profile only an ARRESTED specimen.** A cost sweep over `organBudget` went *down* as
+  the tree got bigger, because at the larger budget it had not arrested yet and a live
+  meristem is a different program from a retired one. Grow to `spent()` first. Arrested,
+  the ratio is 2.2x; the naive sweep said 8x.
+- **Match the camera before comparing geometry counts.** Two framings of the same scene
+  gave 3,184 line vertices against 265,328 and nearly bought a whole false theory about
+  the vein LOD's anchor. At matched `cam.dist` it is 108k against 200k, and there is no
+  anomaly.
+
+**The needle is still a paddle, and `marginBias.ay` is the knob that fixes it.**
+`aspectFloor: 0.04` does not bite — the margin grows 0.193 on its own. `ay` is a **pure
+width knob**: over 0.16 -> 0.003 the margin's *length* is flat (x0.66 to x1.07, no trend)
+while its *half-width* falls 17x.
+
+     ay      len      halfW    aspect    cells  veins
+    0.16    5.3168   1.1339   0.2133      93     86     <- ships
+    0.05    5.6707   1.0044   0.1771      61     60
+    0.02    3.5066   0.3612   0.1030      76     73
+    0.012   3.6273   0.2251   0.0621      98     95
+    0.008   3.7120   0.1576   0.0425     100    100     <- spruce band
+    0.005   3.7639   0.1025   0.0272      55     39
+    0.003   4.2557   0.0672   0.0158      44     35
+
+A Norway spruce needle is 0.02-0.05, so `ay` ~0.005-0.012, and the lattice still builds
+there. **Do not conclude from the top of this sweep that it saturates** — between 0.16
+and 0.05 the aspect moves less than one leaf differs from another, so that stretch is
+noise shaped like a plateau, and an earlier pass stopped at 0.02 and wrote "saturates"
+into four files. Separate a ratio into numerator and denominator before calling a knob
+dead.
+
+**Not shipped yet because of a real tension**: a needle 4.5x narrower covers 4.5x less
+crown, and the fill ladder above was measured on **paddles**, so it does not carry over —
+`organLen` saturating at 3.0 is a statement about needles that already overlap. It is
+*cheaper* (92.9k -> 58.1k line vertices), so there is headroom to spend recovering the
+fill. ROADMAP 13 item 0.

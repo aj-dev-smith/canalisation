@@ -2632,3 +2632,150 @@ being silent. Blade meshes now obey two conservations — never finer than the t
 quads per unit of drawn blade area held constant. A garden of eight went from 279,620
 triangles saturated to 81,804 at 29% occupancy, and the natural view from 97.7 ms to
 44.3 ms.
+
+## The Charlie Brown tree: a hardcoded coin flip, and two things that were not the problem (2026-07-31)
+
+AJ, watching the ninth species: *"much too sparse. they're some real charlie brown
+xmas trees. I think that's the main thing visually."* Which is the third time a person
+watching for a few seconds has beaten the harnesses to a real defect — every number in
+`test/tree.mjs` and `test/conifer.mjs` was green, the crown half-angle was inside the
+Norway spruce band, and the specimen still read as a bare pole with tufts stuck to it.
+
+**The first two diagnoses were both wrong, and both were wrong in the same way** — a
+metric that moved with the thing it was measuring.
+
+**Wrong diagnosis 1: not enough organs.** The census said `organBudget: 540` bound
+*exactly* — 540 of 540, with the leader taking 80 of them at `maxOrgans`. Obvious cure,
+obvious result: raising it to 1200 or 2400 both produced the same 1013 organs, because
+laterals were **internode-limited**, not budget-limited (a 3.79-long branch at
+`minInternode: 0.12` holds 31.6 organs, measured 32.2).
+
+**Wrong diagnosis 2: no second-order branching.** A spruce bough is a flattened spray of
+sub-shoots and ours was a bare stick, so `maxGen: 2` looked like the whole answer. Built,
+measured, **falsified**: fill 0.281 -> 0.268, i.e. slightly *worse*, for 4.8x the
+simulation cost. At `maxGen: 3`, 0.311 for 6.7x. Sub-branches grow the crown's silhouette
+exactly as fast as they fill it, so the ratio does not move. **Do not rebuild this.**
+
+**And the metric was the reason both survived as long as they did.** The first fill
+statistic was needle area over silhouette area, and it came back **0.28 for every variant
+including ones that plainly differed**, because both terms move together — a ratio of two
+quantities that scale with each other measures nothing. Replaced with a rasterised
+silhouette: ink over the crown's own outline, per row. That one separated the cases
+immediately, and it is the same trap `test/venation.mjs` records under a different name.
+
+### What it actually was: `if (this.rnd() > 0.35)`
+
+One line in `40_plant.js`, uncommented, unreachable, shared by every species: a bud that
+had escaped apical dominance then took with probability 0.35, and **two in three were
+retired permanently.** It is the strongest single lever on how many branches a crown has,
+and it was the same species of constant as the `0.72` and the `v3lerp(..., 0.45)` that
+ROADMAP 13 deleted — an unnamed number doing a job a species parameter should do.
+
+Now `sp.budTake`, default 0.35 so all eight herbs are unchanged bud for bud. At 1.0 the
+conifer's branch count is decided entirely by `exp(-d/dominance) > branching`, and
+`maxAxes` is not what stops it: 77 axes against a cap of 140. **29 branches became 77.**
+
+### The budget is a POOL, which is why one knob was never going to do it
+
+Raising `budTake` alone divides the *same* 540 organs among three times as many branches,
+and the tree gets **smaller**: 46.1 -> 35.3 units tall, crown radius 7.9 -> 4.3. More
+branches has to be paid for. And the payment has to be aimed: `maxOrgans` is left at 80
+deliberately because it caps the **leader**, so the extra budget goes into branches
+instead of into a taller trunk. Height then stays at 46.1 to the digit while fill moves.
+
+    budTake  organBudget  organLen   axes  organs   fill
+     0.35        540        1.45       30     540   0.559   shipped
+     0.45       1600        2.1        39     898   0.604
+     0.60       1600        2.1        51    1215   0.672
+     1.0         900        2.1        75     900   0.681
+     1.0         900        3.0        75     900   0.699
+     1.0        1200        3.0        77    1201   0.752   ships
+     1.0        1600        2.1        77    1601   0.750
+
+**`organLen` is nearly free fill** — drawn area per organ at no extra organ, 153.6k
+triangles against 153.8k — and it **saturates**: 3.0 and 3.8 are within 0.003. It also
+does almost nothing alone (0.559 -> 0.570 at 540 organs); it is a multiplier on having
+branches to hang needles from. 1200 organs at `organLen 3.0` reaches the same fill as
+1600 at 2.1, so the shipped setting is 25% cheaper than the one that first looked right.
+
+### The needle is not a needle — and my first explanation of why was wrong
+
+The preset advertises `aspectFloor: 0.04` and its comment claimed "a blade that narrow
+canalises one unbranched midvein. That is a needle." **The floor does not bite.** This
+margin grows aspect **0.193** on its own — five times above the floor — so the blade is a
+narrow *paddle*, which is exactly what the close-up shows.
+
+The claim was not fabricated, it was **about a different property**: `test/venation.mjs`
+measured the *venation* — one dominant bundle, `n50 = 1` — and that is still true. The
+*silhouette* was never checked.
+
+**I then got the cause wrong, and the way I got it wrong is the reusable part.** I swept
+`marginBias.ay` from 0.16 down to 0.02, saw 0.213 -> 0.103 with a visible flattening in
+the middle of that range, and concluded it *saturated* — that no setting of it would
+reach a needle, and therefore a new mechanism was needed. Written up in four files that
+way. AJ asked whether we could do better on the needles, one more sweep went two decades
+further down, and it does not saturate at all:
+
+      ay      len       halfW    aspect    len ratio   width ratio
+     0.16    5.3168    1.1339    0.2133      x1.000       x1.000
+     0.10    4.2192    0.7928    0.1879      x0.794       x0.699
+     0.05    5.6707    1.0044    0.1771      x1.067       x0.886
+     0.02    3.5066    0.3612    0.1030      x0.660       x0.319
+     0.012   3.6273    0.2251    0.0621      x0.682       x0.199
+     0.008   3.7120    0.1576    0.0425      x0.698       x0.139
+     0.005   3.7639    0.1025    0.0272      x0.708       x0.090
+     0.003   4.2557    0.0672    0.0158      x0.800       x0.059
+
+`ay` is a **pure width knob**: length is flat across the whole range with no trend, while
+half-width falls **17x**, monotonically, all the way down. A Norway spruce needle's
+0.02-0.05 sits at `ay` ~0.005-0.012, and the lattice still builds there — 100 cells and
+100 veins at 0.008. Rendered, it is unmistakably a needle rather than a paddle.
+
+**The error was reading a trend off the noisy end of a sweep and extrapolating past the
+data.** Between 0.16 and 0.05 the aspect moves 0.213 -> 0.177 while individual leaves
+differ by more than that from each other, so that stretch is noise wearing the shape of a
+plateau. The signal starts exactly where I stopped looking. **Separate the ratio into its
+numerator and denominator before declaring a knob dead** — one line of extra output would
+have shown length flat and width falling, which is not what saturation looks like.
+
+**Why it still is not shipped**, and this is a real tension rather than a doubt: a needle
+4.5x narrower covers 4.5x less crown, so fixing the silhouette walks the specimen back
+toward the sparseness this whole entry is about. The fill ladder above was measured on
+*paddles* and does not carry over — `organLen` saturating at 3.0 is a statement about
+needles that already overlap each other, which thin ones do not. It also gets *cheaper*
+(92.9k -> 58.1k line vertices), so there is headroom to spend on recovering the fill.
+That is the next PR, and ROADMAP 13 item 0 carries the plan.
+
+### A latency bug this exposed, and it was never about the crown
+
+`warmGarden` checked its time budget **once per round**, on stated reasoning: *"a round
+is seven steps and the budget is in whole milliseconds, so per-step timing would cost more
+than it saves."* That holds only if every step costs the same. A herb's step is a few
+hundred microseconds and a conifer's is milliseconds, so one round could overrun the whole
+budget several times over with nothing looking. Now checked per step, with a cursor so
+breaking mid-round does not hand the budget to whichever specimens sort first. Median frame
+gap during establishment 24.8 -> 21.7ms, p99 70.9 -> 59.8ms.
+
+**A comment that names its own assumption is worth more than a correct one**, and this one
+paid for itself the day the assumption stopped holding.
+
+### What it costs, measured rather than estimated
+
+A grown stand of seven with two conifers, both fully arrested, real browser on Metal:
+
+    main    48.1 ms/frame  (20.8 fps)   1349 organs   79 axes   59k tri   108k line
+    this   127.5 ms/frame  ( 7.8 fps)   2672 organs  172 axes  112k tri   200k line
+
+Linear in organs, so it is ROADMAP 10b and 11 rather than a bug, and it is shipped
+knowingly. **Two measurement traps on the way to that table**, both of which produced
+confidently wrong numbers first:
+
+- **Life stage was confounded with size.** A cost column swept over `organBudget` went
+  *down* as the tree got bigger — 20280us at budget 2200 against 5750us at 1600 — because
+  at the larger budget the specimen had not arrested yet and a live meristem is a
+  different program from a retired one. Grow to `spent()` **first**, then profile. Fully
+  arrested the ratio is a sane 2.2x, not the 8x the naive sweep reported.
+- **Two camera positions are not a comparison.** A first pass had main drawing 3,184 line
+  vertices against this branch's 265,328 — 83x for 2.6x the organs — and a whole theory
+  about the vein LOD's anchor was built on it before the framing was checked. At matched
+  `cam.dist` it is 108k against 200k. **There was no anomaly.** The vein cull is fine.

@@ -17,6 +17,11 @@ window.__app = app;
 // the view table, so a capture script can enumerate them rather than keep its
 // own list and quietly stop covering the one that was added last
 window.__VIEWS = VIEWS;
+// The species table, for the same reason and one more: a preset A/B is only
+// honest if both specimens are grown in ONE browser session on ONE GL backend,
+// and a tool that has to rebuild the bundle between candidates cannot do that.
+// `newSpecimen` reads this table, so a tool can patch a preset and regrow.
+window.__SPECIES = SPECIES;
 
 // --- the specimen label ----------------------------------------------------
 let lastHud = 0;

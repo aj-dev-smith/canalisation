@@ -212,6 +212,20 @@ both."* The full flux partition, with Q taken from subtree auxin traffic, was bu
 to try to derive it and is **falsified**; see JOURNAL.md and `Plant._partition`. It
 ships off and is re-measurable.
 
+**How many buds take is now a named number rather than a hidden one** (2026-07-31).
+A bud that escapes apical dominance did not automatically build a shoot: it took with
+probability `0.35`, hardcoded in `40_plant.js`, uncommented, and shared by every
+species. That is real biology — most axillary meristems abort or stay dormant for the
+life of the plant even with nothing above them — but it was doing the strongest single
+job in the crown's appearance while being unreachable, which is the same failure as the
+`0.72` and the `0.45` that ROADMAP 13 deleted. It is `sp.budTake`, defaulting to 0.35 so
+nothing that shipped moves.
+
+For the conifer it is **1.0, and that is a removal rather than an addition**: at 1.0 the
+coin flip is gone and branch count is decided entirely by `exp(-d/dominance) > branching`,
+which is chemistry. `maxAxes` is not what stops it either — 77 axes against a cap of 140.
+The number that *is* stated is still `dominance`, and this does not change that.
+
 **Render views add nothing to this list, and that is worth stating rather than
 assuming.** `VIEWS` in `70_app.js` decides which channels of the simulation reach
 the screen — the lamina, the vasculature, the cells, the needles — and every one of
