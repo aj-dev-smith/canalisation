@@ -86,7 +86,16 @@ function grow(over, seed) {
   sp.marginBias = { ...(S.sp.marginBias || {}) };
   // the knobs this file exists to sweep
   if (over.ay !== undefined) sp.marginBias.ay = over.ay;
-  for (const k of ['organLen', 'organBudget', 'budTake', 'maxOrgans', 'maxAxes', 'organTilt'])
+  // `aspectFloor` clamps the blade's aspect in `30_leaf.js` and TUNING records it
+  // as never biting, on a measurement taken when this species wore a PADDLE at
+  // aspect 0.193. A needle lives at 0.04-0.06, which is the floor itself, so it
+  // is a live knob here and has to be sweepable.
+  if (over.aspectFloor !== undefined) sp.leafOpts.aspectFloor = over.aspectFloor;
+  for (const k of ['organLen', 'organBudget', 'budTake', 'maxOrgans', 'maxAxes', 'organTilt',
+    // HOW DENSELY NEEDLES PACK ALONG A SHOOT, which is the axis that does not
+    // widen the crown. Every other way of adding foliage lengthens an axis and
+    // grows the silhouette as fast as it fills it.
+    'minInternode', 'internode', 'elongation'])
     if (over[k] !== undefined) sp[k] = over[k];
 
   const P = new Plant({ ...DEFAULT_PRM, ...S.prm }, { ...MERISTEM_DEFAULTS, ...S.mo }, sp, seed);
