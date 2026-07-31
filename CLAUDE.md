@@ -419,7 +419,9 @@ of its bugs were found, and none would have been visible on screen.
 - **A borrowed model has assumptions, and one of them is its dimensionality.** The plate aerodynamics was solving a cross-section — an infinitely long plate — while a leaf is a stub, which over-predicted lift roughly twofold and read as "flappy". Ask what a borrowed model assumes about the dimension you are *not* solving, and whether two of its coefficients are secretly one.
 - **Pre-flight the number before writing the solver.** The stem's frequencies were worked out analytically for all eight species on paper first. That table then caught three separate bugs in the solver, none of which was visible on screen and all of which produced a plant that swayed pleasantly at the wrong rate. A solver that cannot reproduce a number somebody computed beforehand is not the thing it claims to be.
 - **Green is a statement about what the gate imports, and about internal consistency only.** A name collision once shipped a bundle that did not parse while 47 checks passed. The wind field passed all 24 of its own assertions while every gust mode sat at vibration frequencies. Ask what the suite *cannot* see, then go and look at that.
-- **Get a person to watch it.** Twice now the fastest path to a genuine modelling error was AJ watching for a few seconds. When a report says "feels like a bug", measure it before explaining it — and take more than one measurement, because "too fast" has meant frequency once and amplitude once, in nearly the same words.
+- **Ask what CLASS of quantity the suite measures at all.** The sharpest version of the above, and the 2026-07-31 instance. `test/tree.mjs` and `test/conifer.mjs` were entirely green on a conifer a person immediately called a Charlie Brown tree, because every statistic in them — branch angle, crown half-angle, taper slope, length fit — is a **shape** statistic and not one of them is a **quantity** statistic. A crown can be exactly the right shape with a tenth of the foliage. **There is still no harness here that measures how much of anything there is**; density was checked by rasterising a silhouette in a scratch script. Before believing a green suite about appearance, write down what it would still pass with.
+- **Do not read a trend off the noisy end of a sweep, and split a ratio before calling a knob dead.** Same session: `marginBias.ay` was swept 0.16 → 0.02, flattened in the middle, and got written up in four files as "saturates — needs a new mechanism". It does not saturate; the signal starts exactly where the sweep stopped. The tell was available for free — `ay` is a *width* knob and the aspect it moves is width/length, so printing numerator and denominator separately shows length flat and width falling 17x, which is not what saturation looks like.
+- **Get a person to watch it.** Three times now the fastest path to a genuine modelling error was AJ watching for a few seconds — a wind field at vibration frequencies, a crown that was upside down, and a tree with a tenth of its foliage. When a report says "feels like a bug", measure it before explaining it — and take more than one measurement, because "too fast" has meant frequency once and amplitude once, in nearly the same words.
 - **Never fake it to make it look better.** The piece's entire claim is that nothing is drawn. A single hardcoded curve would make the whole thing a lie.
 
 ## The honest state of it
@@ -480,18 +482,35 @@ corkscrewed 5.2 up and 0.2 out. PITFALLS has both, and the general lesson — **
 general-looking mechanism has actually been run on.**
 
 **THE GARDEN HAS NOW BEEN WATCHED IN A REAL BROWSER, and the bottleneck is not where the
-roadmap said.** A stand of eight with two conifers runs at 25-28 fps — and that number
-does not move when you switch render view, does not move when you turn the vein cull
-off, and the entire simulation is 5.9ms per step. So a grown stand is bound by the
-**per-organ CPU work in the geometry build**, which all four views share. Measure that
-before optimising ROADMAP 11 or 10b.
+roadmap said.** A stand of eight with two conifers ran at 25-28 fps *before the conifer's
+crown was filled in* — and that number did not move when you switched render view, did
+not move when you turned the vein cull off, against 5.9ms of simulation. So a grown
+stand is bound by the **per-organ CPU work in the geometry build**, which all four views
+share. Measure that before optimising ROADMAP 11 or 10b.
 
-*The rest of this section is current as of 2026-07-29. The most recent landings are the wind field (#16), the
+**Those numbers are pre-#32 and the conifer is now ~2.2x the organs it was.** Measured
+the same way after (a stand of *seven* with two conifers, both fully arrested, real
+browser on Metal): **48.1 → 127.5 ms/frame, 20.8 → 7.8 fps**, 1349 → 2672 organs,
+79 → 172 axes, 108k → 200k line vertices. The cost is linear in organs, so the diagnosis
+above is unchanged and it is still ROADMAP 10b and 11 — but **do not quote 25-28 fps for
+a stand that contains conifers.**
+
+**⚠ `tools/garden_hitch.mjs` EXITS NON-ZERO ON `main`, AND IT IS NOT YOUR FAULT.** Worst
+frame gap ~292ms against its 250ms budget, where `main` before #32 was 141ms. It is not
+reporting a stall: the worst frames all land at `debt 0`, which is the *grown* stand's
+ordinary per-frame cost, not the warm loop. Its verdict line was written when a heavy
+stand could not exist. It will keep saying FREEZES until ROADMAP 10b lands. Its median
+and p99 are the numbers worth reading (21.7ms / 59.8ms, both *better* than before #32).
+**Do not "fix" it by raising its threshold** — that would delete the only signal anyone
+has about the thing 10b is for.
+
+*The rest of this section is current as of 2026-07-31. The most recent landings are the wind field (#16), the
 falsified second rotational plane (#17), the bending stem (#18), the weather being
 turned down to force 2 (#19), the occlusion cull no longer hiding leaves the viewer can
 see (#23), the petiole becoming a petiole — pipe-model radius and droop as a force
-balance (ROADMAP 5 + 7b) — **the scene becoming a garden** (#25, ROADMAP 10), and
-**the renderer getting views** (ROADMAP 12); if the git log has moved a long way past
+balance (ROADMAP 5 + 7b) — **the scene becoming a garden** (#25, ROADMAP 10),
+**the renderer getting views** (ROADMAP 12), **a conifer** (#31, ROADMAP 13) and
+**the conifer's crown being filled in** (#32); if the git log has moved a long way past
 those, treat the specifics below as needing a re-read rather than as fact.*
 
 **THE RENDERER HAS FOUR VIEWS, AND THEY ARE ONE TABLE.** `VIEWS` in `70_app.js` says
@@ -553,9 +572,11 @@ half of that story**, because it turned up the fact that about ninety percent of
 hero's veins are already sub-pixel and already drawn at one uniform width. TUNING and
 JOURNAL both cover it. `app.veinLOD = false` is the pre-LOD renderer, exactly.
 
-Geometry is comfortable now — eight specimens is 551k triangles and 664k lines against
-buffers about 60% full. **Simulation is the ceiling**, and it has not been watched in a
-real browser yet.
+Geometry is comfortable — eight specimens was 551k triangles and 664k lines against
+buffers about 60% full, and it has since been watched in a real browser. **Simulation is
+the ceiling and that is now confirmed rather than suspected**: a stand of seven with two
+conifers spends 127.5ms a frame, the number is linear in organ count, and it does not
+move with render view or with the vein cull. ROADMAP 10b.
 
 **The life cycle is complete.** A specimen germinates, leafs, flowers, fruits,
 ripens, and then **finishes**: it runs out of growing points, drains each blade
@@ -638,7 +659,22 @@ what would have to change instead.
 [docs/ROADMAP.md](docs/ROADMAP.md) is the ranked list and has the reasoning; the
 short version, in order:
 
-0. **THE CONE (ROADMAP 13c) — small, and the only thing the conifer does not have.**
+0. **THE NEEDLE IS A PADDLE (ROADMAP 13 item 0) — one parameter, and the work is paying
+   for it.** `marginBias.ay` is a pure width knob and `ay` ~0.005-0.012 puts the aspect
+   in a Norway spruce's 0.02-0.05 with the lattice still building. Rendered, it is
+   unmistakably a needle. What stops it shipping is that a needle 4.5x narrower covers
+   4.5x less crown, so **TUNING's fill ladder has to be re-run from scratch — it was
+   measured on paddles.** `organLen` saturating at 3.0 is a statement about needles that
+   already overlap; thin ones do not, so exhaust that free axis before spending organs.
+   Thin needles are *cheaper*, so there is headroom. **Draw it at both framings**: the
+   whole-tree and arm's-length views disagree about this change more than about anything
+   else so far.
+0a. **WHAT THE GARDEN OWES (ROADMAP 10b) IS NOW THE URGENT ONE, not the cheap one.**
+   It was "the cheapest interesting work here"; #32 made it the thing standing between
+   the piece and a stand that runs. A grown background plant pays full `stepAuxin` cost
+   to pattern tissue that will never change again, and a conifer is now 1200 organs of
+   exactly that. 20.8 → 7.8 fps on a stand of seven. Still not research.
+0b. **THE CONE (ROADMAP 13c) — small, and the only thing the conifer does not have.**
    `Ashfall Spire` has no reproduction at all: `florigenRate: 0`, no flowers, no fruit.
    That is correct for a gymnosperm and it is a code path *removed*, but it means the
    specimen finishes by running out of growing points and leaves a bare skeleton rather
@@ -647,11 +683,14 @@ short version, in order:
    so it **deletes** the ovary path rather than adding one, and it would show the
    reproductive machinery generalises across a 300-million-year split. Read the box at
    the top of ROADMAP 13 first.
-0a. **WHERE THE FRAME ACTUALLY GOES.** Measured in a real browser for the first time:
-   a stand of eight with two conifers is 25-28 fps, identical in all four views,
-   identical with the vein cull off, against 5.9ms of simulation. It is the per-organ
-   geometry build. ROADMAP 11 (instancing ribbons) and 10b (cheaper background
-   simulation) are both aimed slightly off it. **Measure before optimising.**
+0c. **WHERE THE FRAME ACTUALLY GOES.** Measured in a real browser: the cost is the
+   per-organ CPU work in the geometry build, identical in all four views and identical
+   with the vein cull off. It was 25-28 fps for a stand of eight **before #32**; after,
+   a stand of seven with two conifers is 7.8 fps and the cost is linear in organs.
+   ROADMAP 11 (instancing ribbons) and 10b (cheaper background simulation) are both
+   aimed slightly off it. **Measure before optimising, and measure an ARRESTED stand** —
+   a live meristem is a different program from a retired one, and a sweep that mixes
+   them reports cost going *down* as the specimen gets bigger.
 0b. ~~**MURRAY'S LAW IS WRONG FOR SELF-SUPPORTING AXES (ROADMAP 14)**~~ — **DONE
    2026-07-30, and it was a minor term.** The literature was right about the mechanism
    and wrong about the size: `radiusExp` exists and ships at 3, because the exponent
@@ -667,12 +706,11 @@ short version, in order:
    fruit is drawn through every station below it — so this is a magnitude-and-look
    question and **wants a person watching**, not a sweep alone. `EI` is built on these
    radii and `r⁴` is unforgiving, so **`node test/stem.mjs` is not optional here.**
-1. **What the garden owes (ROADMAP 10b)** — the cheapest interesting work here, and
-   none of it is research. The simulation cost of stepping eight specimens is the real
-   one: a grown background plant pays full `stepAuxin` cost to pattern tissue that will
-   never change again. Also a species picker that samples *with* replacement (a stand of
-   seven from a catalogue of eight came out as four distinct species), and a director
-   whose entire shot list assumes one subject.
+1. **The rest of what the garden owes (ROADMAP 10b)** — its headline half is 0a above.
+   The remainder is not about frames: a species picker that samples *with* replacement
+   (a stand of seven from a catalogue of eight came out as four distinct species), and a
+   director whose entire shot list assumes one subject — which got sharper with the
+   conifer, since at 46 units it is three times the height of any herb.
 2. **The handover** — a new specimen germinating as the old one fades. The garden has
    reframed rather than replaced this: the question is now "a stand gains and loses
    members", and the scene already holds a list. `Plant.dead()` is the trigger and the
@@ -715,8 +753,8 @@ defect.** The petiole is physical, and at a physical stiffness the one-degree-of
 rigid blade snaps between face-on attitudes instead of rocking, so it ships disabled with
 its three measurements written down (ROADMAP 9). What a viewer reads is the stem, which
 bends for real at 0.56-0.64 Hz, and the hang, which is now a force balance. **If you are
-picking up work with no other instruction, pick up what the garden owes (ROADMAP 10b),
-then the handover (ROADMAP 6).** Also still
+picking up work with no other instruction, pick up the needle (ROADMAP 13 item 0, small
+and specified), then what the garden owes (ROADMAP 10b, now the urgent one).** Also still
 open is the other half of step 4: a falling blade's long axis snaps level on the frame it
 detaches on — by a median 15° now, down from 27°, because a derived droop hands the fall
 a smaller tilt exactly as ROADMAP 7b predicted — and the obvious fix was built and

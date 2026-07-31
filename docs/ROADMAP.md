@@ -6,28 +6,42 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
-0. **[#13c, the cone](#13-a-conifer--built-and-on-screen-2026-07-30)** — **START HERE,
-   and it is small.** The conifer is built and on screen; what it does not have is
+0. **[#13 item 0, the needle](#13-a-conifer--built-and-on-screen-2026-07-30)** — **START
+   HERE.** One parameter, and the work is paying for it rather than finding it:
+   `marginBias.ay` is a pure width knob, `ay` ~0.005-0.012 puts the aspect in a Norway
+   spruce's 0.02-0.05, and rendered it is unmistakably a needle instead of the paddle
+   that ships. The cost is that a needle 4.5x narrower covers 4.5x less crown, so
+   **TUNING's fill ladder must be re-run from scratch — it was measured on paddles.**
+   Read #13's box for the plan and JOURNAL for why the first diagnosis of this was wrong.
+0a. **[#10b, and it is now the urgent item rather than the cheap one](#10-a-garden-2026-07-29)**
+   — #32 filled the conifer's crown and made a grown stand of seven with two conifers
+   20.8 → 7.8 fps. A grown background plant paying full `stepAuxin` cost to pattern
+   tissue that will never change again is now 1200 organs per conifer of exactly that.
+   Still not research. **`tools/garden_hitch.mjs` exits non-zero on `main` because of
+   this** and will until it lands — that is expected, not a regression you introduced.
+0b. **[#13c, the cone](#13-a-conifer--built-and-on-screen-2026-07-30)** — **small.** The conifer is built and on screen; what it does not have is
    reproduction of any kind. A cone is a short determinate axis bearing spirally
    arranged scales, which is what the floral meristem already makes — plausibly a
    floral axis whose `q` stays in one band and never goes whorled. It **deletes** the
    ovary path rather than adding one, and it would show the reproductive machinery
    generalises across a 300-million-year split rather than being quietly tuned to
    angiosperms. Read the box at the top of #13 first.
-0b. **[#11 / #10b, and the bottleneck is not where either of them says](#11-a-ribbon-as-twelve-floats)**
-   — **the garden has now been watched in a real browser, which it never had been.** A
-   stand of eight with two conifers runs at 25-28 fps, and the number does not move
-   when you switch render view, and it does not move when you switch the vein cull
-   off, and the whole simulation is 5.9ms. So once a stand is grown the cost is the
-   **per-organ CPU work in the geometry build**, which every view shares. Measure that
-   before optimising either of the things below it. Numbers at the end of the
-   2026-07-30 JOURNAL entry.
-1. **[#10b, what the garden still owes](#10-a-garden-2026-07-29)** — a stand of plants
-   ships, and it left three things behind: the simulation cost of stepping eight
-   specimens, a species picker that samples with replacement, and a director whose
-   whole shot list assumes one subject. **None of it is research.** Note the director
-   item got sharper with the conifer: at 46 units tall it is three times the height of
-   any herb, and a shot list built around one subject frames a mixed stand badly.
+0c. **[#11 / #10b, and the bottleneck is not where either of them says](#11-a-ribbon-as-twelve-floats)**
+   — **the garden has now been watched in a real browser, which it never had been.**
+   The cost is the **per-organ CPU work in the geometry build**, which every view
+   shares: the number does not move when you switch render view and does not move when
+   you switch the vein cull off. It was 25-28 fps for a stand of eight *before #32*;
+   after, a stand of seven with two conifers is 7.8 fps, and the cost is linear in
+   organs. Measure that before optimising either of the things below it — **and measure
+   an ARRESTED stand**, because a live meristem is a different program from a retired
+   one and a sweep that mixes them reports cost going *down* as the specimen gets
+   bigger. Numbers at the end of the 2026-07-30 and 2026-07-31 JOURNAL entries.
+1. **[#10b's remainder](#10-a-garden-2026-07-29)** — its headline half is 0a above. What
+   is left is not about frames: a species picker that samples with replacement (a stand
+   of seven from a catalogue of eight came out as four distinct species), and a director
+   whose whole shot list assumes one subject. **Neither is research.** The director item
+   got sharper with the conifer: at 46 units tall it is three times the height of any
+   herb, and a shot list built around one subject frames a mixed stand badly.
 2. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
    of the life cycle, and the garden has **reframed rather than replaced** it: the
    question is no longer "one plant replaces another" but "a stand gains and loses
