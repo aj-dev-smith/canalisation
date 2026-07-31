@@ -183,9 +183,20 @@ export const SPECIES = {
   //              and the floor is five times below it, so the blade is a narrow
   //              paddle rather than the needle this comment used to claim. The
   //              VENATION is a needle's — one dominant bundle — and that is what
-  //              `test/venation.mjs` measured. The SILHOUETTE is not, and
-  //              `marginBias.ay` saturates: 0.16 -> 0.02 moves the aspect only
-  //              0.213 -> 0.103. Left as a known gap, written up in JOURNAL.
+  //              `test/venation.mjs` measured. The SILHOUETTE is not.
+  //   marginBias.ay 0.16  AND THIS IS THE KNOB THAT FIXES IT — it is a pure
+  //              WIDTH knob, not a size knob. Over 0.16 -> 0.003 the margin's
+  //              length is flat (x0.66 to x1.07, no trend) while its half-width
+  //              falls 17x, so aspect runs 0.213 -> 0.0158 and a real spruce
+  //              needle's 0.02-0.05 sits at ay ~0.005-0.012. The lattice still
+  //              builds there (100 cells, 100 veins at 0.008).
+  //
+  //              It is NOT shipped yet, and the reason is a genuine tension
+  //              rather than a doubt: a needle 4.5x narrower covers 4.5x less
+  //              crown, so the silhouette gets right and the crown goes thin
+  //              again. The fill ladder below was measured on PADDLES and does
+  //              not carry over — `organLen` saturating at 3.0 is a statement
+  //              about needles that already overlap. ROADMAP 13 item 0.
   //
   // WHAT SETS HOW FULL THE CROWN IS, and it is three numbers rather than one.
   // Shipped, this specimen was a Charlie Brown tree — a bare pole with tufts —

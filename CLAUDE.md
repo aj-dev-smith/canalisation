@@ -450,10 +450,16 @@ it are worth knowing before touching anything near branching:
   seven 20.8 → 7.8 fps and that is shipped knowingly; the cost is linear in organs, so it
   is ROADMAP 10b and 11. TUNING has the ladder and the two ways to measure it wrong.
 - **The needle is a paddle, and the preset used to claim otherwise.** `aspectFloor: 0.04`
-  does **not** bite — this margin grows aspect 0.193 on its own — and `marginBias.ay`
-  saturates (0.16 → 0.02 moves it only 0.213 → 0.103). What `test/venation.mjs` measured
-  was the **venation**, one dominant bundle, and that still holds; the **silhouette** was
-  never checked. A cap on aspect would fix it and would be a stated shape number.
+  does **not** bite — this margin grows aspect 0.193 on its own. What `test/venation.mjs`
+  measured was the **venation**, one dominant bundle, and that still holds; the
+  **silhouette** was never checked. **`marginBias.ay` is the fix and it is a pure width
+  knob**: over 0.16 → 0.003 the margin's length is flat while its half-width falls 17x, so
+  a spruce needle's 0.02-0.05 sits at ay ~0.005-0.012 and the lattice still builds there.
+  It is not shipped because a needle 4.5x narrower covers 4.5x less crown and undoes the
+  density work above; **TUNING's fill ladder was measured on paddles and does not carry
+  over.** ROADMAP 13 item 0 has the plan. An earlier pass stopped that sweep at 0.02 and
+  wrote "saturates" into four files — **separate a ratio into numerator and denominator
+  before calling a knob dead**, and do not read a trend off the noisy end of a sweep.
 - **The hardcoded `0.72` is gone**, along with the untaxed subapical stretch that was
   the real reason the taper was floored. Both read `Axis.vigour` = `(1-L)/L` off
   `apicalControl`. L = 0.5 is unbiased, which is why the eight herbs are unchanged organ

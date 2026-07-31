@@ -830,12 +830,35 @@ cannot split by construction. Building either gets you closer to the other.
 >
 > **What is genuinely still open, in order:**
 >
-> 0. **The needle is a paddle.** `aspectFloor: 0.04` never bites — the margin grows
->    aspect 0.193 — and `marginBias.ay` saturates. The *venation* is a needle's, which
->    is what `test/venation.mjs` measured and what the old comment conflated it with.
->    An aspect **ceiling** would fix the silhouette and would be a stated shape number,
->    so it needs a mechanism instead. Cheapest honest route is probably the same one
->    grass needs: an intercalary meristem, so length is added without width.
+> 0. **THE NEEDLE IS A PADDLE, AND THE FIX IS ONE PARAMETER — the work is paying for
+>    it.** `aspectFloor: 0.04` never bites; the margin grows aspect 0.193. The
+>    *venation* is a needle's, which is what `test/venation.mjs` measured and what the
+>    old comment conflated it with. **`marginBias.ay` is a pure width knob** — over
+>    0.16 -> 0.003 the margin's length is flat while its half-width falls 17x, so
+>    aspect runs 0.213 -> 0.0158 and a spruce's 0.02-0.05 sits at ay ~0.005-0.012,
+>    with the lattice still building (100 cells, 100 veins at 0.008). Rendered, it is
+>    unmistakably a needle. *(An earlier pass stopped the sweep at 0.02 and wrote
+>    "saturates" into four files — see JOURNAL for why that is the interesting error.)*
+>
+>    **So this is not a mechanism problem, it is a budget problem.** A needle 4.5x
+>    narrower covers 4.5x less crown, and walks the specimen straight back toward the
+>    sparseness that was just fixed. The plan, in order:
+>
+>    1. Set `ay` into the spruce band and **re-run the fill ladder from scratch** —
+>       TUNING's ladder was measured on paddles and does not carry over. `organLen`
+>       saturating at 3.0 is a statement about needles that already overlap; thin ones
+>       do not, so length may keep buying fill well past 3.0. That is the cheap axis
+>       and it should be exhausted first.
+>    2. Only then spend organs. Thin needles are **cheaper** — 92.9k -> 58.1k line
+>       vertices on the same specimen — so there is headroom that did not exist above.
+>    3. Draw it at both framings before believing any of it. The whole-tree and the
+>       arm's-length views disagree about this change more than about anything else so
+>       far: at the branch it is obviously right and at 46 units it reads thin.
+>
+>    Cross-check worth keeping in view: `test/venation.mjs`'s n50 should stay at a
+>    needle's value throughout, and if a very low `ay` starts costing cells (55 at
+>    0.005, 44 at 0.003) the blade is running out of tissue to canalise, which is the
+>    real floor on this and is the thing `aspectFloor` was guarding against.
 > 1. **The cone (claim 2 below), which is untouched.** Ashfall Spire has no
 >    reproduction at all — `florigenRate: 0`, no flowers, no fruit. That is correct
 >    gymnosperm biology and it is a code path removed rather than added, but it means

@@ -2698,20 +2698,53 @@ does almost nothing alone (0.559 -> 0.570 at 540 organs); it is a multiplier on 
 branches to hang needles from. 1200 organs at `organLen 3.0` reaches the same fill as
 1600 at 2.1, so the shipped setting is 25% cheaper than the one that first looked right.
 
-### The needle is not a needle, and `ay` cannot make it one
+### The needle is not a needle — and my first explanation of why was wrong
 
-Chased on the way, and left open honestly. The preset advertises `aspectFloor: 0.04` and
-its comment claimed "a blade that narrow canalises one unbranched midvein. That is a
-needle." **The floor does not bite.** This margin grows aspect **0.193** on its own —
-five times above the floor — so the blade is a narrow *paddle*, which is exactly what the
-close-up shows. Nor is `marginBias.ay` a way out: an eightfold cut, 0.16 -> 0.02, moves
-the aspect only 0.213 -> 0.103, and it saturates smoothly the whole way.
+The preset advertises `aspectFloor: 0.04` and its comment claimed "a blade that narrow
+canalises one unbranched midvein. That is a needle." **The floor does not bite.** This
+margin grows aspect **0.193** on its own — five times above the floor — so the blade is a
+narrow *paddle*, which is exactly what the close-up shows.
 
 The claim was not fabricated, it was **about a different property**: `test/venation.mjs`
 measured the *venation* — one dominant bundle, `n50 = 1` — and that is still true. The
-*silhouette* was never checked. A ceiling on aspect would fix it and would be a stated
-shape number, which is the one thing this project does not buy. Left as a known gap and
-the comment corrected in place.
+*silhouette* was never checked.
+
+**I then got the cause wrong, and the way I got it wrong is the reusable part.** I swept
+`marginBias.ay` from 0.16 down to 0.02, saw 0.213 -> 0.103 with a visible flattening in
+the middle of that range, and concluded it *saturated* — that no setting of it would
+reach a needle, and therefore a new mechanism was needed. Written up in four files that
+way. AJ asked whether we could do better on the needles, one more sweep went two decades
+further down, and it does not saturate at all:
+
+      ay      len       halfW    aspect    len ratio   width ratio
+     0.16    5.3168    1.1339    0.2133      x1.000       x1.000
+     0.10    4.2192    0.7928    0.1879      x0.794       x0.699
+     0.05    5.6707    1.0044    0.1771      x1.067       x0.886
+     0.02    3.5066    0.3612    0.1030      x0.660       x0.319
+     0.012   3.6273    0.2251    0.0621      x0.682       x0.199
+     0.008   3.7120    0.1576    0.0425      x0.698       x0.139
+     0.005   3.7639    0.1025    0.0272      x0.708       x0.090
+     0.003   4.2557    0.0672    0.0158      x0.800       x0.059
+
+`ay` is a **pure width knob**: length is flat across the whole range with no trend, while
+half-width falls **17x**, monotonically, all the way down. A Norway spruce needle's
+0.02-0.05 sits at `ay` ~0.005-0.012, and the lattice still builds there — 100 cells and
+100 veins at 0.008. Rendered, it is unmistakably a needle rather than a paddle.
+
+**The error was reading a trend off the noisy end of a sweep and extrapolating past the
+data.** Between 0.16 and 0.05 the aspect moves 0.213 -> 0.177 while individual leaves
+differ by more than that from each other, so that stretch is noise wearing the shape of a
+plateau. The signal starts exactly where I stopped looking. **Separate the ratio into its
+numerator and denominator before declaring a knob dead** — one line of extra output would
+have shown length flat and width falling, which is not what saturation looks like.
+
+**Why it still is not shipped**, and this is a real tension rather than a doubt: a needle
+4.5x narrower covers 4.5x less crown, so fixing the silhouette walks the specimen back
+toward the sparseness this whole entry is about. The fill ladder above was measured on
+*paddles* and does not carry over — `organLen` saturating at 3.0 is a statement about
+needles that already overlap each other, which thin ones do not. It also gets *cheaper*
+(92.9k -> 58.1k line vertices), so there is headroom to spend on recovering the fill.
+That is the next PR, and ROADMAP 13 item 0 carries the plan.
 
 ### A latency bug this exposed, and it was never about the crown
 
