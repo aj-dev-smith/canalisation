@@ -731,3 +731,30 @@ trusting that something is general, ask what it has actually been *run* on. And 
 that (2) was invisible to a per-segment check and obvious in a chord — the same shape of
 failure as `test/conifer.mjs` section 3b, where four numeric sections agreed with each
 other about a specimen that was the wrong way up.
+
+## The same trap from the harness side: a check that measured the pose (2026-07-30)
+
+Directly above is the bug where `updateRadii` sized a stem off the bent polyline
+against a rest-shape ruler. Here is the same confusion arriving in a *test*, found
+because a change that had nothing to do with it moved the number by 34%.
+
+`test/conifer.mjs` PREDICTION 3 asserted that a bud escapes a fixed distance below the
+apex, `d_esc = max(-dominance*ln(branching), V0*budRelease)`, and measured it as
+`|tipPos - org.frame.o|`. That is a **straight line on the deflected pose**. Teaching
+`updateRadii` to conserve flow at a fork thickened every trunk below its branches, `EI`
+goes as `r⁴`, the leader stopped leaning — `zeta` 0.919 → 0.943, height 63.38 → 64.97 —
+and the measured median escape distance fell from **5.49 to 3.64**.
+
+**And not one escape time moved.** The median bud still escaped at age 2252, the count
+was still 36. The release schedule — which is what the prediction was *about* — was
+identical. The number that changed was how far the stem had bowed.
+
+Bisected rather than guessed: reverting the one line that pushes a kid's subtree flow
+into its parent's station list restored 5.49 exactly, with every other change in place.
+
+**The general form.** A quantity that is invariant under deflection (a schedule, a
+material length, a count) must not be checked through one that is not (a straight-line
+distance, a world position, a chord). It will pass for years, because nothing else moves
+the pose — and then something stiffens or softens a beam somewhere and the check reports
+a change in a mechanism that did not change. The assertion is on the schedule now and
+the distance is printed with a line saying what it is.
