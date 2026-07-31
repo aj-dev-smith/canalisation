@@ -1236,3 +1236,80 @@ had any right to be, and not the thing ROADMAP 14 was worried about. Lowering `p
 `S` by making everything thicker and raises `f1` with it, which is the trade
 `39a_stem.js:49-69` already names: a stem stiff enough not to fall over does not sway like
 a plant.
+
+---
+
+## Apical control, and the gravitropic set point (2026-07-30, ROADMAP 13)
+
+Three species numbers arrived with the conifer. Two are switched off by default and
+the third has a zero point, which is why all eight shipped species came through
+unchanged organ for organ (`test/species.mjs`, before and after).
+
+### `apicalControl` — what fraction of the leader's rate a branch apex gets
+
+Borchert–Honda's L. The closed form is the whole of it:
+
+```
+    vigour of a lateral, relative to the apex dominating it   =   (1 - L) / L
+```
+
+exact, whatever the two subtree capacities are — the flux terms cancel at a fork.
+`test/tree.mjs` asserts it to 1e-9 across five values of L. So the number is readable
+straight off the crown you want, via the envelope from `test/conifer.mjs` section 3:
+
+```
+    half-angle = atan( k*sin(theta) / (zeta - k*cos(theta)) ),   k = (1-L)/L
+```
+
+| L | k = (1-L)/L | what it is |
+|---|---|---|
+| 0.50 | 1.000 | **unbiased.** Every apex in the plant runs at the leader's rate. The default, and the reason the catalogue did not move — it is *not* a no-op relative to the old hardcoded 0.72, but it is within 6% of it and measured to be indistinguishable across the eight |
+| 0.65 | 0.538 | |
+| 0.75 | 0.333 | |
+| **0.80** | **0.250** | **Ashfall Spire.** Measured crown half-angle 9.5deg against a Norway spruce's 8-15 |
+| 0.90 | 0.111 | a spire; branches barely leave the trunk |
+
+It replaced `(this.gen === 0 ? 1 : 0.72)` at `40_plant.js:138`, and it also had to be
+applied to `sp.internode` — `elongate` stretches the subapical zone at 3.6x the tip's own
+rate on shipped defaults and carried **no** generation penalty at all, which is the whole
+reason the pre-flight measured a taper slope of 0.94 where 0.72 was intended.
+
+⚠ **It is a stated number and the sweep cannot fix that.** Nobody has derived L; the
+Prusinkiewicz lab treats it as a knob and says so. The full flux partition was built to
+try and is falsified — see JOURNAL.
+
+### `agoGain` / `agoK` — the antigravitropic offset
+
+`agoGain` **ships at 0**, which is the orthotropic engine exactly. It is not a taper
+knob and it is not an angle; it is the size of one of two competing statocyte fluxes,
+and the angle is where they cancel. In the continuum limit the ring sum gives
+
+```
+    sin(theta*) = ago = agoGain * agoK^n / (agoK^n + iaa^n),     n = prm.nP = 2
+```
+
+so `agoK` is the auxin level at which the offset is half its maximum — the direct
+analogue of `kP` in `10_auxin.js`, read on the same Hill exponent.
+
+**`agoK` has to straddle the leader's auxin and a lateral's, and that is the whole of
+choosing it.** A lateral's statocyte auxin is essentially its own vigour, so at
+`apicalControl` 0.80 it sits at 0.25 while the leader sits at 1. Measured set points at
+`agoGain: 1.0`:
+
+| `agoK` | lateral (iaa 0.25) | what happens |
+|---|---|---|
+| 0.45 | 50deg | branches sweep up; reads as a young fir |
+| **0.90** | **66deg** | **Ashfall Spire.** Bang inside the measured GSA range for real laterals (WT Arabidopsis 63deg, SD 7) |
+| 1.60 | 79deg | near-horizontal, and a gen-2 branch would droop past level |
+
+Two things not to do. **Do not use `agoK` to widen the crown** — it moves the half-angle
+by about 3 degrees across its whole useful range while `apicalControl` moves it by
+tens, because the envelope depends on `k` far more strongly than on `theta`. And **do
+not raise `agoGain` above about 1.4**: `sin(theta*)` clamps at 1, so everything past
+that is a 90-degree branch and the knob has stopped meaning anything.
+
+The within-crown gradation is not tuned at all and should not be: an axis's statocyte
+auxin is its own apex plus every apex above it attenuated over `dominance`, so branches
+near the leader stand up and branches far below it lie out flat, measured at 52.9deg in
+the top quarter against 63.3deg in the bottom. That is the same field that decides
+whether a bud escapes, read a second time.

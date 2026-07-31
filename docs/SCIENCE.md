@@ -160,6 +160,58 @@ numbered list above; nothing draws a stem. It is a stated *magnitude* doing more
 work on what a viewer sees than the mechanism it sits inside, and the honest place
 for that is here rather than nowhere. TUNING.md carries the sweep.
 
+**A branch's ANGLE is not on the numbered list, and the reason is worth setting out
+because it very nearly was.** Until 2026-07-30 every axis wanted the same thing —
+`want = (0,1,0)`, leader and lateral alike — which is orthotropy and has exactly
+one fixed point. A conifer's laterals are plagiotropic, and the obvious way to get
+that is to state an angle per species. That would have been a new entry here and a
+bad one.
+
+What ships instead is a fixed point of a competition, and both halves of it are
+measured. Statoliths sediment onto whichever statocyte wall is lowest and PIN
+follows them there, which pumps auxin to the underside and bends the shoot up.
+Against it runs an antigravitropic offset, which is not inferred but unmasked: on a
+clinostat, with the gravity signal removed, Arabidopsis lateral shoots bend
+*outward*, "never observed in primary shoots" (Roychoudhry, Del Bianco, Kieffer &
+Kepinski 2013, Curr Biol 23:1497). The angle an axis holds is where the two fluxes
+cancel. Auxin sets the size of the offset — through RCN1/PP2A dephosphorylating
+PIN3 off the upper membrane (Roychoudhry et al. 2023, Nature Plants 9:1500) — so
+**more auxin means more vertical**, and the whole gradation of angle across a crown
+comes from that rather than from a table.
+
+Three things about it belong here rather than in a commit message:
+
+- **`sin(theta)` is nowhere in the code.** The angle enters once, as the component
+  of gravity acting *across* the axis, because that is the only part a statolith can
+  press a wall with. The sine law is a consequence of a projection, not a chosen
+  response curve. `test/tree.mjs` checks the wall sum against its own integral.
+- **The leader stays vertical with no flag saying so.** An offset is a push away
+  from vertical *in some direction*, and an axis launched straight up has no
+  dorsiventral plane to be pushed in. That is the clinostat sentence read forwards.
+  A lateral gets its plane from the axil it arose in, which is already emergent.
+- **One gain is stated** (`agoGain`, with `agoK` its half-saturation) and it ships
+  at zero, so the eight herbaceous species are the orthotropic engine exactly. That
+  is a rate constant in the same category as `rho` or `kP`, not a shape.
+
+⚠ **And the honest caveat, which is large.** Every molecular detail above — PIN
+identity, RCN1, the phospho-switch — is demonstrated in lateral **roots**. The 2023
+paper says explicitly that shoots are not addressed. For shoots the demonstrated
+level is only that the offset exists, that it requires auxin transport, and that its
+magnitude is set by auxin signalling in the gravity-sensing cells. This is an
+extrapolation to an aerial organ. It is also assumed to be angle-independent, and a
+2025 PNAS paper finds *every* graviresponse component angle-dependent.
+
+**A lateral's VIGOUR is a stated number, and that one is a real debt.** How fast a
+branch extends relative to the leader is `apicalControl`, the Borchert–Honda
+partition's L. It replaced a hardcoded `0.72` shared by all eight species, and it is
+better than what it replaced — L = 0.5 is an unbiased partition and gives every apex
+the leader's rate, so the number now has a meaning and a zero point — but nobody has
+derived it. The Prusinkiewicz lab says so plainly: *"It is not known whether apical
+control in nature is exerted through competition for resources, hormonal control, or
+both."* The full flux partition, with Q taken from subtree auxin traffic, was built
+to try to derive it and is **falsified**; see JOURNAL.md and `Plant._partition`. It
+ships off and is re-measurable.
+
 **Render views add nothing to this list, and that is worth stating rather than
 assuming.** `VIEWS` in `70_app.js` decides which channels of the simulation reach
 the screen — the lamina, the vasculature, the cells, the needles — and every one of

@@ -158,7 +158,7 @@ node test/phyllo.mjs                               # divergence angle statistics
 node test/margin.mjs                               # leaf outline, ASCII silhouette
 node test/fruit.mjs                                # fruits, ASCII radius map
 node test/flower2.mjs                              # full life cycle incl. axillary flowers
-node test/species.mjs                              # grow all eight species, print what each does
+node test/species.mjs                              # grow all nine species, print what each does
 node test/senesce.mjs                              # a dying blade, drawn: ASCII map of what still holds colour
 node test/fall.mjs                                 # a shed blade: is the fall a falling plate?
 node test/lamina.mjs                               # a blade at cell resolution: is there contrast to draw?

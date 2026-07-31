@@ -695,3 +695,39 @@ continuous quantity is compared against a threshold.
 It surfaced as a single species missing a closed form by 2.8% while seven hit it
 to 4e-16. A tolerance of 2% — which is what was written first, and which looks
 generous — would have passed it.
+
+## A general mechanism that has only ever run in one configuration is a special case wearing a general one's clothes (2026-07-30)
+
+Two bugs, both found the day an axis was first allowed to point somewhere other than
+straight up, and **neither is a mistake in the code that had it**. Both are exactly
+right for a vertical axis, which was the only kind there was.
+
+**1. Wander and circumnutation were in the world's frame.** They were added straight
+into `want[0]` and `want[2]` and then renormalised. On a near-vertical `want`, adding a
+horizontal offset tilts it — which is what they are for, and what makes an Ember Creeper
+a helix. On a branch holding 80 degrees off vertical, the same offset barely changes
+the elevation and swings the **azimuth** instead. A branch that ought to run out
+straight snakes.
+
+They belong in the plane *across* `want`, which is what circumnutation means — a helical
+search about the growing tip's own direction. For a vertical `want` the corrected form
+reproduces the old vectors exactly, chosen deliberately so the eight shipped species do
+not move: `test/species.mjs` is identical organ for organ before and after.
+
+**2. The azimuth had no restoring term, so it was a random walk.** `want` took its
+vertical plane from the *current* tip direction. Gravity only ever argues about
+elevation; nothing anywhere turns a shoot sideways. So every azimuthal perturbation was
+remembered and built on, and the tip integrated a drift.
+
+The measurement is the memorable part: a branch held a **correct 59-degree elevation
+along its entire length** — every segment, checked one by one — while its azimuth turned
+a full circle every nine segments. It corkscrewed 5.2 units up and 0.2 out. Every
+per-segment number was right and the branch was wrong. An axis now remembers the
+vertical plane it grew out in, which is the axil's own azimuth and is emergent.
+
+**What to take from it.** Both were invisible for months because the configuration that
+exposes them did not exist, and both were found within an hour of it existing. Before
+trusting that something is general, ask what it has actually been *run* on. And note
+that (2) was invisible to a per-segment check and obvious in a chord — the same shape of
+failure as `test/conifer.mjs` section 3b, where four numeric sections agreed with each
+other about a specimen that was the wrong way up.
