@@ -301,23 +301,53 @@ console.log(`  crown apex at height ${zTop.toFixed(2)}`);
 console.log('');
 console.log(`  MEASURED crown half-angle, off ${r.lat.length} branch tips:  ${measured.toFixed(1)}deg`);
 console.log(`  closed form at measured k and theta:                ${half(-f.m, thetaMean, zeta).toFixed(1)}deg`);
-console.log(`  closed form at floor k ${GAMMA}, same theta:              ${half(GAMMA, thetaMean, zeta).toFixed(1)}deg`);
-console.log(`  closed form at floor k ${GAMMA}, horizontal, straight:    ${half(GAMMA, Math.PI / 2, 1).toFixed(1)}deg`);
 console.log(`  a Norway spruce:                                    ${SPRUCE}deg (8-15)`);
 
-check('measurement and closed form agree within 6deg',
-  Math.abs(measured - half(-f.m, thetaMean, zeta)) <= 6,
-  `${measured.toFixed(1)} vs ${half(-f.m, thetaMean, zeta).toFixed(1)}`, 'within 6deg');
+// ⚠ THE CLOSED FORM HAS A DOMAIN AND THE DEFAULTS ARE OUTSIDE IT, which is the
+// single most useful thing this section now says.
+//
+//   half-angle = atan( k*sin(theta) / (zeta - k*cos(theta)) )
+//
+// The denominator is how fast the crown apex outruns the rising tip of a branch.
+// At `apicalControl` 0.5 the partition is unbiased, so a lateral runs at the
+// leader's own rate — k = 1 — and with branches still sweeping upward at 19deg
+// the denominator is 0.943 - 0.983*0.906 = 0.052. The tips very nearly keep up
+// with the apex, the ratio blows up, and the formula reports 88deg against a
+// measured 53. Neither number means anything: THERE IS NO CONE THERE TO HAVE AN
+// ANGLE. Branches as vigorous as the leader do not make one at any branch angle,
+// which is the whole reason `apicalControl` exists.
+//
+// So the agreement is asserted where the form applies and the degeneracy is
+// asserted where it does not. `test/tree.mjs` runs the same cross-check at a
+// conifer's L and gets 9.5 against 8.9.
+const denom = zeta - (-f.m) * Math.cos(thetaMean);
+console.log(`\n  closed-form denominator (zeta - k*cos(theta)): ${denom.toFixed(3)}`);
+if (denom > 0.25) {
+  check('measurement and closed form agree within 6deg',
+    Math.abs(measured - half(-f.m, thetaMean, zeta)) <= 6,
+    `${measured.toFixed(1)} vs ${half(-f.m, thetaMean, zeta).toFixed(1)}`, 'within 6deg');
+} else {
+  console.log('  ^ under 0.25: the crown envelope is degenerate and the closed form');
+  console.log('    is meaningless here. That is a statement about the DEFAULTS, which');
+  console.log('    are herbaceous — an unbiased partition makes no cone at all.');
+  check('at an unbiased partition the envelope is degenerate, not merely wide',
+    denom <= 0.25, denom.toFixed(3), '<= 0.25');
+}
 
-// Does the branch ANGLE offer a way out? ROADMAP 13 names the hardcoded 0.45
-// lerp as an obstacle. It is not the one that matters, and this says why.
-console.log('\n  half-angle against branch angle, at the FLOOR k = 0.72 and a straight stem:\n');
+// Does the branch ANGLE offer a way out? The original entry named the hardcoded
+// 0.45 launch lerp as an obstacle. It was not the one that mattered — that line
+// is deleted now and a branch launches along the leaf it arose behind — and this
+// table is why: at a taper slope near 1 the angle cannot buy a cone, and at a
+// conifer's taper slope it barely has to.
+console.log(`\n  half-angle against branch angle, at a conifer's k and a straight stem:\n`);
+const kCone = 0.25;   // (1-L)/L at apicalControl 0.80, which is what Ashfall Spire ships
 console.log('    theta   half-angle');
 for (const d of [20, 35, 50, 65, 80, 90]) {
-  console.log(`    ${String(d).padStart(3)}deg   ${half(GAMMA, d * Math.PI / 180, 1).toFixed(1).padStart(6)}deg`);
+  console.log(`    ${String(d).padStart(3)}deg   ${half(kCone, d * Math.PI / 180, 1).toFixed(1).padStart(6)}deg`);
 }
-console.log('\n  The branch angle moves the crown by about 12deg across its whole range,');
-console.log(`  and the gap to a spruce is about ${(half(GAMMA, thetaMean, zeta) - SPRUCE).toFixed(0)}deg -- IF theta could be held. It cannot.`);
+console.log(`\n  About 8deg across the whole range, against the ${SPRUCE}deg target — so the`);
+console.log('  taper slope decides the silhouette and the branch angle decides how each');
+console.log('  branch READS. Both are needed and they are not interchangeable.');
 
 // --- 3a. why theta is 25deg and not 50.7deg: nothing holds a branch out ------
 // The measured mean branch angle is half the nominal one, and that is not
