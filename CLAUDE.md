@@ -103,6 +103,15 @@ script in `tools/` passed — they all navigate, wait, and screenshot, so a froz
 tab and a busy one are the same script. It measures the gap between animation
 frames and exits non-zero past 250ms.
 
+**⚠ IT IS RED ON `main` RIGHT NOW, AND THAT IS EXPECTED.** Worst gap ~292ms against a
+250ms budget, where `main` before #32 was 141ms. It is **not** reporting a stall: every
+one of its worst frames lands at `debt 0`, which is the *grown* stand's ordinary
+per-frame cost rather than anything in the warm loop, and its verdict line was written
+when a stand that heavy could not exist. Read its **median and p99** instead (21.7ms and
+59.8ms, both better than before #32). It will stay red until ROADMAP 10b lands. **Do not
+raise its threshold to make it pass** — that deletes the only signal anyone has about
+the thing 10b exists to fix.
+
 **Ten of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
 `petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`, `plagio.mjs`, `taper.mjs`,
 `tree.mjs`.** Only
