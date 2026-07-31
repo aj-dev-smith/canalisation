@@ -758,3 +758,40 @@ distance, a world position, a chord). It will pass for years, because nothing el
 the pose — and then something stiffens or softens a beam somewhere and the check reports
 a change in a mechanism that did not change. The assertion is on the schedule now and
 the distance is printed with a line saying what it is.
+
+## A level-of-detail law can hold on every specimen the gate names (2026-07-31)
+
+`test/views.mjs` asserts that a blade's cell view conserves drawn area from 6 to 96
+units — the same conservation the vein cull obeys, stated for discs. It does, on
+everything CI runs it against. Give `Ashfall Spire` a needle and it **fails**:
+
+    node test/views.mjs 'Ashfall Spire'
+      eye distance   cells drawn   total drawn area
+                6            58      1.000x
+               12            15      0.954x
+               24             4      0.990x
+               48             1      0.861x     <- FAIL, 8% tolerance
+               96             1      0.861x
+
+The law is `nDraw = max(1, round(T.n * shrink))` with each kept cell's radius scaled by
+`sqrt(T.n / nDraw)`, which conserves area exactly **if every cell in the prefix is
+drawn and every cell is the same size**. Neither is quite true: the loop skips cells
+that fall outside the outline, and a cell's drawn radius comes from its own baked
+half-width, so which cell survives at the one-cell floor decides the answer. A paddle
+has enough cells that the tail never gets that granular. A needle reaches one cell two
+distance-steps earlier and sits there.
+
+**It is a real weakness in the law rather than a wrong tolerance, and it should not be
+fixed by widening the 8%.** Conserving *count* is a proxy for conserving *area*; the
+honest version scales by the ratio of summed cell areas over the prefix, which is a
+prefix sum that could be baked into `cellTable` alongside everything else it bakes.
+
+**The part worth carrying, though, is how nearly nobody would have seen it.** CI runs
+this file twice and neither run names the conifer — one names `Cathedral Fern` and the
+other takes the garden, whose LOD section reads a fern. Both are green with this in the
+tree, and so is `smoke.mjs`. It was found only because the needle work ran the harness
+against the species it was changing.
+
+**So: after changing a species, run the whole `test/` suite against THAT species, not
+the suite.** A gate names its subjects, and a law that holds for the subjects it names
+is not a law you have checked.
