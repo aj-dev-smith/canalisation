@@ -41,6 +41,7 @@ export const LEAF_DEFAULTS = {
   lobeDepth: 0.16,
   fenestrate: 0.0,   // programmed cell death between veins (monstera holes)
   aspect: 0.44,      // width / length
+  aspectFloor: 0.12, // how narrow a margin is allowed to make the lattice
   furl: 0.42,        // how tightly the immature tip is rolled
   laminaComp: 0.12,  // gradient competence inside the blade
 };
@@ -189,7 +190,17 @@ export class Leaf {
     if (!this.built) {
       this.margin.step(dt);
       if (this.margin.mature) {
-        this.o.aspect = Math.max(0.12, this.margin.aspect);
+        // THE FLOOR IS A GUARD ON THE LATTICE, NOT A STATEMENT ABOUT LEAVES,
+        // and it was hardcoded at 0.12 and shared by every species. Probed by
+        // making it overridable: at 0.05 a margin's own 0.073 takes over and the
+        // lattice still builds — 103 cells against 64, canalising normally — so
+        // it was over-conservative rather than load-bearing. It has to be a
+        // per-species option because a needle is the only thing that wants to
+        // go under it, and `test/venation.mjs` is the reason a needle is worth
+        // having: at that aspect the blade canalises ONE bundle carrying 80% of
+        // mid-blade traffic, n50 = 1, which is a needle's single unbranched
+        // midvein. Nothing draws a needle; a narrow margin is enough.
+        this.o.aspect = Math.max(this.o.aspectFloor, this.margin.aspect);
         this._build();
         this.built = true;
       }

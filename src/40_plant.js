@@ -60,6 +60,155 @@ function updateBend(org) {
   org.bendH = bendOf(org).thetaH;
 }
 
+// ---------------------------------------------------------------------------
+// THE GRAVITROPIC SET POINT — why a branch is not simply vertical
+//
+// Every axis in this engine used to want the same thing: `want = (0,1,0)`, for
+// the leader and for a branch alike. That is orthotropy, and it has exactly one
+// fixed point. A conifer's laterals are PLAGIOTROPIC — they hold a near
+// horizontal angle for life — so with one set point the crown came out a vase,
+// widest at the top, with the long lower branches curving up over the leader.
+// `test/conifer.mjs` measured that and `test/tree.mjs` is where it is now
+// checked the other way round.
+//
+// The angle is not drawn. It is the fixed point of a competition between two
+// auxin fluxes in the same tissue, and both are measured:
+//
+//   GRAVITROPISM. Statoliths sediment onto whichever statocyte wall is lowest,
+//   PIN follows them to that membrane, auxin is pumped to the underside, the
+//   underside elongates, the shoot bends up. Alone this has one fixed point,
+//   straight up.
+//
+//   THE ANTIGRAVITROPIC OFFSET. On a clinostat — gravity signal removed —
+//   Arabidopsis lateral shoots bend OUTWARD, "never observed in primary
+//   shoots". So a second component is always pushing the organ away from
+//   vertical, and it is unmasked the moment gravity stops arguing with it.
+//   (Roychoudhry, Del Bianco, Kieffer & Kepinski 2013, Curr Biol 23:1497–1504.)
+//
+// The gravitropic set point is where they cancel: "angle-dependent variation in
+// downward gravitropic auxin flux acting against angle-independent upward,
+// antigravitropic flux." The two are separable down to the carrier — PIN7 to
+// the UPPER statocyte membrane is the antigravitropic one, PIN3 to the LOWER is
+// the gravitropic one, and auxin shifts PIN3 downward through RCN1/PP2A
+// dephosphorylation (Roychoudhry et al. 2023, Nature Plants 9:1500–1513). So
+//
+//        MORE AUXIN  ->  SMALLER OFFSET  ->  MORE VERTICAL
+//
+// and that direction is the thing to get right. Reversed, the whole silhouette
+// inverts — vigorous shoots would flop and starved ones would spire.
+//
+// ⚠ EVERY MOLECULAR DETAIL ABOVE IS DEMONSTRATED IN LATERAL ROOTS. The 2023
+// paper is explicit that shoots are not addressed. For shoots the demonstrated
+// level is that the offset exists, that it needs auxin transport, and that its
+// magnitude is set by auxin signalling in the gravity-sensing cells. Which
+// shoot PINs carry it, and with what polarity, is unknown. This is an
+// extrapolation to an aerial organ and it is labelled as one here rather than
+// in a commit message.
+//
+// ⚠ And the sine law is a modelling assumption, not a measurement: a 2025 PNAS
+// paper finds every graviresponse component angle-dependent, including PIN
+// polarisation, which undercuts the angle-independence the balance assumes.
+// Nothing below writes a sine down — see `statocyteFlux`.
+// ---------------------------------------------------------------------------
+
+// How many walls the statocyte ring is resolved over. A resolution, not a
+// physical quantity: `test/tree.mjs` sweeps it and the set point it produces
+// moves by under a hundredth of a degree past sixteen.
+export const STATOCYTE_WALLS = 16;
+
+// The net PIN-mediated auxin flux across that ring, resolved antiparallel to
+// gravity, for a tip whose transverse gravity component is `st` and whose
+// constitutive offset is `ago`. Positive means the offset is winning and the
+// tip is being driven further from vertical.
+//
+// NOTHING HERE WRITES sin(theta). The angle enters once, as `st` — the part of
+// gravity that acts ACROSS the axis, which is the only part statoliths can
+// sediment with. Along the axis they press on an end wall and say nothing about
+// which way is up. That projection IS the sine law, and it arrives as geometry
+// rather than as a chosen response curve.
+export function statocyteFlux(st, ago, walls = STATOCYTE_WALLS) {
+  let J = 0;
+  for (let m = 0; m < walls; m++) {
+    // the wall's outward normal resolved along the transverse component of
+    // gravity: +1 is the wall facing straight down, -1 the one facing up
+    const c = Math.cos((m + 0.5) * TAU / walls);
+    const pinDown = Math.max(0, c) * st;    // statoliths, and the PIN that follows them
+    const pinUp = Math.max(0, -c) * ago;    // the constitutive upper-membrane carrier
+    J += (pinUp + pinDown) * -c;            // each wall's flux, resolved upward
+  }
+  return J / walls;
+}
+
+// The angle from vertical at which that sum crosses zero. Bisected rather than
+// solved, deliberately: the set point stays the zero of whatever the wall sum
+// is, so changing how PIN is allocated over the ring moves the angle without
+// anything here having to be re-derived.
+export function gsaOf(ago, walls = STATOCYTE_WALLS) {
+  if (!(ago > 0)) return 0;
+  if (statocyteFlux(1, ago, walls) > 0) return Math.PI / 2;   // the offset wins outright
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 30; i++) {
+    const m = 0.5 * (lo + hi);
+    if (statocyteFlux(m, ago, walls) > 0) lo = m; else hi = m;
+  }
+  return Math.asin(0.5 * (lo + hi));
+}
+
+// The offset's magnitude, which is the one thing auxin sets. The response curve
+// is not invented here: `10_auxin.js` already writes auxin's control of PIN as a
+// Hill function with exponent `nP`, and this is that same curve read the other
+// way up — auxin raises RCN1/PP2A, which dephosphorylates the carrier and moves
+// it off the upper membrane.
+export function agoOf(iaa, sp, prm) {
+  if (!(sp.agoGain > 0)) return 0;
+  const n = (prm && prm.nP) || 2;
+  const k = Math.pow(sp.agoK, n);
+  return sp.agoGain * k / (k + Math.pow(Math.max(0, iaa), n));
+}
+
+// ---------------------------------------------------------------------------
+// APICAL CONTROL — what sets how fast a lateral extends
+//
+// The forestry literature draws a line the engine did not. Apical DOMINANCE is
+// control over whether a bud opens at all; apical CONTROL is suppression of the
+// vigour of a branch that has already opened. They are distinct and they are
+// ANTI-correlated: conifers have weak dominance and strong control, oaks the
+// reverse (Cline & Harrington 2007, Can J For Res 37:74–83; Brown, McAlpine &
+// Kormanik 1967, Am J Bot 54:153–162). One `exp(-d/dominance)` field was being
+// asked to be both, and one decay length cannot be weak and strong at once.
+//
+// So control is a PARTITION, not a field. Resource arriving at a fork divides
+// between the two subtrees in proportion to their capacities, biased by one
+// number L:
+//
+//   v_m = v * L*Q_m / (L*Q_m + (1-L)*Q_l)          the parent's continuation
+//   v_l = v * (1-L)*Q_l / (L*Q_m + (1-L)*Q_l)      the branch
+//
+// (Borchert & Honda 1984; Palubicki, Horel, Longay, Runions, Lane, Mech &
+// Prusinkiewicz 2009, ACM TOG 28(3):58.) In the published model Q is LIGHT,
+// computed by shadow propagation. There is no light field here — so Q is the
+// auxin traffic a subtree delivers to the fork, which is the quantity
+// `updateRadii` already sizes a stem by. NOBODY HAS PUBLISHED THAT
+// SUBSTITUTION; it is the experiment, and `test/tree.mjs` is where it is run.
+//
+// ⚠ Auxin is NOT the apical-control signal — three independent negatives, the
+// cleanest being that auxin applied to an already-growing dominant shoot does
+// not restore control at all. That is a negative about auxin CONCENTRATION as
+// an inhibitor arriving from above. This is a competition for a partitioned
+// flux, which is a different claim; it is not licensed by those experiments and
+// it is not refuted by them either. See docs/research_7_30_26.md §1.3 and §1.6.
+//
+// L is a stated number and is defended as one rather than apologised for: "It is
+// not known whether apical control in nature is exerted through competition for
+// resources, hormonal control, or both." Nobody has derived it. 0.5 is the
+// unbiased partition — proportional share, no bias either way.
+//
+// What this buys that `exp(-d/lambda)` could not: a branch's share depends on
+// what it has already built, so it is a RATCHET with memory. The bottlebrush
+// theorem — that ANY multiplier reading only distance-below-apex gives a
+// cylinder or a straight cone and never a taper — does not apply to it.
+// ---------------------------------------------------------------------------
+
 class Axis {
   constructor(plant, base, dir, gen, seed) {
     this.plant = plant;
@@ -70,6 +219,27 @@ class Axis {
     this.radii = [0.02];
     this.dir = v3(); v3norm(this.dir, dir);
     this.up = v3(0, 1, 0);
+    // THE VERTICAL PLANE THIS AXIS GROWS OUT IN, remembered rather than re-read
+    // off the tip every step. Gravity only ever argues about elevation — there
+    // is no force that turns a shoot sideways — so a branch's azimuth has no
+    // restoring term, and taking it from the current tip direction makes it a
+    // random walk that wander and circumnutation drive. Measured, once the axes
+    // stopped being vertical: a branch held a correct 59-degree elevation the
+    // whole way up while its azimuth turned a full circle every nine segments,
+    // so it corkscrewed 5.2 units up and 0.2 out. This is the axil's own
+    // azimuth, which is emergent, and it is what the set point is held in.
+    //
+    // AND AN AXIS THAT LAUNCHED STRAIGHT UP HAS NO SUCH PLANE, which is where
+    // the leader's orthotropy comes from — there is no flag anywhere saying a
+    // primary shoot is different. An offset is a push away from vertical in some
+    // direction, and a shoot with no dorsiventral axis has no direction to be
+    // pushed in. That is the clinostat result read forwards: outward curvature
+    // is unmasked in lateral shoots and "never observed in primary shoots",
+    // because a primary shoot has no side to bend towards. A lateral gets its
+    // plane from the axil it arose in, which is emergent.
+    this.azim = v3(dir[0], 0, dir[2]);
+    if (v3len(this.azim) < 1e-4) this.azim = null;
+    else v3norm(this.azim, this.azim);
     // a stable reference frame carried up the axis, so organ angles mean
     // something consistent from node to node
     this.ref = v3();
@@ -89,6 +259,13 @@ class Axis {
     this.alive = true;
     this.length = 0;
     this.twist = 0;
+    // Share of the leader's extension rate this apex commands, and the set
+    // point it is holding. Both are computed, once per step, by `Plant`; the
+    // leader starts at 1 because everything is expressed as a share of it.
+    this.vigour = 1;
+    this.gsa = 0;
+    this.iaa = 0;
+    this.attachOrgan = null;   // the organ in whose axil this shoot arose
     const P = plant.prm, M = { ...plant.mo };
     // a lateral shoot has a smaller growing point than the leader, which is
     // both true of real plants and considerably cheaper
@@ -135,17 +312,44 @@ class Axis {
     m.step(dt);
 
     // --- elongate ------------------------------------------------------------
-    const rate = sp.elongation * (this.gen === 0 ? 1 : 0.72) * (this.floral ? 0.22 : 1);
+    // `this.vigour` was `(this.gen === 0 ? 1 : 0.72)` — one hardcoded number
+    // shared by all eight species, which is why `test/conifer.mjs` found the
+    // taper slope floored in (0.72, 1) with nothing able to reach below it. It
+    // is a share of a partitioned flux now; see the apical-control note above.
+    const rate = sp.elongation * this.vigour * (this.floral ? 0.22 : 1);
     const tip = this.tipPos();
-    // tropism: up, plus a slow drift that gives the axis its character
+    // WHERE THE TIP IS TRYING TO POINT, which is not simply up. `gsa` is the
+    // angle from vertical at which this axis's two statocyte fluxes cancel;
+    // zero recovers the orthotropic axis this engine had until now. The offset
+    // is applied as an ELEVATION in the vertical plane the tip is already
+    // heading in, so wander and nutation go on owning the azimuth.
     const want = v3(0, 1, 0);
+    if (this.gsa > 1e-4 && this.azim) {
+      const cs = Math.cos(this.gsa), sn = Math.sin(this.gsa);
+      v3set(want, this.azim[0] * sn, cs, this.azim[2] * sn);
+    }
+    // WANDER AND CIRCUMNUTATION ARE PERTURBATIONS OF THE TIP'S OWN DIRECTION,
+    // not of the world's vertical, and until an axis could point somewhere other
+    // than up there was no way to tell the difference. Both used to be added
+    // straight into `want[0]` and `want[2]`: on a near-vertical `want` that
+    // tilts it, which is what they are for. On a branch holding 80 degrees off
+    // vertical the same offset swings the AZIMUTH instead, and the branch coils
+    // — measured chord 17 degrees on a branch whose every segment was laid down
+    // at 70-80. The offsets go in the plane ACROSS `want` now, which is what
+    // they always meant. For a vertical `want` this reproduces the old vectors
+    // exactly, so the eight shipped species do not move.
+    _zga[0] = 1; _zga[1] = 0; _zga[2] = 0;
+    v3addScaled(_zga, _zga, want, -v3dot(_zga, want));
+    if (v3len(_zga) < 1e-4) { _zga[0] = 0; _zga[1] = 0; _zga[2] = 1; v3addScaled(_zga, _zga, want, -v3dot(_zga, want)); }
+    v3norm(_zga, _zga);
+    v3cross(_zgb, _zga, want);
     const t = this.age * 0.004 + this.seed;
-    want[0] += Math.sin(t) * sp.wander;
-    want[2] += Math.cos(t * 1.31) * sp.wander;
     // circumnutation — the slow helical search a real growing tip performs
     const nu = this.age * sp.nutation + this.seed * 0.7;
-    want[0] += Math.cos(nu) * sp.nutAmp;
-    want[2] += Math.sin(nu) * sp.nutAmp;
+    const wa = Math.sin(t) * sp.wander + Math.cos(nu) * sp.nutAmp;
+    const wb = Math.cos(t * 1.31) * sp.wander + Math.sin(nu) * sp.nutAmp;
+    v3addScaled(want, want, _zga, wa);
+    v3addScaled(want, want, _zgb, wb);
     v3norm(want, want);
     v3lerp(this.dir, this.dir, want, clamp(sp.tropism * dt, 0, 1));
     v3norm(this.dir, this.dir);
@@ -237,13 +441,25 @@ class Axis {
         if (suppressed > sp.branching) continue;
         if (this.rnd() > 0.35) { org.branched = true; continue; }
         org.branched = true;
+        // A SHOOT LAUNCHES ALONG THE LEAF IT AROSE BEHIND, and that is all.
+        // This line used to be `v3lerp(dir, org.frame.x, v3(0,1,0), 0.45)` — 45%
+        // of the way to vertical, hardcoded, undocumented and shared by every
+        // species. `test/conifer.mjs` showed it was not even a branch angle:
+        // tropism forgets an initial direction in about fifty steps and a branch
+        // then grows for thousands, so it was an initial condition wearing an
+        // angle's clothes. The angle a branch holds is `gsa`, and `org.frame.x`
+        // is already emergent — where the axil is, is where the shoot points.
         const dir = v3();
-        v3lerp(dir, org.frame.x, v3(0, 1, 0), 0.45);
+        v3copy(dir, org.frame.x);
         v3norm(dir, dir);
         // competent plant → this bud makes a flower rather than a branch
         const flowering = this.plant.florigen > sp.florigenThresh;
         if (flowering && this.plant.flowerCount() >= sp.maxFlowers) break;
         const ax = this.plant.addAxis(org.frame.o, dir, this.gen + 1, org.vStem, this);
+        // the axil it came out of, kept live rather than copied: `org.birthLen`
+        // is advected by `elongate` every step, so a stored number would drift
+        // off the fork it names and the partition would divide at the wrong place
+        ax.attachOrgan = org;
         if (flowering) ax.goFloral(sp, true);
         break;
       }
@@ -420,9 +636,17 @@ class Axis {
     const total = oldArc[n - 1];
 
     newArc[0] = 0;
+    // THE SUBAPICAL STRETCH IS TAXED BY VIGOUR TOO, and it did not used to be.
+    // That omission is what floored the taper: `elongate` overwrites
+    // `this.length`, so on shipped defaults it contributed 3.6x the tip's own
+    // extension with no generation penalty anywhere in it, and the measured
+    // taper slope came out 0.94 where the 0.72 above was supposed to put it.
+    // A suppressed shoot has short internodes as well as a slow tip; both are
+    // the same shoot growing less.
+    const stretch = sp.internode * this.vigour;
     for (let i = 0; i < n - 1; i++) {
       const belowTip = total - oldArc[i];
-      const e = sp.internode * Math.exp(-belowTip / sp.internodeSpan);
+      const e = stretch * Math.exp(-belowTip / sp.internodeSpan);
       const L = segL[i] * (1 + e * dt);
       newArc[i + 1] = newArc[i] + L;
       v3addScaled(this.pts[i + 1], this.pts[i], dirs[i], L);
@@ -487,6 +711,57 @@ class Axis {
     org.bendS = clamp(org.birthLen, 0, this.length);
   }
 
+  // Where along the parent this shoot forks off, in the parent's own material
+  // coordinate. Read live off the axil organ, because that odometer is advected
+  // by `elongate` and a copied number would drift off the fork it names.
+  attachLen() { return this.attachOrgan ? this.attachOrgan.birthLen : 0; }
+
+  // THE AUXIN TRAFFIC A SUBTREE DELIVERS TO ITS OWN BASE, in the r^3 units
+  // `updateRadii` already works in. Every organ is a source, every apex is a
+  // source, and every branch hands its whole total to the axis it grew from —
+  // which is conservation at a fork, and is what both Murray's law and the pipe
+  // model assume of one. Cached per step: `Plant.step` stamps `_flowAt`.
+  subtreeFlow(sp) { return this.flowAbove(-1, sp); }
+
+  // The same total, counting only what enters above arc position `s`. This is
+  // Q_m at a fork: the parent's own continuation, everything it carries above
+  // the branch point, and nothing below.
+  flowAbove(s, sp) {
+    let f = (this.alive && this.meristem) ? sp.apexFlow : 0;
+    if (this.fruit) f += sp.fruitFlow;
+    for (const org of this.organs) if (org.birthLen > s) f += sp.organFlow;
+    for (const k of this.kids) if (k.attachLen() > s) f += k.subtreeFlow(sp);
+    return f;
+  }
+
+  // THE AUXIN THIS AXIS'S OWN BENDING ZONE SITS IN, which is what sets the size
+  // of its antigravitropic offset and therefore the angle it holds.
+  //
+  // Every living apex is an auxin source and the stream drains rootward through
+  // the statocytes below it, so a shoot sees its own apex at no distance at all
+  // plus every apex above it on the path to the root, each attenuated over
+  // `dominance`. That is the SAME field, with the same decay length, that
+  // already decides whether a bud escapes — one field, two readouts, and the
+  // second one costs no new constant.
+  //
+  // An apex's strength is its vigour, because a suppressed growing point is a
+  // smaller auxin source; that is the coupling that makes vigour and angle one
+  // story rather than two. What it predicts, and it is worth stating because it
+  // is checkable: a branch high in the crown is bathed in the leader's stream
+  // and stands up; one far below it is not and lies out flat. And decapitation
+  // — less auxin — drives branches MORE horizontal, which is the documented
+  // sign and the one naive coupling gets backwards.
+  statocyteIAA(sp) {
+    let a = (this.alive && this.meristem) ? this.vigour : 0;
+    const base = this.pts[0];
+    for (let ax = this.parent; ax; ax = ax.parent) {
+      if (!ax.alive || !ax.meristem) continue;
+      const d = v3len(v3sub(_zs0, ax.tipPos(), base));
+      a += ax.vigour * Math.exp(-d / sp.dominance);
+    }
+    return a;
+  }
+
   // Murray's law: a stem is exactly as thick as the traffic it carries.
   // Organs are then placed by ARC LENGTH along the axis, interpolated between
   // stem points, using a frame that is parallel-transported up the shoot. The
@@ -536,10 +811,21 @@ class Axis {
     // above, plus steady secondary thickening with distance below the tip.
     // The old version counted polyline vertices, so the whole stem stepped
     // thicker every time the shoot gained a point.
+    // Traffic entering above each station, as (arc, flow) pairs. A BRANCH IS
+    // TRAFFIC TOO, and it did not used to be: `bl` held only this axis's own
+    // organs, so a branch's whole subtree vanished at the fork and the stem
+    // below it was sized as if the branch were not there. With three or four
+    // laterals that is a small error; with a crown of two dozen it is the
+    // difference between a trunk and a twig, and it is a violation of the one
+    // thing Murray's law and the pipe model agree on — flow is conserved at a
+    // junction. `sp.apexFlow` is here for the same reason: a growing point is
+    // the plant's largest single auxin source, which is the whole basis of
+    // apical dominance, and it was the one source not being counted.
     const bl = this._bl || (this._bl = []);
     bl.length = 0;
-    for (const org of this.organs) bl.push(org.birthLen);
-    bl.sort((a, b) => a - b);
+    for (const org of this.organs) bl.push([org.birthLen, sp.organFlow]);
+    for (const k of this.kids) bl.push([k.attachLen(), k.subtreeFlow(sp)]);
+    bl.sort((a, b) => a[0] - b[0]);
     // The exponent is Murray's law's, and Murray's law is measured to hold only
     // "as long as they do not function additionally as supports for the plant
     // body" (McCulloh, Sperry & Adler 2003, Nature 421:939-942). Every axis here
@@ -552,12 +838,14 @@ class Axis {
     const p = sp.radiusExp;
     const tp = Math.pow(sp.tipRadius, p);
     const conv = Math.pow(sp.tipRadius, p - 3);
-    let above = bl.length, k = 0;
+    let above = 0;
+    for (const e of bl) above += e[1];
+    let k = 0;
     for (let i = 0; i < n; i++) {
-      while (k < bl.length && bl[k] <= arc[i]) { k++; above--; }
+      while (k < bl.length && bl[k][0] <= arc[i]) { above -= bl[k][1]; k++; }
       const below = total - arc[i];
       this.radii[i] = Math.pow(
-        tp + (sp.organFlow * above + sp.thicken * below
+        tp + (above + sp.thicken * below
           + (this.fruit ? sp.fruitFlow : 0)) * conv,
         1 / p) * sp.radiusScale;
     }
@@ -623,6 +911,7 @@ class Axis {
 }
 
 const _zs0 = v3(), _zs1 = v3(), _zp = v3(), _zax = v3(), _zu = v3(), _zd = v3();
+const _zga = v3(), _zgb = v3();
 const _wind = v3(), _fpl = v3();
 const _zdir = v3(), _zside = v3(), _znrm = v3();
 const _zsx = v3(1, 0, 0), _zsy = v3(0, 1, 0);
@@ -756,6 +1045,33 @@ export const SPECIES_DEFAULTS = {
   organBudget: 96,   // across the whole specimen, not per shoot
   tipRadius: 0.05,
   organFlow: 0.00035,
+  // What a growing point is worth as an auxin source, in the same r^3 flow units
+  // as `organFlow`. It is the traffic `tipRadius` already expresses as a radius —
+  // 0.05^3 — kept separately because the partition needs it as a flow, and
+  // because a species may make its apex a larger source than its stem tip is
+  // wide. It is deliberately NOT added to `updateRadii`'s own stations: `tp`
+  // there is this same quantity and adding both would count the apex twice.
+  apexFlow: 0.000125,
+  // Borchert–Honda's apical control, and the one stated number in the partition
+  // that replaced the hardcoded 0.72. 0.5 is unbiased — each subtree takes its
+  // proportional share and no fork favours the leader. Above 0.5 the leader is
+  // favoured at every fork it passes and the crown becomes excurrent; conifers
+  // want it high, oaks near the middle. See the note above `class Axis`.
+  apicalControl: 0.5,
+  // Switches on the FULL flux partition instead of its first-order term.
+  // Falsified and kept runnable — see `Plant._partition` and `test/tree.mjs`
+  // section 3. Nothing in the running piece reads it.
+  fluxPartition: false,
+  // THE ANTIGRAVITROPIC OFFSET, and it ships OFF. Zero recovers the orthotropic
+  // axis this engine had until now — every shipped species is a herb whose
+  // laterals do stand up — so a species that wants plagiotropic branches turns
+  // it on, in the same way `fenestrate` turns on programmed cell death. It is
+  // one gain, not an angle: the angles across a crown come from auxin.
+  agoGain: 0,
+  // The statocyte's half-saturation: the auxin level at which the offset is half
+  // its maximum. The analogue of `kP` in `10_auxin.js`, and read on the same
+  // Hill exponent `nP`.
+  agoK: 0.45,
   radiusScale: 1.0,
   // How radius answers traffic. 3 is Murray's law and is measured only in
   // conduits that do NOT also support the plant; a self-supporting axis reverts
@@ -873,9 +1189,99 @@ export class Plant {
     return true;
   }
 
+  // ONE PASS THAT DECIDES HOW FAST EVERY APEX GROWS AND WHICH WAY IT POINTS.
+  //
+  // Both come off the same partition and are run together for that reason: a
+  // shoot's share of the flux is also what makes its apex an auxin source, and
+  // the auxin at a shoot's own statocytes is what sizes its offset. Vigour and
+  // angle are one story, not two, and running them apart would let them
+  // disagree by a step.
+  //
+  // Cheap enough to run every step — the recursion is over axes, of which a
+  // specimen has at most a few dozen, and the flow sums are cached for the
+  // duration of the pass.
+  updateVigour(sp) {
+    const L = clamp(sp.apicalControl, 0.001, 0.999);
+    if (sp.fluxPartition) this._partition(sp, L);
+    else {
+      // WHAT SHIPS: the partition's own first-order answer, which is one line.
+      // At a single fork the density ratio is exactly (1-L)/L whatever the two
+      // capacities are — the flux terms cancel — so a branch apex extends at
+      // that fraction of the apex dominating it, and a second-generation branch
+      // at the square of it. L = 0.5 is unbiased and gives every apex the
+      // leader's rate, which is why the eight shipped species did not move when
+      // this replaced the hardcoded 0.72.
+      //
+      // Expressed as a share OF THE LEADER'S, not as an absolute. There is no
+      // carbon in this model and no total resource to divide, so only the ratio
+      // is a quantity the engine can honestly claim — and the ratio is what
+      // apical control means. The cost is real and worth writing down: a crown
+      // filling in does not slow its own leader here, so the age-dependent
+      // drift from excurrent to decurrent form does not fall out.
+      const walk = (ax, d) => { ax.vigour = d; for (const k of ax.kids) walk(k, d * (1 - L) / L); };
+      walk(this.main, 1);
+    }
+    // …and now the angle, which reads the vigours just set.
+    for (const a of this.axes) {
+      a.iaa = a.statocyteIAA(sp);
+      a.gsa = gsaOf(agoOf(a.iaa, sp, this.prm));
+    }
+  }
+
+  // THE FULL FLUX PARTITION, AND IT SHIPS OFF — a falsified mechanism kept
+  // runnable, in the same category as the second inhibitor at `rhoI: 0` and the
+  // whole-plant stream in `38_shoot.js`. A negative result you cannot
+  // re-measure is just a story. `test/tree.mjs` section 3 turns it on.
+  //
+  // What is carried down the tree is a DENSITY rather than an amount, and that
+  // is the whole of why it is fifteen lines. Between forks the stream passes
+  // organs, and an organ takes its proportional share of what goes by, so the
+  // share PER UNIT of capacity is unchanged by everything except a fork. Every
+  // apex has the same capacity `apexFlow`, so the ratio of two apices' shares
+  // is the ratio of the densities reaching them and `apexFlow` cancels out of
+  // the answer entirely. (Carrying the amount instead was the first version and
+  // it compared a lateral's WHOLE SUBTREE share against the leader's top-segment
+  // share — not like for like. It crushed the catalogue: Hoarfrost Thicket lost
+  // two thirds of its organs.)
+  //
+  // ⚠ WHY IT IS OFF. The leader takes more than its proportional share at each
+  // fork, so the density in the leader RISES as it climbs, and a branch attached
+  // higher taps a richer stream. Measured on a 25-lateral crown at L = 0.826:
+  // vigour runs 0.056 at the bottom to 0.211 at the top — a 3.8x taper of RATE
+  // pointing the wrong way, against the closed form's flat 0.211. It is enough
+  // to cancel the taper of TIME that made the pre-flight's R2 = 0.9988, and the
+  // crown comes out a bottlebrush (R2 0.036, lengths 2.3-4.4 on a leader of 86).
+  //
+  // The criticism is precise rather than a shrug: Borchert–Honda is stated for a
+  // BINARY tree where an axis forks once into two. A monopodial leader carrying
+  // two dozen laterals is not that topology, and running the pairwise rule two
+  // dozen times in series compounds a 5% per-fork bias into a 4x one. The
+  // first-order term survives that criticism; the product does not.
+  _partition(sp, L) {
+    const flow = new Map();
+    for (const a of this.axes) flow.set(a, a.subtreeFlow(sp));
+    const dens = (ax, d) => {
+      const kids = ax.kids.slice().sort((a, b) => a.attachLen() - b.attachLen());
+      let dd = d;
+      for (const k of kids) {
+        const Ql = flow.get(k);
+        const Qm = ax.flowAbove(k.attachLen(), sp);
+        const den = L * Qm + (1 - L) * Ql;
+        if (den <= 0) { dens(k, 0); continue; }
+        dens(k, dd * (Qm + Ql) * (1 - L) / den);
+        dd *= (Qm + Ql) * L / den;
+      }
+      ax._dens = dd;      // what reaches this axis's own apex
+    };
+    dens(this.main, 1);
+    const lead = this.main._dens || 1e-12;
+    for (const a of this.axes) a.vigour = clamp((a._dens || 0) / lead, 0, 1);
+  }
+
   step(dt) {
     this.time += dt;
     this.leaves.step();
+    this.updateVigour(this.sp);
     // Undo last step's deflection before growing, so the wind never compounds into
     // the grown shape — see `Axis.restorePose`.
     for (const a of this.axes) a.restorePose();

@@ -160,6 +160,64 @@ export const SPECIES = {
       petal0: [0.30, 0.36, 0.46], petal1: [0.90, 0.95, 1.0], petalVein: [0.85, 0.95, 1.0],
     },
   },
+  // A TREE, and the first thing here that is not a herb. Everything that makes
+  // it one is chemistry the other eight already had turned to a different
+  // setting, plus two mechanisms this species is the first to switch on.
+  //
+  //   agoGain    the antigravitropic offset. Its laterals hold a gravitropic set
+  //              point instead of being pulled vertical, so the crown is a spire
+  //              rather than the vase every other species would make with this
+  //              many branches. The angle itself is not stated anywhere — it is
+  //              where two statocyte fluxes cancel, and auxin sizes one of them.
+  //   apicalControl  0.80, so a branch apex extends at (1-L)/L = 0.25 of the
+  //              leader's. That is the taper, and lower branches are longer only
+  //              because they escaped earlier and have been growing longer.
+  //   branching 0.94 with budRelease 60  weak apical DOMINANCE — buds escape
+  //              close under the leader — against strong apical CONTROL, which
+  //              is the 2x2 the forestry literature insists on and is the
+  //              conifer corner of it.
+  //   eModulus 1.2 GPa  a conifer is woody and the engine's default is
+  //              herbaceous. At 60 MPa this specimen folds up; see test/plagio.mjs.
+  //   aspectFloor 0.04  lets the margin's own slenderness through, and a blade
+  //              that narrow canalises one unbranched midvein. That is a needle,
+  //              and nothing draws one.
+  //
+  // It has no florigen, so it never flowers and never sets fruit — which is the
+  // right biology for a gymnosperm and is a code path REMOVED rather than added.
+  // It still finishes: an axis that runs out of growing point arrests, the plant
+  // reports spent, and the senescence wave runs as it does for everything else.
+  'Ashfall Spire': {
+    prm: { T: 40, D: 6.0, mu: 0.30, rho: 0.60, b: 3.0 },
+    mo: { R: 10, rCZ: 2.4, rPZ: 6.8, G: 0.0042 },
+    sp: {
+      elongation: 0.0052, organLen: 1.15, organTilt: 0.92, organRoll: 0.30,
+      maxOrgans: 110, organBudget: 520, maxAxes: 22, maxGen: 1,
+      branching: 0.94, budRelease: 60, dominance: 6.0,
+      apicalControl: 0.80, agoGain: 1.0, agoK: 0.90,
+      // a conifer's leader is straight, and wander and circumnutation are what
+      // make the other eight lean
+      wander: 0.06, nutation: 0.010, nutAmp: 0.05,
+      florigenRate: 0,
+      tipRadius: 0.055, minInternode: 0.12,
+      stemOpts: { eModulus: 1.2e9 },
+      leafOpts: { fenestrate: 0, aspectFloor: 0.04, nv: 5 },
+      marginBias: { ay: 0.16, g1: 1.30, D: 0.70 },
+    },
+    pal: {
+      blade0: [0.05, 0.12, 0.11], blade1: [0.13, 0.28, 0.24],
+      veinTint: [0.06, 0.14, 0.16], vein: [0.55, 0.88, 0.80],
+      stem0: [0.14, 0.13, 0.12], stem1: [0.34, 0.31, 0.27],
+      cell0: [0.05, 0.10, 0.11], cell1: [0.70, 0.95, 0.85],
+      bgTop: [0.020, 0.024, 0.026], bgBot: [0.004, 0.005, 0.006],
+      bgGlow: [0.05, 0.07, 0.07], fog: [0.030, 0.036, 0.038], fogD: 0.068,
+      key: [0.38, 0.80, 0.44], keyCol: [0.86, 0.90, 0.88],
+      ambTop: [0.14, 0.18, 0.20], ambBot: [0.03, 0.038, 0.042],
+      glow: 0.92, spore: [0.70, 0.90, 0.82],
+      pin: [0.62, 0.90, 0.85], spark: [0.90, 0.98, 0.94],
+      fruit0: [0.10, 0.14, 0.13], fruit1: [0.60, 0.70, 0.62],
+      petal0: [0.22, 0.28, 0.28], petal1: [0.72, 0.84, 0.80], petalVein: [0.85, 0.92, 0.90],
+    },
+  },
   // A climber. Long internodes that keep stretching far below the tip, a fast
   // circumnutation and a weak upward tropism: the axis writes a helix instead of
   // a column. It flowers on less leaf area than the others, so it fruits early.
@@ -483,6 +541,39 @@ export class App {
     }
     this.bladeMU = nOrg > 42 ? (fen ? 17 : 13) : nOrg > 24 ? 18 : 22;
     this.bladeMV = nOrg > 42 ? (fen ? 9 : 6) : nOrg > 24 ? 8 : 10;
+    // AND THE LONGEST BLADE IN THE SCENE, because the numbers above are a
+    // budget for the frame and were being spent per blade regardless of how
+    // much of the frame a blade covers. A Cathedral Fern frond is 4.3 long and
+    // an Ashfall Spire needle 1.15 — a fourteenfold difference in drawn area,
+    // both getting 17x9 quads. Two conifers in a stand of eight overflowed the
+    // triangle buffer by 317,000, which the buffer said out loud because a full
+    // buffer stopped being silent (ROADMAP 10). See `bladeMesh`.
+    this.bladeRef = 0.5;
+    for (const S of specimens) this.bladeRef = Math.max(this.bladeRef, S.sp.organLen);
+  }
+
+  // How finely one blade is drawn. Two ceilings on the scene budget, and both
+  // are conservations rather than dials — the same shape of law as the vein
+  // cull and the cell thinning:
+  //
+  //   - NEVER FINER THAN THE TISSUE. A needle is five cells across; nine quads
+  //     cannot tell them apart, and the whole reason the mesh is coarse is that
+  //     the veins are meant to carry the detail.
+  //   - QUADS PER UNIT OF DRAWN BLADE AREA HELD CONSTANT against the largest
+  //     blade in the scene. Quads go as area and area as length squared, so each
+  //     side scales linearly with length. Floored, because a blade still has to
+  //     be a surface.
+  //
+  // `detL` is the microscope and it wins: walking the camera into a blade still
+  // fades all the way up to the leaf's own lattice.
+  bladeMesh(L, bl, detL, out) {
+    const q = clamp(bl / this.bladeRef, 0.16, 1);
+    let mu = Math.max(4, Math.round(this.bladeMU * q));
+    let mv = Math.max(2, Math.round(this.bladeMV * q));
+    if (detL > 0) { mu = Math.round(lerp(mu, L.o.nu, detL)); mv = Math.round(lerp(mv, L.o.nv, detL)); }
+    out[0] = Math.min(L.o.nu, mu);
+    out[1] = Math.min(L.o.nv, mv);
+    return out;
   }
 
   view() { return VIEWS[this.viewName] || VIEWS.natural; }
@@ -1458,8 +1549,8 @@ export class App {
         // Under the microscope they cannot: 22x10 quads across a blade that
         // fills the frame is a visibly faceted slab, and cells scattered over
         // it read as blobs on cardboard.
-        const mu = detL > 0 ? Math.round(lerp(this.bladeMU, L.o.nu, detL)) : this.bladeMU;
-        const mv = detL > 0 ? Math.round(lerp(this.bladeMV, L.o.nv, detL)) : this.bladeMV;
+        const mesh = this.bladeMesh(L, bl, detL, this._mesh || (this._mesh = [0, 0]));
+        const mu = mesh[0], mv = mesh[1];
         blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mu, mv, dev,
           (1 - 0.82 * detL) * vis, sen,
           { surface: V.lamina > 0, veinMul: V.veins * vis });
