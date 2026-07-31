@@ -2779,3 +2779,88 @@ confidently wrong numbers first:
   vertices against this branch's 265,328 — 83x for 2.6x the organs — and a whole theory
   about the vein LOD's anchor was built on it before the framing was checked. At matched
   `cam.dist` it is 108k against 200k. **There was no anomaly.** The vein cull is fine.
+
+## The needle, and three things the roadmap had wrong about it (2026-07-31)
+
+ROADMAP 13 item 0 was written up as the small, specified, obviously-next piece of work:
+one parameter, `marginBias.ay` into a spruce's aspect band, with a known cost to be paid
+back out of a re-run fill ladder. It landed, and it is a needle — but almost none of the
+plan survived contact.
+
+**First, the ladder could not be re-run, because the instrument was a scratch script and
+it was gone.** CLAUDE.md said so in as many words and the sentence had been read many
+times without anyone noticing it was load-bearing: "there is still no harness here that
+measures how much of anything there is." `test/crown.mjs` is that harness now. It reads
+the shipped paddle tree at 0.772 against the lost script's 0.750 and the pre-#32 Charlie
+Brown tree at 0.576/0.493 against its 0.546, which is the only reason any of the numbers
+below can be compared with the ones already in TUNING.
+
+**And the instrument had to be checked before it could be believed, twice over.** Its
+first version sampled the blade at a fixed density and **failed its own area-conservation
+check the moment it saw a needle** — 25.7% of the drawn area vanished between 480 and 960
+rows, because a blade two pixels wide sampled at a paddle's density is a dotted line, and
+a dotted line is a sparse crown. The harness would have manufactured exactly the defect
+it exists to measure. Sampling is adaptive to the raster now.
+
+Its width-response check was wrong in the other direction and is the better story. Written
+as a 2x nudge from the shipped `ay`, it **passed while measuring nothing**: a 1.03x change
+in ink, which reads as "coverage has saturated". It is nothing of the kind. 0.16 → 0.08
+moves the *tissue* by 1.07x, because that is the flat top of the sweep TUNING already
+warns about by name. **Splitting the ratio into numerator and denominator is the same
+lesson, on the same knob, two documents apart** — and the first time it cost four files
+saying `ay` saturates.
+
+### The three results
+
+**1. Setting `ay` alone would have been worse than the Charlie Brown tree.** At the
+shipped `organLen` the needle reads 0.419/0.352 resolved fill against the pre-#32
+specimen's 0.576/0.493. The entry predicted this change "walks the specimen straight back
+toward the sparseness that was just fixed"; it walks *past* it. Worth noting how nearly
+this was missed: at the whole-tree framing the same specimen reads 0.617 against 0.673,
+a gap small enough to argue about. The two numbers disagree because a needle is 2 px
+across there, so the raster — and the eye — flatter it. **Fill is pixel coverage and
+means nothing without a stated raster.**
+
+**2. `organLen` does not saturate on needles, and that was the one prediction that
+held.** TUNING has it flat past 3.0 with 3.0 and 3.8 within 0.003 of each other; on
+needles every step still buys, +0.051, +0.041, +0.033, +0.029. That entry was a statement
+about needles that already overlap, exactly as item 0 guessed. It is the whole recovery
+and it costs no organs.
+
+**3. ORGANS ARE THE WRONG LEVER, AND PAST ~1800 THEY REVERSE.** This is the one nobody
+predicted. Sweeping the pool at `ay .008, oL 4.6`:
+
+    organBudget   organs   crown R   resolved fill
+       1200        1202      7.01       0.5112
+       1800        1800      9.45       0.5345
+       2400        2402     11.87       0.5341
+       3200        3202     14.95       0.5080
+
+Crown radius more than doubles, and `fill` is ink over the crown's own outline, so the
+extra needles grow the silhouette as fast as they fill it. **That is the same mechanism
+that falsified `maxGen: 2`**, arriving on a different knob — and it means item 0 never
+owed ROADMAP 10b anything, which is how it was costed.
+
+`organTilt`, the other free axis, is nearly dead: 0.92 → 1.40 moves fill by 0.009. Whatever
+limits a needled crown, it is not self-overlap.
+
+### What made it affordable at all
+
+Over ay 0.16 → 0.008 the blade **tissue** falls 4.85x and the **drawn ink** only 1.41x,
+because at paddle width most of the foliage is behind other foliage. That gap is redundant
+tissue and it is what the needle spends. Without it this change would have been a straight
+4.5x loss of crown and not worth doing.
+
+Shipped: `ay` 0.012 — the wide end of the band, aspect 0.040-0.058 over three seeds,
+`n50 = 1` throughout — with `organLen` 5.4. Resolved fill 0.618/0.567, on screen
+0.725/0.712, `organBudget` untouched, line vertices 92.9k → 89.1k.
+
+### And a law it broke that nothing was watching
+
+`test/views.mjs` fails its drawn-area conservation on a needled blade (0.861x at 48 and
+96 units against an 8% tolerance) and **both CI runs of that file stay green**, because
+one names `Cathedral Fern` and the other reads a fern out of the garden. It is a real
+weakness in the law — count is a proxy for area, and it stops being a good one when a
+blade reaches the one-cell floor — and it is written up in PITFALLS rather than fixed by
+widening the tolerance. The general form: **a gate names its subjects, and a law that
+holds for the subjects it names is not a law you have checked.**
