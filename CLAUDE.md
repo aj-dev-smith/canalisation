@@ -73,6 +73,7 @@ node test/views.mjs                                # render views: cost, cull la
 node test/conifer.mjs                              # ROADMAP 13 pre-flight: does a taper fall out of apical dominance?
 node test/plagio.mjs                               # ROADMAP 13 pre-flight: can gravity hold a branch out? (no)
 node test/taper.mjs                                # ROADMAP 14: what sizes a stem, swept and drawn (~3min)
+node test/tree.mjs                                 # ROADMAP 13: the crown — set point, taper, and an ASCII conifer (~4min)
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -92,12 +93,23 @@ script in `tools/` passed — they all navigate, wait, and screenshot, so a froz
 tab and a busy one are the same script. It measures the gap between animation
 frames and exits non-zero past 250ms.
 
-**Nine of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
-`petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`, `plagio.mjs`, `taper.mjs`.** Only
-**two of the nine are wired into CI** and therefore gate a merge — `smoke.mjs` and
-`views.mjs`. The other seven assert locally and *nothing runs them for you*, which is worth
+**Ten of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+`petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`, `plagio.mjs`, `taper.mjs`,
+`tree.mjs`.** Only
+**two of the ten are wired into CI** and therefore gate a merge — `smoke.mjs` and
+`views.mjs`. The other eight assert locally and *nothing runs them for you*, which is worth
 knowing before treating a green PR as evidence about the stem or the air. The rest print
 and never fail.
+
+`test/tree.mjs` is where ROADMAP 13 landed, and it is the check on both pre-flights
+above being answered. Its first two sections are the derivation — the statocyte wall sum
+against its own integral, and the auxin-to-angle map, whose direction is the thing that
+inverts the whole silhouette if you get it backwards (**more auxin, more vertical**).
+Section 3 asserts apical control against a closed form it hits to 1e-9. **Section 3b is
+a falsified mechanism switched on deliberately** (`fluxPartition`), in the same category
+as `test/shoot.mjs`'s stream: the flagship untried experiment from the literature sweep,
+built, measured and wrong. Section 5 draws the crown, for the reason `conifer.mjs`
+section 3b exists. ~4min.
 
 `test/plagio.mjs` is the ROADMAP 13 blocker-2 pre-flight and its answer is **no**: on the
 radii the engine actually grew, a lateral held horizontal has a tip slope of 16-268°, so
@@ -347,7 +359,10 @@ src/38_shoot.js     FALSIFIED EXPERIMENT, ships disabled. Whole-plant auxin tran
 src/39_fall.js      A BLADE IN AIR, attached or shed. Quasi-steady plate
                     aerodynamics; the petiole, sized by the pipe model, as the
                     cantilever a leaf hangs off. Its TORSIONAL half ships disabled
-src/40_plant.js     the organism: axes, elongation, branching, florigen, fruit set, senescence
+src/40_plant.js     the organism: axes, elongation, branching, florigen, fruit set,
+                    senescence. THE GRAVITROPIC SET POINT is here — the statocyte
+                    balance that decides which way an axis points — and so is
+                    APICAL CONTROL, which decides how fast it grows
 src/39a_stem.js     THE STEM BENDS. Axes as coupled damped cantilevers off EI on the
                     radii Murray's law grew, loaded by the canopy. Lettered, not
                     numbered, because it must load after the air and before the organism
@@ -399,7 +414,46 @@ of its bugs were found, and none would have been visible on screen.
 
 ## The honest state of it
 
-*Current as of 2026-07-29. The most recent landings are the wind field (#16), the
+**THERE IS A TREE. `Ashfall Spire` is the ninth species and it is a different body plan
+— a straight leader, two dozen plagiotropic laterals that get longer toward the ground,
+needles, and no reproduction at all.** ROADMAP 13, landed 2026-07-30. Three things about
+it are worth knowing before touching anything near branching:
+
+- **A branch's angle is derived, not stated.** An axis holds a gravitropic set point: a
+  ring of statocyte walls, gravitropic PIN following sedimenting statoliths to the lower
+  wall against a constitutive antigravitropic carrier on the upper one, and the angle is
+  where the two fluxes cancel. Auxin sizes the offset and **more auxin means more
+  vertical** — get that backwards and the crown inverts. Tips sit at their set point to
+  0.6°; crown half-angle 9.5° against a Norway spruce's 8-15. `sin(theta)` is nowhere in
+  the code. The leader stays vertical with **no flag saying so**, because an axis
+  launched straight up has no dorsiventral plane for an offset to push it in.
+- **The hardcoded `0.72` is gone**, along with the untaxed subapical stretch that was
+  the real reason the taper was floored. Both read `Axis.vigour` = `(1-L)/L` off
+  `apicalControl`. L = 0.5 is unbiased, which is why the eight herbs are unchanged organ
+  for organ. **L is still a stated number** and SCIENCE.md books it as a debt.
+- **The full flux partition is FALSIFIED and ships off** (`fluxPartition`). It was the
+  literature sweep's flagship untried experiment and it inverts the rate taper —
+  0.031 at the bottom of the crown against 0.201 at the top — because the leader's
+  stream is re-concentrated at every fork it passes. **Do not rebuild it**; the
+  2026-07-30 JOURNAL entry says exactly why it fails.
+
+**And two bugs that had been there since the beginning, both invisible because every
+axis was vertical, both found within an hour of one not being.** Wander and
+circumnutation were added in the world's frame — a tilt on a vertical axis, an azimuth
+swing on a plagiotropic one. And the azimuth was re-read off the tip each step, which is
+a random walk with nothing to restore it: a branch held a correct 59° elevation along its
+whole length while its azimuth turned a full circle every nine segments, so it
+corkscrewed 5.2 up and 0.2 out. PITFALLS has both, and the general lesson — **ask what a
+general-looking mechanism has actually been run on.**
+
+**THE GARDEN HAS NOW BEEN WATCHED IN A REAL BROWSER, and the bottleneck is not where the
+roadmap said.** A stand of eight with two conifers runs at 25-28 fps — and that number
+does not move when you switch render view, does not move when you turn the vein cull
+off, and the entire simulation is 5.9ms per step. So a grown stand is bound by the
+**per-organ CPU work in the geometry build**, which all four views share. Measure that
+before optimising ROADMAP 11 or 10b.
+
+*The rest of this section is current as of 2026-07-29. The most recent landings are the wind field (#16), the
 falsified second rotational plane (#17), the bending stem (#18), the weather being
 turned down to force 2 (#19), the occlusion cull no longer hiding leaves the viewer can
 see (#23), the petiole becoming a petiole — pipe-model radius and droop as a force
@@ -473,7 +527,8 @@ real browser yet.
 **The life cycle is complete.** A specimen germinates, leafs, flowers, fruits,
 ripens, and then **finishes**: it runs out of growing points, drains each blade
 into its own veins, drops them one at a time in a wave up the plant, and reports
-`dead`, leaving a standing seed head. All eight species get all the way through.
+`dead`, leaving a standing seed head. All nine species get all the way through — the
+conifer without ever flowering, because it runs out of growing points instead.
 The stage bar along the bottom of the page tells you where a run has got to, and
 `tools/senesce_shot.mjs` walks the last act headlessly.
 
@@ -550,41 +605,20 @@ what would have to change instead.
 [docs/ROADMAP.md](docs/ROADMAP.md) is the ranked list and has the reasoning; the
 short version, in order:
 
-0. **A CONIFER (ROADMAP 13) — BOTH BLOCKERS ARE NOW UNDERSTOOD, AND THE WORK IS
-   BUILDABLE.** Picked deliberately over everything below: AJ asked what else the engine
-   could grow, and a ninth species that is a *different body plan* is worth more than
-   polishing. **Read the box at the top of ROADMAP 13 first** — the entry below it was
-   written before any of the measurements and is wrong in two places.
-
-   The needles are already proven: a narrow blade canalises **one bundle carrying 80% of
-   mid-blade traffic, n50 = 1**, a needle's single unbranched midvein. The one line in
-   the way is the aspect floor at `30_leaf.js:192`, probed and found over-conservative
-   rather than load-bearing. **That half is still cheap and is untouched by everything
-   below.**
-
-   Two pre-flights and a literature sweep since. **The length taper is emergent and
-   confirmed** (linear in bud position, R2 0.9988) — but the silhouette is a **vase, and
-   upside down**, because `tropism` pulls every axis vertical with no generation term.
-   Two blockers, and both now have named mechanisms:
-
-   - **Vigour.** The taper slope is floored at a hardcoded `0.72`. Worse, *any* multiplier
-     reading only distance-below-apex gives a cylinder or a straight cone and never a
-     taper — there is a closed-form proof of this. And **measured conifer crowns are
-     parabolic, not conical**, so the cone was the wrong target. Auxin gives apical
-     *dominance* for free and does **not** give apical *control*.
-   - **Angle.** `39_fall.js`-style force balance does **not** set it: at woody stiffness a
-     lateral held horizontal is near equilibrium, so mechanics *preserves* horizontal and
-     cannot *supply* it. But the antigravitropic offset **is auxin-dependent and resolves
-     to per-wall PIN polarity**, which this engine already has — so branch angle is a
-     **derivation, not an imposition**. ⚠ **More auxin → more vertical**; get that
-     backwards and the silhouette inverts.
-
-   Ranked runway with citations: ROADMAP 13's "the runway" section and
-   [docs/research_7_30_26.md](docs/research_7_30_26.md) Part 4.
-
-   Grass was asked for first and came back **falsified** — see ROADMAP 12b, though note
-   the sweep's §3.1 argues our conclusion was right about the growth phase and wrong
-   about where patterning happens.
+0. **THE CONE (ROADMAP 13c) — small, and the only thing the conifer does not have.**
+   `Ashfall Spire` has no reproduction at all: `florigenRate: 0`, no flowers, no fruit.
+   That is correct for a gymnosperm and it is a code path *removed*, but it means the
+   specimen finishes by running out of growing points and leaves a bare skeleton rather
+   than a seed head. A cone is a short determinate axis bearing spirally arranged
+   scales — plausibly a floral axis whose `q` stays in one band and never goes whorled —
+   so it **deletes** the ovary path rather than adding one, and it would show the
+   reproductive machinery generalises across a 300-million-year split. Read the box at
+   the top of ROADMAP 13 first.
+0a. **WHERE THE FRAME ACTUALLY GOES.** Measured in a real browser for the first time:
+   a stand of eight with two conifers is 25-28 fps, identical in all four views,
+   identical with the vein cull off, against 5.9ms of simulation. It is the per-organ
+   geometry build. ROADMAP 11 (instancing ribbons) and 10b (cheaper background
+   simulation) are both aimed slightly off it. **Measure before optimising.**
 0b. ~~**MURRAY'S LAW IS WRONG FOR SELF-SUPPORTING AXES (ROADMAP 14)**~~ — **DONE
    2026-07-30, and it was a minor term.** The literature was right about the mechanism
    and wrong about the size: `radiusExp` exists and ships at 3, because the exponent

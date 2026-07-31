@@ -6,18 +6,28 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
-0. **[#13, a conifer](#13-a-conifer-not-started)** — **START HERE. This is the next
-   thing to build**, and it is a direction rather than a debt: AJ asked what else the
-   engine could grow, and a ninth species that is a *different body plan* is worth more
-   right now than any of the polishing below. The needles are already proven (see #13
-   for the numbers); the interesting claim is that a conifer's conical silhouette
-   should fall out of apical dominance the engine already has, and the cone should
-   **delete** the ovary path rather than add anything. Do the pre-flight first.
+0. **[#13c, the cone](#13-a-conifer--built-and-on-screen-2026-07-30)** — **START HERE,
+   and it is small.** The conifer is built and on screen; what it does not have is
+   reproduction of any kind. A cone is a short determinate axis bearing spirally
+   arranged scales, which is what the floral meristem already makes — plausibly a
+   floral axis whose `q` stays in one band and never goes whorled. It **deletes** the
+   ovary path rather than adding one, and it would show the reproductive machinery
+   generalises across a 300-million-year split rather than being quietly tuned to
+   angiosperms. Read the box at the top of #13 first.
+0b. **[#11 / #10b, and the bottleneck is not where either of them says](#11-a-ribbon-as-twelve-floats)**
+   — **the garden has now been watched in a real browser, which it never had been.** A
+   stand of eight with two conifers runs at 25-28 fps, and the number does not move
+   when you switch render view, and it does not move when you switch the vein cull
+   off, and the whole simulation is 5.9ms. So once a stand is grown the cost is the
+   **per-organ CPU work in the geometry build**, which every view shares. Measure that
+   before optimising either of the things below it. Numbers at the end of the
+   2026-07-30 JOURNAL entry.
 1. **[#10b, what the garden still owes](#10-a-garden-2026-07-29)** — a stand of plants
    ships, and it left three things behind: the simulation cost of stepping eight
    specimens, a species picker that samples with replacement, and a director whose
-   whole shot list assumes one subject. The first is the real one. **None of it is
-   research** — it is the cheapest interesting work on this list.
+   whole shot list assumes one subject. **None of it is research.** Note the director
+   item got sharper with the conifer: at 46 units tall it is three times the height of
+   any herb, and a shot list built around one subject frames a mixed stand badly.
 2. **[#6, one specimen giving way to the next](#6-handover-and-the-end-of-the-film)** — the last piece
    of the life cycle, and the garden has **reframed rather than replaced** it: the
    question is no longer "one plant replaces another" but "a stand gains and loses
@@ -41,7 +51,7 @@ priority.** The list below is the priority.
    line buffer had to grow to, and is what stands between the cell view and a whole
    garden of it.
 
-#1, #2, #4b, #5, #7, #7b, #8, #10 and #12 are **done**; their entries are kept for what
+#1, #2, #4b, #5, #7, #7b, #8, #10, #12, #13 and #14 are **done**; their entries are kept for what
 they record. **#12b is falsified** and its entry is the one to read before anyone asks
 about grass, palms, or any other monocot.
 
@@ -765,10 +775,73 @@ dichotomous body plan needs (liverworts, clubmosses) are the same class of work 
 central zone is a fixed radius `rCZ` from the apex centre (`20_meristem.js:50`), so it
 cannot split by construction. Building either gets you closer to the other.
 
-## 13. A conifer — STEP 1 DONE, AND IT CAME BACK SPLIT
+## 13. A conifer — BUILT AND ON SCREEN (2026-07-30)
 
-**The next thing to build.** A ninth species that is a different body plan, arrived at
-by asking what else the engine could grow after the monocot came back negative.
+> **DONE. `Ashfall Spire` is the ninth species and it is a tree.** The harness is
+> `test/tree.mjs`, the write-up is the 2026-07-30 JOURNAL entry, the sweeps are in
+> TUNING.md and the accounting is in SCIENCE.md. Everything below this box was written
+> before it was built and is kept because the reasoning is the useful part — but read
+> this first, because it is wrong in several places and right in one that matters.
+>
+> **Blocker 2, the angle: DERIVED, not imposed.** An axis holds a gravitropic set point
+> — a ring of statocyte walls, gravitropic PIN following sedimenting statoliths to the
+> lower wall against a constitutive antigravitropic carrier on the upper one whose
+> magnitude auxin sets. The angle is where the two fluxes cancel. `sin(theta)` is
+> nowhere in the code: the angle enters once as the transverse component of gravity,
+> because that is the only part a statolith can press a wall with.
+>
+>     tip directions against the set point, 47 laterals      64.5 vs 65.1 deg
+>     mean branch angle from vertical                        58.4 (pre-flight: 25.0)
+>     crown half-angle, off 47 branch tips                   9.5 deg (spruce 8-15)
+>     widest crown quarter, bottom to top      15.69 / 9.16 / 6.21 / 2.00
+>
+> The leader stays orthotropic **with no flag saying so**: an offset is a push away
+> from vertical in some direction, and an axis launched straight up has no dorsiventral
+> plane to be pushed in.
+>
+> **Blocker 1, vigour: the hardcoded 0.72 is gone**, and so is the untaxed subapical
+> stretch that floored the taper at 0.94. Both read `Axis.vigour` = `(1-L)/L` off
+> `apicalControl`, exact to 1e-9. Taper `L = -0.2146 * A_esc + 16.75`, R2 0.9805.
+> L is still a stated number and SCIENCE.md books it as a debt.
+>
+> **⚠ THE FULL FLUX PARTITION IS FALSIFIED.** The sweep's flagship untried experiment —
+> Borchert–Honda with Q from subtree auxin flux — was built and it inverts the rate
+> taper: vigour 0.031 at the bottom of the crown against 0.201 at the top, because the
+> leader's stream is re-concentrated at every fork it passes. It collapses the taper
+> slope from 0.215 to 0.048 and at L = 0.845 flattens it to a bottlebrush outright. The
+> criticism is precise: Borchert–Honda is stated for a *binary* tree, and running the
+> pairwise rule two dozen times in series down one leader compounds a per-fork bias.
+> Ships off behind `fluxPartition`; `test/tree.mjs` 3b turns it on. **Do not rebuild it.**
+>
+> **The runway below is therefore mostly spent or superseded.** Item 1 (the sub-linear
+> power law) is not needed — a constant vigour ratio gives the straight cone, and the
+> measured crown is already in the spruce band. Item 4 (the AGO from per-wall PIN) is
+> what shipped. Items 3, 5 and the abscission rule are open and now much less urgent.
+>
+> **What is genuinely still open, in order:**
+>
+> 1. **The cone (claim 2 below), which is untouched.** Ashfall Spire has no
+>    reproduction at all — `florigenRate: 0`, no flowers, no fruit. That is correct
+>    gymnosperm biology and it is a code path removed rather than added, but it means
+>    the specimen finishes by running out of growing points and leaves a bare skeleton
+>    rather than a seed head. A cone as a floral axis whose `q` stays in one band is
+>    still the right next move and is still cheap.
+> 2. **Parabolic rather than conic.** Measured conifer crowns are parabolic in the
+>    upper and middle crown; ours is a straight cone because vigour is constant. The
+>    literature's route to that (a sub-linear power law) is a hand-set exponent, so it
+>    would be a step backwards in accounting. Something with memory is the honest route.
+> 3. **A conifer costs five times a herb, and that is now the scene's bottleneck** —
+>    see the measurements at the end of the JOURNAL entry, and #10b/#11 below, both of
+>    which turn out to be aiming slightly off it.
+>
+> **One thing to protect.** The needle is real: at `nv: 5` the blade canalises **one
+> bundle carrying 53-71% of mid-blade traffic, n50 = 1**, against a dicot control's 3
+> and 0.25 — checked on the shipped species' own margin chemistry, not a hand-passed
+> config. Nothing draws a needle; a narrow margin is enough.
+
+**The original entry, kept for its reasoning.** A ninth species that is a different body
+plan, arrived at by asking what else the engine could grow after the monocot came back
+negative.
 
 > **Step 1 has been run — read this before the rest of the entry, which was written
 > before it and is wrong in two places.** The pre-flight is `test/conifer.mjs` and the

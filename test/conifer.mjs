@@ -1,5 +1,21 @@
 // ROADMAP 13 step 1: PRE-FLIGHT THE CONICAL SILHOUETTE.
 //
+// > **READ THIS FIRST. The defect this file was written to measure has been
+// > fixed, and the file has been re-derived against the engine that replaced
+// > it (2026-07-30, `test/tree.mjs`).** What survives unchanged is the part
+// > that was always structural: branch length is LINEAR in the arc position of
+// > its bud, and nothing draws a cone. What changed:
+// >
+// > - **`gamma` is gone.** The taper slope was `(gamma*E + I*S)/(E + I*S)` with
+// >   `gamma = 0.72` hardcoded, because `elongate` stretched the subapical zone
+// >   with no generation penalty at all. Vigour now taxes both terms, so
+// >   `k = vigour` exactly, and vigour is `(1-L)/L` off `apicalControl`.
+// >   Section 2 used to sweep the dilution; it now checks there is none.
+// > - **Section 3a measured orthotropy and orthotropy is gone.** Its two
+// >   assertions are retired to prints. `test/tree.mjs` is where the angle is
+// >   checked now, and it checks the opposite.
+// > - **⚠ PREDICTION 3 WAS MEASURING THE POSE.** See the note at section 1.
+
 // The claim being tested is ROADMAP 13's claim 1: that a conifer's taper falls
 // out of the apical dominance already in `Axis.step`, with nothing drawing a
 // cone. Lower buds escape earlier, so they have had longer to elongate.
@@ -13,23 +29,25 @@
 // ---------------------------------------------------------------------------
 // THE DERIVATION
 //
-// An axis climbs by two terms, and only one of them knows about generation:
+// An axis climbs by two terms:
 //
-//   40_plant.js:138   rate = sp.elongation * (gen === 0 ? 1 : 0.72) * ...
-//   40_plant.js:402   elongate() stretches the subapical zone and OVERWRITES
-//                     this.length
+//   40_plant.js   rate = sp.elongation * this.vigour * ...
+//   40_plant.js   elongate() stretches the subapical zone at
+//                 sp.internode * this.vigour, and OVERWRITES this.length
 //
-// The second is a fixed window of arc below the tip, stretching at
-// `sp.internode` and decaying over `sp.internodeSpan`, so once an axis is
-// longer than a few spans it contributes
+// The second is a fixed window of arc below the tip, decaying over
+// `sp.internodeSpan`, so once an axis is longer than a few spans it contributes
 //
 //   integral of internode * exp(-b/span) db  ->  internode * internodeSpan
 //
-// per unit time, on EVERY axis, leader or lateral. So the two climb rates are
+// per unit time. BOTH terms are taxed by vigour, which is the fix — the second
+// one used to carry no generation penalty at all, at 3.6x the size of the
+// first, which is why this file originally measured a taper slope of 0.94 where
+// a hardcoded 0.72 was supposed to put it. So the two climb rates are
 //
-//   V0 = E + I*S                 (leader)
-//   V1 = gamma*E + I*S           (lateral, gamma = 0.72)
-//   k  = V1 / V0                 (the taper slope)
+//   V0 = E + I*S                 (leader, vigour 1 by definition)
+//   V1 = g * (E + I*S)           (lateral, g = (1-L)/L off apicalControl)
+//   k  = V1 / V0 = g             (the taper slope, and it is just the vigour)
 //
 // A bud escapes on the first step where BOTH gates open: `suppressed <=
 // branching`, i.e. the tip is at least d_dom = -dominance * ln(branching)
@@ -47,18 +65,27 @@
 // slope -k, hitting zero a fixed distance d_esc below the apex. That is a cone,
 // and nothing drew it. ROADMAP 13's claim 1 stands or falls here.
 //
-// PREDICTION 2 (slope): k = (gamma*E + I*S) / (E + I*S). Note what this says:
-// the 0.72 the roadmap entry expected to set the taper is diluted by subapical
-// stretching, which carries no generation penalty. On the shipped defaults
-// I*S = 0.0187 against E = 0.0052, so stretching is 3.6x the tip's own
-// extension and k comes out near 0.94 -- a crown of branches almost as long as
-// the tree is tall. k is bounded in (gamma, 1) for any species: setting
-// `internode: 0` reaches the floor and NOTHING reaches below it.
+// PREDICTION 2 (slope): k = (1-L)/L, and it does NOT depend on `internode`.
+// That independence is the whole of the fix and section 2 is the check on it:
+// on shipped defaults I*S = 0.0187 against E = 0.0052, so subapical stretching
+// is 3.6x the tip's own extension, and while it went untaxed it diluted any
+// generation penalty into the range (0.72, 1) with nothing able to reach below
+// it. Sweeping `internode` should now move k not at all.
 //
-// PREDICTION 3 (escape distance): d_esc is the same for every bud, and on the
-// shipped defaults budRelease binds rather than dominance -- 7.18 against 3.59.
-// That matters for a conifer, because it is `dominance` the roadmap entry
-// expects to be shaping the crown and it is not the term in charge.
+// PREDICTION 3 (escape distance): SUPERSEDED, and the reason is worth more than
+// the prediction was. It said d_esc is the same for every bud and that on
+// shipped defaults `budRelease` binds rather than `dominance`. The escape
+// SCHEDULE is right -- the median bud still escapes at age 2252 exactly as it
+// did -- but the DISTANCE it recorded is not a property of the release rule at
+// all. It is `|tipPos - org.frame.o|`, a straight line measured on the DEFLECTED
+// pose, and making the trunk stiffer moved its median 34% (5.49 -> 3.64) while
+// leaving every escape time untouched.
+//
+// The stiffening was `updateRadii` learning to conserve flow at a fork: a
+// branch's subtree traffic now thickens the trunk below it, EI goes as r^4, and
+// the leader stops leaning (zeta 0.919 -> 0.943, height 63.38 -> 64.97). So the
+// old number was reporting how far the stem had bowed, dressed as apical
+// dominance. Section 1 asserts on the schedule now and prints the distance.
 //
 // PREDICTION 4 (silhouette): a branch of length L leaving at angle theta from
 // vertical puts its tip at radius L*sin(theta), height h + L*cos(theta). With
@@ -90,19 +117,21 @@ import { MERISTEM_DEFAULTS } from '../src/20_meristem.js';
 const prm = { ...DEFAULT_PRM, T: 40, D: 6, mu: 0.3, rho: 0.6, b: 3 };
 const mo = { ...MERISTEM_DEFAULTS, R: 10, rCZ: 2.4, rPZ: 6.8, G: 0.0042 };
 
-// The lateral penalty at 40_plant.js:138, kept here deliberately as a second
-// copy. Everything else is read out of the shipped defaults, per the rule that
-// a harness carrying its own copy of a shipped constant eventually tests a
-// different program than the one you are running.
-const GAMMA = 0.72;
+// The lateral penalty, kept here deliberately as a SECOND IMPLEMENTATION rather
+// than a call into `Plant.updateVigour`. It is a closed form now instead of a
+// hardcoded 0.72, and it reads `apicalControl` out of the shipped defaults --
+// per the rule that a harness carrying its own copy of a shipped constant
+// eventually tests a different program than the one you are running.
+const GAMMA = (sp) => (1 - sp.apicalControl) / sp.apicalControl;
 
 const predict = (sp) => {
   const E = sp.elongation, I = sp.internode, S = sp.internodeSpan;
   const IS = (I > 0) ? I * S : 0;
-  const V0 = E + IS, V1 = GAMMA * E + IS;
+  const g = GAMMA(sp);
+  const V0 = E + IS, V1 = g * (E + IS);
   const dDom = -sp.dominance * Math.log(sp.branching);
   const dBud = V0 * sp.budRelease;
-  return { V0, V1, k: V1 / V0, dDom, dBud, dEsc: Math.max(dDom, dBud) };
+  return { V0, V1, k: g, dDom, dBud, dEsc: Math.max(dDom, dBud) };
 };
 
 // A controlled vegetative run: no florigen, so nothing converts to a flower
@@ -213,14 +242,19 @@ else {
     f.r2 >= 0.95, f.r2.toFixed(4), '>= 0.95');
   check('PREDICTION 2  slope = -k within 10%',
     Math.abs(-f.m - p.k) / p.k <= 0.10, (-f.m).toFixed(4), `${p.k.toFixed(4)} +-10%`);
-  check('PREDICTION 3  median escape distance = d_esc within 25%',
-    Math.abs(dm - p.dEsc) / p.dEsc <= 0.25, dm.toFixed(2), `${p.dEsc.toFixed(2)} +-25%`);
-  check('PREDICTION 3b budRelease binds, not dominance',
+  // PREDICTION 3 is superseded — see the header. The distance above is measured
+  // on the deflected pose and moves with how far the trunk has bowed; it is not
+  // a property of the release rule, and it is printed rather than asserted.
+  console.log('  ^ printed, NOT asserted: this is a pose measurement. See the header.');
+  check('PREDICTION 3  no bud escapes closer than the dominance gate allows',
+    Math.min(...r.lat.map(o => o.dEsc)) >= p.dDom - 1e-6,
+    Math.min(...r.lat.map(o => o.dEsc)).toFixed(2), `>= ${p.dDom.toFixed(2)}`);
+  check('PREDICTION 3b budRelease binds the SCHEDULE, not dominance',
     p.dBud > p.dDom, `budRelease ${p.dBud.toFixed(2)} vs dominance ${p.dDom.toFixed(2)}`, 'budRelease larger');
 }
 
 // --- 2. does k move the way the formula says? -------------------------------
-console.log('\n=== 2. k = (gamma*E + I*S)/(E + I*S): sweep the dilution ===\n');
+console.log('\n=== 2. k = (1-L)/L: sweep `internode` and watch it NOT move ===\n');
 console.log('  internode   predicted k   measured slope    R2     n   steps');
 for (const I of [0, 0.0018, 0.0072, 0.020]) {
   const rr = grow({ internode: I }, 9000);
@@ -228,12 +262,14 @@ for (const I of [0, 0.0018, 0.0072, 0.020]) {
   const ff = fit(rr.lat.map(o => [o.aEsc, o.L]));
   console.log(`  ${String(I).padStart(9)}   ${pp.k.toFixed(4).padStart(11)}   ${ff ? (-ff.m).toFixed(4).padStart(14) : '     too few  '}   ${ff ? ff.r2.toFixed(3) : '  -  '}  ${String(rr.lat.length).padStart(3)}  ${String(rr.steps).padStart(5)}`);
   if (ff && rr.lat.length >= 5) {
-    check(`internode ${I}: slope tracks k within 12%`,
+    check(`internode ${I}: slope tracks k within 12% (k must not move at all)`,
       Math.abs(-ff.m - pp.k) / pp.k <= 0.12, (-ff.m).toFixed(4), pp.k.toFixed(4));
   }
 }
-console.log(`\n  THE FLOOR: with internode 0 the formula gives k = gamma = ${GAMMA} exactly.`);
-console.log('  No species parameter reaches below it, because gamma is hardcoded.');
+console.log(`\n  THE FLOOR IS GONE. k = (1-L)/L = ${GAMMA(SPECIES_DEFAULTS).toFixed(4)} at the shipped`);
+console.log('  apicalControl, whatever `internode` is doing. It used to be bounded in');
+console.log('  (0.72, 1) with nothing able to reach below it, because the subapical');
+console.log('  stretch was 3.6x the tip term and carried no generation penalty.');
 
 // --- 3. the silhouette ------------------------------------------------------
 // The crown envelope is MEASURED off where the branches actually ended up, and
@@ -265,23 +301,53 @@ console.log(`  crown apex at height ${zTop.toFixed(2)}`);
 console.log('');
 console.log(`  MEASURED crown half-angle, off ${r.lat.length} branch tips:  ${measured.toFixed(1)}deg`);
 console.log(`  closed form at measured k and theta:                ${half(-f.m, thetaMean, zeta).toFixed(1)}deg`);
-console.log(`  closed form at floor k ${GAMMA}, same theta:              ${half(GAMMA, thetaMean, zeta).toFixed(1)}deg`);
-console.log(`  closed form at floor k ${GAMMA}, horizontal, straight:    ${half(GAMMA, Math.PI / 2, 1).toFixed(1)}deg`);
 console.log(`  a Norway spruce:                                    ${SPRUCE}deg (8-15)`);
 
-check('measurement and closed form agree within 6deg',
-  Math.abs(measured - half(-f.m, thetaMean, zeta)) <= 6,
-  `${measured.toFixed(1)} vs ${half(-f.m, thetaMean, zeta).toFixed(1)}`, 'within 6deg');
+// ⚠ THE CLOSED FORM HAS A DOMAIN AND THE DEFAULTS ARE OUTSIDE IT, which is the
+// single most useful thing this section now says.
+//
+//   half-angle = atan( k*sin(theta) / (zeta - k*cos(theta)) )
+//
+// The denominator is how fast the crown apex outruns the rising tip of a branch.
+// At `apicalControl` 0.5 the partition is unbiased, so a lateral runs at the
+// leader's own rate — k = 1 — and with branches still sweeping upward at 19deg
+// the denominator is 0.943 - 0.983*0.906 = 0.052. The tips very nearly keep up
+// with the apex, the ratio blows up, and the formula reports 88deg against a
+// measured 53. Neither number means anything: THERE IS NO CONE THERE TO HAVE AN
+// ANGLE. Branches as vigorous as the leader do not make one at any branch angle,
+// which is the whole reason `apicalControl` exists.
+//
+// So the agreement is asserted where the form applies and the degeneracy is
+// asserted where it does not. `test/tree.mjs` runs the same cross-check at a
+// conifer's L and gets 9.5 against 8.9.
+const denom = zeta - (-f.m) * Math.cos(thetaMean);
+console.log(`\n  closed-form denominator (zeta - k*cos(theta)): ${denom.toFixed(3)}`);
+if (denom > 0.25) {
+  check('measurement and closed form agree within 6deg',
+    Math.abs(measured - half(-f.m, thetaMean, zeta)) <= 6,
+    `${measured.toFixed(1)} vs ${half(-f.m, thetaMean, zeta).toFixed(1)}`, 'within 6deg');
+} else {
+  console.log('  ^ under 0.25: the crown envelope is degenerate and the closed form');
+  console.log('    is meaningless here. That is a statement about the DEFAULTS, which');
+  console.log('    are herbaceous — an unbiased partition makes no cone at all.');
+  check('at an unbiased partition the envelope is degenerate, not merely wide',
+    denom <= 0.25, denom.toFixed(3), '<= 0.25');
+}
 
-// Does the branch ANGLE offer a way out? ROADMAP 13 names the hardcoded 0.45
-// lerp as an obstacle. It is not the one that matters, and this says why.
-console.log('\n  half-angle against branch angle, at the FLOOR k = 0.72 and a straight stem:\n');
+// Does the branch ANGLE offer a way out? The original entry named the hardcoded
+// 0.45 launch lerp as an obstacle. It was not the one that mattered — that line
+// is deleted now and a branch launches along the leaf it arose behind — and this
+// table is why: at a taper slope near 1 the angle cannot buy a cone, and at a
+// conifer's taper slope it barely has to.
+console.log(`\n  half-angle against branch angle, at a conifer's k and a straight stem:\n`);
+const kCone = 0.25;   // (1-L)/L at apicalControl 0.80, which is what Ashfall Spire ships
 console.log('    theta   half-angle');
 for (const d of [20, 35, 50, 65, 80, 90]) {
-  console.log(`    ${String(d).padStart(3)}deg   ${half(GAMMA, d * Math.PI / 180, 1).toFixed(1).padStart(6)}deg`);
+  console.log(`    ${String(d).padStart(3)}deg   ${half(kCone, d * Math.PI / 180, 1).toFixed(1).padStart(6)}deg`);
 }
-console.log('\n  The branch angle moves the crown by about 12deg across its whole range,');
-console.log(`  and the gap to a spruce is about ${(half(GAMMA, thetaMean, zeta) - SPRUCE).toFixed(0)}deg -- IF theta could be held. It cannot.`);
+console.log(`\n  About 8deg across the whole range, against the ${SPRUCE}deg target — so the`);
+console.log('  taper slope decides the silhouette and the branch angle decides how each');
+console.log('  branch READS. Both are needed and they are not interchangeable.');
 
 // --- 3a. why theta is 25deg and not 50.7deg: nothing holds a branch out ------
 // The measured mean branch angle is half the nominal one, and that is not
@@ -309,10 +375,15 @@ console.log('\n=== 3a. the branch angle does not persist: every axis is orthotro
   console.log(`  8 SHORTEST branches (youngest), mean theta:     ${ty.toFixed(1)}deg`);
   console.log(`  8 LONGEST  branches (oldest),   mean theta:     ${to.toFixed(1)}deg`);
   console.log(`  all ${r.lat.length}, mean theta:                             ${(thetaMean * 180 / Math.PI).toFixed(1)}deg`);
-  check('the oldest branches have been pulled closer to vertical than the youngest',
-    to < ty, `old ${to.toFixed(1)}deg vs young ${ty.toFixed(1)}deg`, 'old < young');
-  check('measured theta is far below the nominal 50.7deg (tropism erases it)',
-    thetaMean * 180 / Math.PI < 40, `${(thetaMean * 180 / Math.PI).toFixed(1)}deg`, '< 40deg');
+  // RETIRED TO PRINTS. These two asserted the defect — that tropism erases a
+  // branch's launch angle and drags the oldest branches most. It does not any
+  // more: an axis holds a gravitropic set point. `test/tree.mjs` checks the
+  // opposite of both, and asserts the tips sit at that set point to under a
+  // degree. Kept here because the numbers below are what the crown looked like
+  // before, and a before is worth having.
+  console.log(`  (both of the checks that used to be here asserted the DEFECT: that the`);
+  console.log(`   oldest branches get pulled most, and that theta lands far under the`);
+  console.log(`   nominal angle. See test/tree.mjs, which now asserts the opposite.)`);
   console.log('\n  THIS IS THE BIGGER OBSTACLE, and it is not the one the entry names.');
   console.log('  A conifer\'s laterals are PLAGIOTROPIC -- they hold a near-horizontal set');
   console.log('  point for life. Every axis here is ORTHOTROPIC: `want` is vertical for');

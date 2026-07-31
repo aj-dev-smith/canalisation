@@ -2499,3 +2499,136 @@ pass would have hidden it — the assertion was written at 2% first, and 2% is e
 band the bug lived in. And it was only visible at all because the prediction was worked
 out *before* the solver ran: seven species agreeing with each other says nothing, seven
 species agreeing with arithmetic and one not is a bug report.
+
+## A conifer, and what it cost: one derivation, one stated number, one falsification (2026-07-30)
+
+ROADMAP 13's two blockers, built and measured. The harness is `test/tree.mjs` and it
+follows the norm the pre-flight established the hard way — derive it, then measure it,
+then draw it, and let the three argue.
+
+### Blocker 2, the angle: DERIVED
+
+The pre-flight's verdict was that the silhouette was a vase and upside down, because
+`want` was vertical for leader and lateral alike and `tropism` erased a branch's launch
+direction in fifty steps. The fix is not an angle. It is a fixed point.
+
+A ring of statocyte walls. Gravitropic PIN follows sedimenting statoliths to whichever
+wall is lowest; an opposing constitutive carrier sits on the upper wall and does not
+know the angle; the set point is where the two fluxes cancel. Auxin sizes the second
+one, in the direction the literature insists on and that inverts everything if you get
+it backwards: **more auxin, more vertical.**
+
+    the wall sum against its own integral, 4096 walls      3.33e-16
+    gsaOf(ago) against asin(ago) at 16 walls               0.000 deg
+    the set point across 4 -> 256 walls                    moves 0.0000 deg
+    tip directions against the set point, 47 laterals      64.5 vs 65.1 deg
+    mean branch angle from vertical                        58.4 deg (pre-flight: 25.0)
+      ... lowest quarter of the crown                      63.3 deg
+      ... highest quarter of the crown                     52.9 deg
+    crown half-angle, off 47 branch tips                   9.5 deg (spruce 8-15)
+    widest crown quarter, bottom to top       15.69 / 9.16 / 6.21 / 2.00
+
+**Nothing in the code writes `sin(theta)`.** The angle enters once, as the component of
+gravity acting across the axis, because that is the only part statoliths can press a
+wall with. The sine law falls out of a projection. That is checkable and it is checked.
+
+**And the leader stays orthotropic with no flag.** An offset is a push away from
+vertical *in some direction*; an axis launched straight up has no dorsiventral plane to
+be pushed in. That is the clinostat result — outward curvature unmasked in laterals,
+"never observed in primary shoots" — read forwards rather than asserted.
+
+### Blocker 1, the vigour: STATED, but with a zero point
+
+`0.72` at `40_plant.js:138` is gone. So is the reason the pre-flight found the taper
+slope floored at 0.94 rather than 0.72: `elongate` stretches the subapical zone at 3.6x
+the tip's own rate and carried no generation penalty at all. Both read `Axis.vigour`
+now.
+
+What sets it is the Borchert–Honda partition's first-order term. At a fork the density
+ratio is exactly `(1-L)/L` whatever the two capacities are — the flux terms cancel — so
+a branch apex extends at that fraction of the apex dominating it.
+
+    every lateral against (1-L)/L, five values of L        exact to 1e-9
+    L = 0.5 is unbiased: every apex at the leader's rate   1.000000
+    taper   L = -0.2146 * A_esc + 16.75                    R2 0.9805
+    closed form for L = 0.80                               0.25
+
+L is still a stated number. It is a better one than 0.72 was — it has a published name,
+a meaning, and a zero point at 0.5 that a test can check, which is why all eight
+shipped species came through this unchanged organ for organ — but nobody has derived it
+and the sweep says so.
+
+### THE FALSIFICATION: the full flux partition, run because nobody had
+
+The interesting part. `research_7_30_26.md` §1.6(i) proposes substituting subtree auxin
+flux for light in Borchert–Honda and notes that nobody has published it: "an empirical
+question you can answer in your own engine faster than the literature can answer it for
+you." So it was built. It is wrong, and it is wrong in a way that is worth keeping.
+
+The leader takes more than its proportional share at every fork, so **the density in
+the leader rises as it climbs**, and a branch attached higher taps a richer stream:
+
+    lowest five branches, mean vigour                      0.031
+    highest five branches, mean vigour                     0.201
+    resulting taper slope                                  0.048
+    the same L, first-order only                           0.215
+
+A 6.5x taper of *rate* pointing the opposite way to the taper of *time* that makes the
+cone. At L = 0.845 it cancels it outright — R2 0.033, lengths 1.8-3.5 on a leader of
+86, a bottlebrush. At L = 0.80 a taper survives with a fifth of its slope.
+
+**The criticism is precise rather than a shrug, and that is what makes it useful.**
+Borchert–Honda is stated for a *binary* tree, where an axis forks once into two. A
+monopodial leader carrying two dozen laterals is not that topology, and running the
+pairwise rule two dozen times in series compounds a five-percent per-fork bias into a
+fourfold one. The first-order term survives that criticism. The product does not.
+
+It ships disabled behind `fluxPartition` and `test/tree.mjs` section 3b turns it on, for
+the same reason `rhoI: 0` keeps the dead second inhibitor and `38_shoot.js` keeps the
+whole-plant stream: a negative result you cannot re-measure is just a story.
+
+### Two bugs that only a non-vertical axis could expose
+
+Both had been sitting there since the beginning, invisible because every axis was
+vertical and both are exactly right for a vertical axis.
+
+**Wander and circumnutation were world-framed.** They were added straight into
+`want[0]` and `want[2]`. On a near-vertical `want` that is a tilt, which is what they
+are for. On a branch holding 80 degrees off vertical the same offset swings the
+*azimuth*. They are applied in the plane across `want` now, and for a vertical `want`
+this reproduces the old vectors exactly — the catalogue does not move.
+
+**And the azimuth was a random walk.** `want` took its vertical plane from the current
+tip direction, so any azimuthal drift was remembered and built on. Gravity only ever
+argues about elevation; there is no restoring term sideways. Measured: a branch holding
+a correct 59-degree elevation the whole way up while its azimuth turned a full circle
+every nine segments. It climbed 5.2 units and went out 0.2. An axis remembers the
+vertical plane it grew out in now, which is the axil's own azimuth and is emergent.
+
+**The lesson is the general one.** Neither bug is a mistake in the old code — both are
+correct for the only case that existed. A new body plan is a way of finding the places
+where a general-looking mechanism was quietly special-cased, and it found two in one
+afternoon.
+
+### What the tree cost, measured in a real browser
+
+The garden had never been watched at framerate, which CLAUDE.md said in as many words.
+It has been now, and the answer is not what the roadmap assumed:
+
+    one conifer alone, grown                     45-61 fps
+    a garden of eight with two conifers          25-28 fps
+    simulation, all eight, per step              5.89 ms
+    ... and the same fps in every render view, and with the vein cull switched off
+
+So once a stand is grown it is **neither simulation-bound nor line-bound** — it is the
+per-organ CPU work in the geometry build, which is identical across all four views.
+ROADMAP 11 (instancing) and 10b (cheaper background simulation) both aim slightly off
+the actual bottleneck. A conifer makes it visible because it carries five times the
+organs of a herb.
+
+One overflow found and fixed on the way: 620 needles each got a frond's 17x9 mesh and
+dropped 317,000 triangles, which the buffer said out loud because a full buffer stopped
+being silent. Blade meshes now obey two conservations — never finer than the tissue, and
+quads per unit of drawn blade area held constant. A garden of eight went from 279,620
+triangles saturated to 81,804 at 29% occupancy, and the natural view from 97.7 ms to
+44.3 ms.
