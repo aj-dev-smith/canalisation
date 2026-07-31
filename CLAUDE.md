@@ -80,12 +80,22 @@ Five browser tools are about the scene rather than the simulation, and one of th
 checks something no other harness here can:
 
 ```bash
+node tools/tree_shot.mjs shots            # THE CONIFER, PORTRAIT. the only tall-plant framing
 node tools/garden_shot.mjs shots 7        # grow a stand, three framings, buffer occupancy
 node tools/garden_hitch.mjs 7             # DOES PLANTING A GARDEN FREEZE THE TAB?
 node tools/veinlod_shot.mjs shots         # before/after for the vein LOD, on the hero
 node tools/views_shot.mjs shots           # every render view, wide and close
 GARDEN=7 node tools/clip.mjs shots/g 10   # record the stand moving
 ```
+
+`tree_shot.mjs` is portrait because every other capture tool here frames into 16:10, and
+a 46-unit spire in a landscape frame occupies the middle fifth of the picture — **"looks
+lost" and "is too sparse" are the same picture**, so the wrong frame cannot answer the
+question. It polls for the crown rather than waiting: its first run waited 60s at 4x and
+photographed a *dead* tree, stripped by its own senescence wave, from which "sparse"
+would have been the obvious and completely wrong conclusion. `OVER=` patches a preset
+through `window.__SPECIES` so an A/B happens in one session on one GL backend, and it
+asserts the patch landed rather than trusting it.
 
 `garden_hitch.mjs` exists because **a harness that waits cannot see a freeze.**
 `plantGarden` once blocked the main thread for nineteen seconds and every capture
@@ -427,6 +437,23 @@ it are worth knowing before touching anything near branching:
   0.6°; crown half-angle 9.5° against a Norway spruce's 8-15. `sin(theta)` is nowhere in
   the code. The leader stays vertical with **no flag saying so**, because an axis
   launched straight up has no dorsiventral plane for an offset to push it in.
+- **IT WAS A CHARLIE BROWN TREE UNTIL 2026-07-31, and the cause was a third unnamed
+  constant.** A bud that escaped apical dominance then took with probability `0.35` —
+  hardcoded in `40_plant.js`, uncommented, unreachable — so two in three were retired
+  permanently. It is `sp.budTake` now, default 0.35 so the eight herbs are unchanged, and
+  **1.0** for the conifer, which removes the coin flip and leaves branch count to
+  `exp(-d/dominance) > branching`. 29 branches became 77 and crown fill went 0.559 to
+  0.752. Two things not to relearn: the **organ budget is a pool**, so raising `budTake`
+  alone makes the tree *smaller* (46.1 → 35.3 units), and **second-order branching is
+  falsified** — `maxGen: 2` buys +0.010 of fill for 4.8x the simulation cost, because
+  sub-branches grow the silhouette as fast as they fill it. It costs a grown stand of
+  seven 20.8 → 7.8 fps and that is shipped knowingly; the cost is linear in organs, so it
+  is ROADMAP 10b and 11. TUNING has the ladder and the two ways to measure it wrong.
+- **The needle is a paddle, and the preset used to claim otherwise.** `aspectFloor: 0.04`
+  does **not** bite — this margin grows aspect 0.193 on its own — and `marginBias.ay`
+  saturates (0.16 → 0.02 moves it only 0.213 → 0.103). What `test/venation.mjs` measured
+  was the **venation**, one dominant bundle, and that still holds; the **silhouette** was
+  never checked. A cap on aspect would fix it and would be a stated shape number.
 - **The hardcoded `0.72` is gone**, along with the untaxed subapical stretch that was
   the real reason the taper was floored. Both read `Axis.vigour` = `(1-L)/L` off
   `apicalControl`. L = 0.5 is unbiased, which is why the eight herbs are unchanged organ

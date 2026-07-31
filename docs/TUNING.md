@@ -1313,3 +1313,65 @@ auxin is its own apex plus every apex above it attenuated over `dominance`, so b
 near the leader stand up and branches far below it lie out flat, measured at 52.9deg in
 the top quarter against 63.3deg in the bottom. That is the same field that decides
 whether a bud escapes, read a second time.
+
+## How full a crown is (`70_app.js` Ashfall Spire, 2026-07-31)
+
+Prompted by a person watching: *"much too sparse... real charlie brown xmas trees."*
+Three knobs, and the reason no single one of them works is that they fight each other.
+
+**`budTake` — what fraction of escaped buds build a shoot.** New, and it was a hardcoded
+`0.35` in `40_plant.js` before. **Default 0.35, so every herb is unchanged.** The conifer
+ships at **1.0**, which removes the coin flip entirely and leaves branch count to
+`exp(-d/dominance) > branching`.
+
+    budTake   axes   organs   fill
+      0.35      30      702   0.546
+      0.45      39      898   0.604
+      0.60      51     1215   0.672
+      0.75      60     1429   0.714
+      1.0       77     1601   0.750     <- ships
+
+`fill` is ink over the crown's own rasterised outline, per row. **Do not use needle area
+over silhouette area**: both terms scale together and it returns ~0.28 for every variant
+including ones that plainly differ. That mistake cost two wrong diagnoses.
+
+**`organBudget` — and it is a POOL over the whole specimen.** This is the one that is not
+obvious. Raising `budTake` on its own divides the same 540 organs among three times as
+many branches and **the tree gets smaller**: 46.1 -> 35.3 units tall, crown radius
+7.9 -> 4.3. Ships at **1200**, up from 540.
+
+**`maxOrgans` stays at 80, deliberately.** It caps the **leader**, so the extra budget
+goes into branches rather than into a taller trunk. With it left alone the height stays
+at 46.1 to the digit while fill moves 0.559 -> 0.752. Raise it and you get a taller
+tree, not a fuller one.
+
+**`organLen` — nearly free, and it saturates.** 1.45 -> **3.0**. Drawn area per organ at
+no extra organ: 153.6k triangles against 153.8k. It saturates hard — 3.0 and 3.8 are
+within 0.003 of each other — and it does **almost nothing alone** (0.559 -> 0.570 at 540
+organs). It is a multiplier on having branches to hang needles from. Because of it, 1200
+organs at 3.0 reaches the same fill as 1600 at 2.1, which is where the 25% saving came
+from.
+
+**`maxGen` stays at 1.** Second-order branching is the obvious idea and it is
+**falsified**: fill 0.281 -> 0.268 for 4.8x the simulation cost, because sub-branches grow
+the silhouette as fast as they fill it. JOURNAL has it.
+
+**What it costs, and it is shipped knowingly.** A grown stand of seven with two conifers,
+both fully arrested: 48.1 -> 127.5 ms/frame, 20.8 -> 7.8 fps, 1349 -> 2672 organs. Linear
+in organs, so it is ROADMAP 10b and 11 rather than anything to tune here.
+
+**Two ways to measure this wrong, both of which produced confident nonsense first:**
+
+- **Profile only an ARRESTED specimen.** A cost sweep over `organBudget` went *down* as
+  the tree got bigger, because at the larger budget it had not arrested yet and a live
+  meristem is a different program from a retired one. Grow to `spent()` first. Arrested,
+  the ratio is 2.2x; the naive sweep said 8x.
+- **Match the camera before comparing geometry counts.** Two framings of the same scene
+  gave 3,184 line vertices against 265,328 and nearly bought a whole false theory about
+  the vein LOD's anchor. At matched `cam.dist` it is 108k against 200k, and there is no
+  anomaly.
+
+**The needle is still a paddle, and this section cannot fix it.** `aspectFloor: 0.04`
+does not bite — the margin grows 0.193 on its own — and `marginBias.ay` saturates
+(0.16 -> 0.02 moves aspect only 0.213 -> 0.103). The venation is a needle's; the
+silhouette is not. See JOURNAL.

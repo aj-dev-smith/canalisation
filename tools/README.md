@@ -87,6 +87,26 @@ inside **single** quotes, so it never interpolated.
   proves nothing. The informative shot is from *inside* the canopy (9 or so), where the
   back of the plant is well beyond the framing distance and 31% of the ribbons go.
 
+- `tree_shot.mjs OUTDIR [seed] [waitMs] [species]` — **the conifer, framed as a tree**,
+  and the only capture tool here that is portrait. `Ashfall Spire` is 46 units tall,
+  three times any herb, and everything else frames from `sceneBounds()` into a 16:10
+  viewport — which puts the tree in the middle fifth of the picture. "Looks lost" and
+  "is too sparse" are the same picture, so a landscape frame cannot answer the
+  question this tool exists for. Three framings: the whole silhouette, the middle
+  third where a viewer reads density, and one branch close enough to count needles on.
+
+  **It polls for the crown rather than waiting a fixed time.** Its first run waited 60s
+  at 4x and photographed a *dead* tree — the specimen arrests around step 2900 and its
+  own senescence wave then strips every needle — from which "sparse" would have been
+  the obvious and completely wrong conclusion. It stops the clock at arrest.
+
+  `OVER='{"sp":{"budTake":1}}' TAG=dense node tools/tree_shot.mjs shots` patches the
+  preset via `window.__SPECIES` before growing, so two candidates are compared in **one
+  browser session on one GL backend** rather than across a rebuild and a second
+  browser, which on this machine are not guaranteed to be the same renderer. It
+  **asserts the patch landed** — a silent no-op would compare a candidate against
+  itself and report "no difference", the most expensive wrong answer it could give.
+
 - `views_shot.mjs OUTDIR [species] [seed] [waitMs]` — **every render view, one plant,
   one frame.** `GARDEN=7 node tools/views_shot.mjs shots` does a stand instead. The
   view registry is the only thing in the piece that changes what a frame is made *of*

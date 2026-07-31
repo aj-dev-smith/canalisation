@@ -818,8 +818,24 @@ cannot split by construction. Building either gets you closer to the other.
 > measured crown is already in the spruce band. Item 4 (the AGO from per-wall PIN) is
 > what shipped. Items 3, 5 and the abscission rule are open and now much less urgent.
 >
+> **THE CROWN WAS TOO SPARSE AND IS NOT ANY MORE (2026-07-31).** A person watching
+> called it a Charlie Brown tree while every number in `test/tree.mjs` was green. The
+> cause was a *third* unnamed constant of the same family as the `0.72` and the `0.45`:
+> a bud that escaped dominance took with probability `0.35`, hardcoded, so two in three
+> were retired. It is `sp.budTake` now (default 0.35, herbs unchanged; 1.0 here), and
+> with the organ budget raised to match — it is a **pool**, so branches alone make the
+> tree smaller — crown fill went 0.559 to 0.752 and 29 branches became 77. `maxGen: 2`
+> was tried and is **falsified** (+0.010 fill for 4.8x cost). It costs a grown stand of
+> seven 20.8 -> 7.8 fps, shipped knowingly, and that cost is item 3 below.
+>
 > **What is genuinely still open, in order:**
 >
+> 0. **The needle is a paddle.** `aspectFloor: 0.04` never bites — the margin grows
+>    aspect 0.193 — and `marginBias.ay` saturates. The *venation* is a needle's, which
+>    is what `test/venation.mjs` measured and what the old comment conflated it with.
+>    An aspect **ceiling** would fix the silhouette and would be a stated shape number,
+>    so it needs a mechanism instead. Cheapest honest route is probably the same one
+>    grass needs: an intercalary meristem, so length is added without width.
 > 1. **The cone (claim 2 below), which is untouched.** Ashfall Spire has no
 >    reproduction at all — `florigenRate: 0`, no flowers, no fruit. That is correct
 >    gymnosperm biology and it is a code path removed rather than added, but it means
