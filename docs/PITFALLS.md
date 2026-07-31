@@ -795,3 +795,30 @@ against the species it was changing.
 **So: after changing a species, run the whole `test/` suite against THAT species, not
 the suite.** A gate names its subjects, and a law that holds for the subjects it names
 is not a law you have checked.
+
+## The petiole's "one constant" claim does not survive a needle (2026-07-31)
+
+`test/petiole.mjs` section 2 asserts `freq spread < 0.5 * area spread`, on the pre-flight's
+strongest argument that the pipe model is the right law: stiffness goes as `(kappa*A)^2`
+and inertia goes as area too, so they nearly cancel and every species lands in a narrow
+frequency band off one constant. Its own comment says what a failure would mean — "if that
+band ever opens up, something has stopped scaling with area and the law is no longer doing
+the work."
+
+Giving the conifer a needle opens it up. Blade areas went 6.1x -> **7.7x** across the
+catalogue and the flap frequency 2.29x -> **4.34x** (6.8-29.5 Hz), so the assertion fails.
+
+**Nothing is broken and the number is not wrong.** A needle is a genuinely tiny blade on a
+genuinely thin stalk, and a high natural frequency is what that means. The cancellation was
+only ever approximate; eight broadleaf herbs spanning 4.5x of area kept the residual hidden,
+and a blade an order of magnitude smaller does not.
+
+**Do not fix this by loosening the 0.5.** It is the only thing in the tree watching whether
+the pipe model still explains the spread, and the flap mechanism it describes ships
+**disabled** (ROADMAP 9), so nothing visible depends on it today. What it is telling you is
+that the pre-flight's headline — "one constant puts every species at 6.3-9.5 Hz" — is a
+statement about a catalogue of broadleaf herbs and should be re-derived before ROADMAP 9
+reopens the flap on a catalogue that now contains a conifer.
+
+`petiole.mjs` is one of the eight harnesses that assert locally and are **not** wired into
+CI, so this is red on the branch and green on every required check.

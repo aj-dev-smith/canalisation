@@ -1465,6 +1465,24 @@ which is the whole reason the resolved column exists.
 that already overlap, exactly as ROADMAP 13 item 0 predicted, and it is the cheap axis
 because it costs no organs.
 
+### The shipped point, and the one knob to turn if it reads thin
+
+`ay .012` + `organLen 5.4` + `organBudget 1200` ships, and it is the **cost-neutral**
+point: no extra organs, 92.9k -> 89.1k line vertices. The ladder does go further, and
+this is the row to reach for if a person watching says it is still thin:
+
+    ay .012                              on screen        resolved     organs
+    oL 5.4  bud 1200   <- SHIPS        0.725 0.712      0.618 0.567     1201
+    oL 5.4  bud 1800                   0.752 0.732      0.655 0.593     1800
+    oL 5.4  bud 2400                   0.751 0.727      0.658 0.592     2402
+    oL 6.5  bud 1800                   0.790 0.769      0.712 0.643     1800
+    PADDLE, for reference              0.832 0.824      0.772 0.773     1201
+
+`oL 6.5, bud 1800` gets within 0.06 of the paddle it replaced and **costs +50% organs**,
+which is per-organ CPU on the species that already takes a stand of seven to 7.8 fps.
+That is a composition-against-frames trade and it wants the eye, not another sweep —
+which is why the cheap point ships and this row is written down rather than taken.
+
 ### Organs are the wrong lever, and past ~1800 they REVERSE
 
 The obvious way to buy the rest of the fill back is more needles. It does not work, and
