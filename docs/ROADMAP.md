@@ -6,13 +6,36 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
-0. **[#13 item 0, the needle](#13-a-conifer--built-and-on-screen-2026-07-30)** — **START
-   HERE.** One parameter, and the work is paying for it rather than finding it:
-   `marginBias.ay` is a pure width knob, `ay` ~0.005-0.012 puts the aspect in a Norway
-   spruce's 0.02-0.05, and rendered it is unmistakably a needle instead of the paddle
-   that ships. The cost is that a needle 4.5x narrower covers 4.5x less crown, so
-   **TUNING's fill ladder must be re-run from scratch — it was measured on paddles.**
-   Read #13's box for the plan and JOURNAL for why the first diagnosis of this was wrong.
+0. ~~**[#13 item 0, the needle](#13-a-conifer--built-and-on-screen-2026-07-30)**~~ —
+   **DONE 2026-07-31, and it was two parameters rather than one.** `marginBias.ay`
+   0.16 → **0.012** (aspect 0.040-0.058 over three seeds, inside a Norway spruce's
+   0.02-0.05, `n50 = 1` throughout) and `organLen` 3.0 → **5.4**, which is what pays
+   for it. `test/crown.mjs` is the instrument that made the ladder re-runnable and it
+   is a new harness, not a scratch script.
+
+   Three things it found that this entry had wrong:
+
+   - **Setting `ay` alone would have been worse than the Charlie Brown tree** — 0.419
+     resolved fill against the pre-#32 specimen's 0.576. This entry said it "walks the
+     specimen straight back toward the sparseness that was just fixed"; it walks past
+     it. The one-parameter version was never shippable.
+   - **`organLen` does not saturate on needles**, exactly as predicted, and it is the
+     whole recovery: +0.051, +0.041, +0.033, +0.029 per step at no extra organ.
+   - **ORGANS ARE THE WRONG LEVER AND THEY REVERSE.** Budget 1200 → 1800 → 2400 →
+     3200 gives fill 0.511 → 0.535 → 0.534 → 0.508, because crown radius goes
+     7.0 → 15.0 and the extra organs grow the silhouette as fast as they fill it —
+     **the same mechanism that falsified `maxGen: 2`**, on a different knob. So this
+     did *not* need ROADMAP 10b to fund it, and 10b should not be sized as though it
+     does.
+
+   Left alone, measured rather than assumed: `organTilt` is nearly a dead axis
+   (0.92 → 1.40 moves fill by 0.009), so self-overlap is not what limits a needled
+   crown. Cost is about neutral — 92.9k line vertices → 58.1k from thinning, back to
+   89.1k once `organLen` is spent.
+
+   **It also broke a law nobody was watching**, see PITFALLS: `test/views.mjs` fails
+   its drawn-area conservation on a needled blade, and both CI runs of that file stay
+   green because neither names the conifer.
 0a. **[#10b, and it is now the urgent item rather than the cheap one](#10-a-garden-2026-07-29)**
    — #32 filled the conifer's crown and made a grown stand of seven with two conifers
    20.8 → 7.8 fps. A grown background plant paying full `stepAuxin` cost to pattern

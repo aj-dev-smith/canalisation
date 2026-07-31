@@ -1465,6 +1465,29 @@ which is the whole reason the resolved column exists.
 that already overlap, exactly as ROADMAP 13 item 0 predicted, and it is the cheap axis
 because it costs no organs.
 
+### Organs are the wrong lever, and past ~1800 they REVERSE
+
+The obvious way to buy the rest of the fill back is more needles. It does not work, and
+this is the sharpest result of the re-run. At `ay .008, oL 4.6`, sweeping the pool:
+
+    organBudget   organs   crown R   resolved fill
+       1200        1202      7.01       0.5112
+       1800        1800      9.45       0.5345
+       2400        2402     11.87       0.5341
+       3200        3202     14.95       0.5080
+
+**It peaks around 1800 and then falls.** The crown radius more than doubles over that
+sweep, and `fill` is ink over the crown's own outline — so the extra organs grow the
+silhouette as fast as they fill it. That is **the same mechanism that falsified
+`maxGen: 2`** ("sub-branches grow the silhouette as fast as they fill it"), arriving on
+a different knob, and it is why this change needed no organ budget at all.
+
+`organTilt` is the other free axis and it is nearly dead: 0.92 -> 1.40 moves resolved
+fill by 0.009. Self-overlap is not what limits a needled crown.
+
+**What this means for ROADMAP 10b.** The needle did not have to be paid for in
+simulation cost, so 10b should not be sized as though item 0 owed it anything.
+
 **The free axes alone recover most of the loss.** `ay .012` with `oL 5.4` reaches
 0.618/0.567 resolved and 0.725/0.712 on screen with the organ budget untouched — clear of
 the Charlie Brown line without spending a single organ. Exhaust this before ROADMAP 10b
