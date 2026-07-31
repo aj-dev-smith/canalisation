@@ -439,7 +439,19 @@ class Axis {
         const d = v3len(v3sub(v3(), this.tipPos(), org.frame.o));
         const suppressed = Math.exp(-d / sp.dominance);
         if (suppressed > sp.branching) continue;
-        if (this.rnd() > 0.35) { org.branched = true; continue; }
+        // NOT EVERY BUD THAT ESCAPES SUPPRESSION BUILDS A SHOOT. Most axillary
+        // meristems abort or stay dormant for the life of the plant even with
+        // no apex above them, so a bud that clears `dominance` still only takes
+        // with probability `budTake`, and a bud that does not take is retired.
+        //
+        // This was a hardcoded 0.35 with no comment and no way to reach it,
+        // which is the same species of constant as the `0.72` and the `0.45`
+        // that ROADMAP 13 deleted: an unnamed number doing a job a species
+        // parameter should do. It is the single strongest lever on how many
+        // branches a crown has — a conifer at 0.35 discards two buds in three
+        // and reads as a bare pole with tufts on it. Default is 0.35, so the
+        // eight herbs are unchanged bud for bud.
+        if (this.rnd() > sp.budTake) { org.branched = true; continue; }
         org.branched = true;
         // A SHOOT LAUNCHES ALONG THE LEAF IT AROSE BEHIND, and that is all.
         // This line used to be `v3lerp(dir, org.frame.x, v3(0,1,0), 0.45)` — 45%
@@ -1080,6 +1092,9 @@ export const SPECIES_DEFAULTS = {
   branching: 0.55,
   budRelease: 300,
   dominance: 6.0,
+  // What fraction of the buds that escape suppression actually build a shoot.
+  // 0.35 is the value this was hardcoded at, so nothing that shipped moves.
+  budTake: 0.35,
   maxAxes: 5,
   maxGen: 2,
   leafBudget: 60,

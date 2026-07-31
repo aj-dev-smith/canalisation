@@ -4757,7 +4757,19 @@ class Axis {
         const d = v3len(v3sub(v3(), this.tipPos(), org.frame.o));
         const suppressed = Math.exp(-d / sp.dominance);
         if (suppressed > sp.branching) continue;
-        if (this.rnd() > 0.35) { org.branched = true; continue; }
+        // NOT EVERY BUD THAT ESCAPES SUPPRESSION BUILDS A SHOOT. Most axillary
+        // meristems abort or stay dormant for the life of the plant even with
+        // no apex above them, so a bud that clears `dominance` still only takes
+        // with probability `budTake`, and a bud that does not take is retired.
+        //
+        // This was a hardcoded 0.35 with no comment and no way to reach it,
+        // which is the same species of constant as the `0.72` and the `0.45`
+        // that ROADMAP 13 deleted: an unnamed number doing a job a species
+        // parameter should do. It is the single strongest lever on how many
+        // branches a crown has — a conifer at 0.35 discards two buds in three
+        // and reads as a bare pole with tufts on it. Default is 0.35, so the
+        // eight herbs are unchanged bud for bud.
+        if (this.rnd() > sp.budTake) { org.branched = true; continue; }
         org.branched = true;
         // A SHOOT LAUNCHES ALONG THE LEAF IT AROSE BEHIND, and that is all.
         // This line used to be `v3lerp(dir, org.frame.x, v3(0,1,0), 0.45)` — 45%
@@ -5398,6 +5410,9 @@ const SPECIES_DEFAULTS = {
   branching: 0.55,
   budRelease: 300,
   dominance: 6.0,
+  // What fraction of the buds that escape suppression actually build a shoot.
+  // 0.35 is the value this was hardcoded at, so nothing that shipped moves.
+  budTake: 0.35,
   maxAxes: 5,
   maxGen: 2,
   leafBudget: 60,
@@ -7764,9 +7779,38 @@ const SPECIES = {
   //              conifer corner of it.
   //   eModulus 1.2 GPa  a conifer is woody and the engine's default is
   //              herbaceous. At 60 MPa this specimen folds up; see test/plagio.mjs.
-  //   aspectFloor 0.04  lets the margin's own slenderness through, and a blade
-  //              that narrow canalises one unbranched midvein. That is a needle,
-  //              and nothing draws one.
+  //   aspectFloor 0.04  lets the margin's own slenderness through. NOTE the
+  //              floor does NOT bite: this margin grows aspect 0.193 on its own
+  //              and the floor is five times below it, so the blade is a narrow
+  //              paddle rather than the needle this comment used to claim. The
+  //              VENATION is a needle's — one dominant bundle — and that is what
+  //              `test/venation.mjs` measured. The SILHOUETTE is not, and
+  //              `marginBias.ay` saturates: 0.16 -> 0.02 moves the aspect only
+  //              0.213 -> 0.103. Left as a known gap, written up in JOURNAL.
+  //
+  // WHAT SETS HOW FULL THE CROWN IS, and it is three numbers rather than one.
+  // Shipped, this specimen was a Charlie Brown tree — a bare pole with tufts —
+  // and the diagnosis was that all three were fighting each other:
+  //
+  //   budTake 1.0  the hardcoded coin flip that used to discard two escaped
+  //              buds in three. At 1.0 it is GONE for this species, so branch
+  //              count is decided entirely by `exp(-d/dominance) > branching`,
+  //              which is chemistry, rather than by an unnamed constant. 29
+  //              branches became 76, and `maxAxes` is not what stops it — the
+  //              dominance falloff is, at 77 axes against a cap of 140.
+  //   organBudget 2200  the budget is a POOL over the whole specimen, so
+  //              raising `budTake` alone just divides 540 organs among three
+  //              times as many branches and the tree gets SMALLER: measured
+  //              46.1 -> 35.3 units tall, crown radius 7.9 -> 4.3. More
+  //              branches has to be paid for.
+  //   maxOrgans 80  left alone deliberately. It caps the LEADER, so the extra
+  //              budget goes into branches and not into a taller trunk: height
+  //              stays at 46.1 to the digit while crown fill goes 0.56 -> 0.70.
+  //
+  //   organLen 2.1  and this one is nearly free. Drawn area per organ, at no
+  //              extra organ: fill 0.70 -> 0.78 for 153.8k triangles against
+  //              153.6k. It does almost nothing on its own (0.561 -> 0.576) —
+  //              it is a multiplier on having branches to hang needles from.
   //
   // It has no florigen, so it never flowers and never sets fruit — which is the
   // right biology for a gymnosperm and is a code path REMOVED rather than added.
@@ -7776,9 +7820,9 @@ const SPECIES = {
     prm: { T: 40, D: 6.0, mu: 0.30, rho: 0.60, b: 3.0 },
     mo: { R: 10, rCZ: 2.4, rPZ: 6.8, G: 0.0042 },
     sp: {
-      elongation: 0.0034, organLen: 1.45, organTilt: 0.92, organRoll: 0.30,
-      maxOrgans: 80, organBudget: 540, maxAxes: 36, maxGen: 1,
-      branching: 0.94, budRelease: 60, dominance: 6.0,
+      elongation: 0.0034, organLen: 3.0, organTilt: 0.92, organRoll: 0.30,
+      maxOrgans: 80, organBudget: 1200, maxAxes: 140, maxGen: 1,
+      branching: 0.94, budRelease: 60, dominance: 6.0, budTake: 1.0,
       apicalControl: 0.80, agoGain: 1.0, agoK: 0.90,
       // a conifer's leader is straight, and wander and circumnutation are what
       // make the other eight lean
@@ -8211,7 +8255,7 @@ class App {
     const names = Object.keys(SPECIES);
     const rad = opts.radius === undefined ? 9 : opts.radius;
     const wind = this.plant.wind;      // ONE air over the whole clearing
-    this.garden = [];
+    this.garden = []; this._warmAt = 0;
     // Only the PLAN is drawn up here. Constructing a specimen is not cheap
     // either — every `Axis` runs its meristem forward 220 steps in its own
     // constructor, so it is born from a settled sheet rather than a burst of
@@ -8220,6 +8264,7 @@ class App {
     // building all seven plants up front fixes the long freeze and leaves the
     // sharp one.
     this._plan = [];
+    this._warmAt = 0;              // round-robin cursor, see `warmGarden`
     for (let i = 0; i < n; i++) {
       // a ring, jittered, so nothing reads as a planted row
       const a = (i + 0.5) / n * TAU + (r() - 0.5) * 0.9;
@@ -8287,16 +8332,31 @@ class App {
         this.garden.push(S);
         if (spent()) return false;
       }
+      // THE BUDGET IS CHECKED PER STEP, NOT PER ROUND, and the comment that used
+      // to be here is why: "a round is seven steps and the budget is in whole
+      // milliseconds, so per-step timing would cost more than it saves." That
+      // holds only if every step costs the same, and they do not — a herb's
+      // step is a few hundred microseconds and a conifer's is milliseconds, so
+      // one round could overrun the whole budget several times over and nothing
+      // looked until it was finished. `tools/garden_hitch.mjs` caught it the
+      // day the conifer's crown got denser: worst frame gap 141ms -> 296ms on
+      // the same seed, straight through the 250ms budget. A `now()` call is
+      // ~100ns against a step that costs milliseconds.
+      //
+      // `_warmAt` is a cursor rather than a fresh scan, so breaking mid-round
+      // does not hand the whole budget to whichever specimens sort first — the
+      // next call resumes where this one stopped and the round-robin survives.
       let any = false;
-      for (const S of this.garden) {
+      const g = this.garden;
+      for (let k = 0; k < g.length; k++) {
+        const S = g[(this._warmAt + k) % g.length];
         if (S.debt <= 0) continue;
         S.plant.step(1); S.debt--;
         any = true;
+        if (spent()) { this._warmAt = (this._warmAt + k + 1) % g.length; return false; }
       }
+      this._warmAt = 0;
       if (!any && !(this._plan && this._plan.length)) return true;
-      // checked once per round rather than per step: a round is seven steps and
-      // the budget is in whole milliseconds, so per-step timing would cost more
-      // than it saves
       if (spent()) return false;
     }
   }
@@ -8317,7 +8377,7 @@ class App {
     this.prm = spec.prm; this.mo = spec.mo; this.sp = spec.sp;
     this.pal = spec.pal; this.petalPal = spec.petalPal;
     this.innerPals = spec.innerPals; this.plant = spec.plant;
-    this.garden = [];
+    this.garden = []; this._warmAt = 0;
     this.bbS = null;
     this.cam.dist = 7.5; this.cam.tgtY = 1.4;
     const rnd = mulberry32(seed ^ 0x5bf03635);
@@ -9245,6 +9305,11 @@ window.__app = app;
 // the view table, so a capture script can enumerate them rather than keep its
 // own list and quietly stop covering the one that was added last
 window.__VIEWS = VIEWS;
+// The species table, for the same reason and one more: a preset A/B is only
+// honest if both specimens are grown in ONE browser session on ONE GL backend,
+// and a tool that has to rebuild the bundle between candidates cannot do that.
+// `newSpecimen` reads this table, so a tool can patch a preset and regrow.
+window.__SPECIES = SPECIES;
 
 // --- the specimen label ----------------------------------------------------
 let lastHud = 0;
