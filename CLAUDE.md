@@ -74,7 +74,7 @@ node test/conifer.mjs                              # ROADMAP 13 pre-flight: does
 node test/plagio.mjs                               # ROADMAP 13 pre-flight: can gravity hold a branch out? (no)
 node test/taper.mjs                                # ROADMAP 14: what sizes a stem, swept and drawn (~3min)
 node test/tree.mjs                                 # ROADMAP 13: the crown — set point, taper, and an ASCII conifer (~4min)
-node test/crown.mjs '{"ay":0.008}'                 # HOW MUCH OF ANYTHING IS THERE — crown fill, at five rasters (~40s)
+node test/crown.mjs '{"maxGen":2}'                 # HOW MUCH OF ANYTHING IS THERE — crown fill, at five rasters (~40s)
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -430,6 +430,7 @@ of its bugs were found, and none would have been visible on screen.
 - **Pre-flight the number before writing the solver.** The stem's frequencies were worked out analytically for all eight species on paper first. That table then caught three separate bugs in the solver, none of which was visible on screen and all of which produced a plant that swayed pleasantly at the wrong rate. A solver that cannot reproduce a number somebody computed beforehand is not the thing it claims to be.
 - **Green is a statement about what the gate imports, and about internal consistency only.** A name collision once shipped a bundle that did not parse while 47 checks passed. The wind field passed all 24 of its own assertions while every gust mode sat at vibration frequencies. Ask what the suite *cannot* see, then go and look at that.
 - **Ask what CLASS of quantity the suite measures at all.** The sharpest version of the above, and the 2026-07-31 instance. `test/tree.mjs` and `test/conifer.mjs` were entirely green on a conifer a person immediately called a Charlie Brown tree, because every statistic in them — branch angle, crown half-angle, taper slope, length fit — is a **shape** statistic and not one of them is a **quantity** statistic. A crown can be exactly the right shape with a tenth of the foliage. **`test/crown.mjs` is that missing quantity harness and it exists now** — ink over the crown's own rasterised outline, reproducing the lost scratch script at both ends of its range (0.772 against 0.750 shipped, 0.576/0.493 against 0.546 for the pre-#32 tree). Before believing a green suite about appearance, write down what it would still pass with. **And state the raster**: fill is pixel coverage, so a blade thinner than a cell is measured by the sampler rather than the tissue, which is why that file reports five rasters and separates "how it reads on screen" from "how much is there".
+- **THEN ASK WHAT THE METRIC DIVIDES BY — the 2026-08-01 instance, and it is the same mistake one level up.** Having the right *class* of statistic is not enough. `crown.mjs`'s fill is ink over the crown's **own** rasterised outline, normalised exactly so a crown cannot score by getting bigger — and that normalisation is what made it unable to see second-order branching, which nearly doubles crown radius and multiplies blade area 2.5x for a 4.7% *fall* in fill. **When a metric is normalised, the normaliser is a statement about what it refuses to see.** The suite measured shape and not quantity, so a quantity harness was built; the quantity harness measures density and divides out architecture. **Before quoting a falsification, check which instrument produced it and whether its number is in the same band as the ones the project quotes now** — three rejected values at 0.281/0.268/0.311 sat nowhere near any shipped fill (0.51-0.77), which was visible for free on the page and went unnoticed for a day. And a knob that is not in a harness's sweep list has not been measured by it: `maxGen` never was.
 - **Do not read a trend off the noisy end of a sweep, and split a ratio before calling a knob dead.** Same session: `marginBias.ay` was swept 0.16 → 0.02, flattened in the middle, and got written up in four files as "saturates — needs a new mechanism". It does not saturate; the signal starts exactly where the sweep stopped. The tell was available for free — `ay` is a *width* knob and the aspect it moves is width/length, so printing numerator and denominator separately shows length flat and width falling 17x, which is not what saturation looks like.
 - **Get a person to watch it.** Three times now the fastest path to a genuine modelling error was AJ watching for a few seconds — a wind field at vibration frequencies, a crown that was upside down, and a tree with a tenth of its foliage. When a report says "feels like a bug", measure it before explaining it — and take more than one measurement, because "too fast" has meant frequency once and amplitude once, in nearly the same words.
 - **Never fake it to make it look better.** The piece's entire claim is that nothing is drawn. A single hardcoded curve would make the whole thing a lie.
@@ -455,12 +456,40 @@ it are worth knowing before touching anything near branching:
   permanently. It is `sp.budTake` now, default 0.35 so the eight herbs are unchanged, and
   **1.0** for the conifer, which removes the coin flip and leaves branch count to
   `exp(-d/dominance) > branching`. 29 branches became 77 and crown fill went 0.559 to
-  0.752. Two things not to relearn: the **organ budget is a pool**, so raising `budTake`
-  alone makes the tree *smaller* (46.1 → 35.3 units), and **second-order branching is
-  falsified** — `maxGen: 2` buys +0.010 of fill for 4.8x the simulation cost, because
-  sub-branches grow the silhouette as fast as they fill it. It costs a grown stand of
-  seven 20.8 → 7.8 fps and that is shipped knowingly; the cost is linear in organs, so it
-  is ROADMAP 10b and 11. TUNING has the ladder and the two ways to measure it wrong.
+  0.752. The thing not to relearn: the **organ budget is a pool**, so raising `budTake`
+  alone makes the tree *smaller* (46.1 → 35.3 units) — **anything that multiplies axes has
+  to be paid for out of the pool in the same commit.** TUNING has the ladder and the two
+  ways to measure it wrong.
+- **THE BRANCHES BRANCH NOW, AND THE ENTRY THAT SAID THEY SHOULD NOT WAS MEASURED WITH A
+  RETRACTED RULER (2026-08-01).** `maxGen` ships at **2** with `maxAxes: 240` and
+  `organBudget: 3000`. It was written up in three files as falsified on "fill 0.281 →
+  0.268" — and **0.281 is the signature of the metric the same JOURNAL entry throws out
+  three paragraphs later** ("came back 0.28 for every variant including ones that plainly
+  differed"). Every fill number the project quotes lives at 0.51-0.77. `maxGen` was also
+  never in `test/crown.mjs`'s knob list, so the instrument built to replace the broken one
+  had never been pointed at the change it killed. Re-measured: fill 0.772 → 0.736 while
+  **crown radius nearly doubles (6.87 → 11.53) and blade area goes 673 → 1702, at
+  identical height.** Fill is normalised by the crown's own outline precisely so a crown
+  cannot score by getting bigger — **so it can never answer "is this a tree", and a flat
+  fill means "denser per unit of outline", never "more tree". Print crown radius and blade
+  area beside it.** Outside evidence says this is nearer the floor than the ceiling: a real
+  10-year-old Norway spruce is **26.7% first order, 52.8% second, 16.6% third, 4.0%
+  fourth**. It costs 2.5x the organs and a grown stand of seven was already 20.8 → 7.8 fps;
+  shipped knowingly, linear in organs, ROADMAP 10b and 11. **Do not buy frames back by
+  lowering `maxGen`.**
+- **THE SPECIMEN IS A 2.88 m SAPLING, and the ruler was already in the world.**
+  `WORLD.unitM` = 0.0625 m/unit, fixed months ago by the wind and the falling blade. Trunk
+  9.5 cm, crown 0.85 m across, leaf 13.4 cm (a Cathedral Fern is 1.39 m). That makes three
+  apparent defects **correct biology for the life stage**, checked against literature: no
+  cones ever (spruce seed production starts at 20-40 years), branches retained to the
+  ground (self-pruning needs stand shading; measured on real 3.3 m spruce), and a strong
+  straight leader. ⚠ **Two things that are NOT excused by it and were checked**: our
+  branch spacing is *not* juvenile "free growth" — free growth adds internodal branches
+  **between** whorls rather than removing them, and our gap CV is 0.83 against 1.0 for
+  random and √(k−1) ≈ 2.0 for whorled, so the crown is more regular than either; and the
+  stem is not "wood-free" — a 2.9 m stem is essentially all secondary xylem, and the real
+  error is **irreversibility** (strip the leaves, re-run `updateRadii`, and the basal
+  radius falls 0.757 → 0.241, a 68.2% loss; a cambium can only add). JOURNAL 2026-08-01.
 - **The needle is a paddle, and the preset used to claim otherwise.** `aspectFloor: 0.04`
   does **not** bite — this margin grows aspect 0.193 on its own. What `test/venation.mjs`
   measured was the **venation**, one dominant bundle, and that still holds; the
@@ -669,6 +698,29 @@ what would have to change instead.
 [docs/ROADMAP.md](docs/ROADMAP.md) is the ranked list and has the reasoning; the
 short version, in order:
 
+0z1. **A GROWTH RHYTHM — the tree's biggest remaining gap, and it is one oscillator.**
+   There is no season, no flush and no bud dormancy anywhere in the engine, so the tree
+   grows exactly the way the flowers do: continuously. That is why it has **no whorls**,
+   and whorls are most of what reads as "conifer". Measured: gap CV 0.83 against 1.0 for
+   uniform-random and √(k−1) ≈ 2.0 for a whorled leader. **A bud is a compressed shoot**,
+   so holding elongation while organ founding continues piles primordia at one arc
+   position — a whorl of buds, then a bare internode, out of the branching rule that
+   already exists. Growth rings and bud scars come off the same clock. A season is
+   *environmental*, the same category as the air in `37_wind.js`, so it costs nothing
+   against the one rule. ⚠ **One obstacle, unproven and worth pre-flighting first:**
+   `minInternode` currently makes a non-elongating axis *discard* the primordia its
+   meristem emits (it is the stalled-shoot bug in the senescence notes). It would have to
+   queue them instead, without disturbing the eight herbs. Kill criterion: if that cannot
+   be done, take the wood term alone.
+0z2. **WOOD AS MEMORY — one term in `updateRadii`.** Strip every leaf off the grown
+   conifer and re-run it: basal radius **0.7573 → 0.2412, a 68.2% loss.** Radius is a pure
+   function of *current* traffic with no accumulation, so the 2.9 m trunk is a herbaceous
+   pipe. The pipe-model proportionality is actually correct at this size (a sapling is all
+   sapwood); **the missing property is irreversibility** — a cambium can only add. Note
+   `EI` goes as r⁴, so the sway currently rests on a radius that moves with the foliage:
+   **`node test/stem.mjs` is not optional here.** And do not "measure" this by running
+   senescence — `updateRadii` counts dying organs too, so the load never comes off and the
+   radius holds perfectly, which is what a first attempt reported.
 0. ~~**THE NEEDLE IS A PADDLE (ROADMAP 13 item 0)**~~ — **BUILT, MEASURED, DRAWN AND
    REJECTED, 2026-07-31. Do not reopen it without reading the JOURNAL entry.** The knob
    works: `marginBias.ay` 0.008 grows aspect 0.040-0.058, inside a Norway spruce's
@@ -688,9 +740,13 @@ short version, in order:
 
    Four things it produced that outlive it: `test/crown.mjs`; the fact that `organLen` is
    the only lever that fills a needled crown *and spends the thinness one-for-one*, so no
-   setting has both; that **organs saturate near 1800 and then reverse** (the `maxGen: 2`
-   mechanism again), so this never owed ROADMAP 10b anything; and `minInternode` as the
-   one lever that adds foliage without lengthening an axis.
+   setting has both; that **organs saturate near 1800 and then reverse**, so this never
+   owed ROADMAP 10b anything; and `minInternode` as the one lever that adds foliage
+   without lengthening an axis. *(That saturation used to be cited as "the `maxGen: 2`
+   mechanism again". The mechanism is real on this knob — a bigger crown that is also
+   emptier — but `maxGen: 2` was un-falsified on 2026-08-01 and ships. Second-order
+   branching nearly doubles crown radius and multiplies blade area 2.5x for a 4.7% fill
+   cost, which is the opposite case. Both are reasons not to judge a crown by fill alone.)*
 0a. **WHAT THE GARDEN OWES (ROADMAP 10b) IS NOW THE URGENT ONE, not the cheap one.**
    It was "the cheapest interesting work here"; #32 made it the thing standing between
    the piece and a stand that runs. A grown background plant pays full `stepAuxin` cost
