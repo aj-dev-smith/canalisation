@@ -7,35 +7,56 @@ priority.** The list below is the priority.
 **Start here, in this order:**
 
 0. ~~**[#13 item 0, the needle](#13-a-conifer--built-and-on-screen-2026-07-30)**~~ —
-   **DONE 2026-07-31, and it was two parameters rather than one.** `marginBias.ay`
-   0.16 → **0.012** (aspect 0.040-0.058 over three seeds, inside a Norway spruce's
-   0.02-0.05, `n50 = 1` throughout) and `organLen` 3.0 → **5.4**, which is what pays
-   for it. `test/crown.mjs` is the instrument that made the ladder re-runnable and it
-   is a new harness, not a scratch script.
+   **DISSOLVED 2026-07-31, not done.** It was built, measured, rendered at both
+   framings, and then deliberately not shipped. `marginBias.ay` 0.008 puts the aspect
+   at 0.040-0.058 (Norway spruce 0.02-0.05) with `n50 = 1`, and at arm's length it is
+   unmistakably a needle. The knob works. The entry was wrong about what it was for.
 
-   Three things it found that this entry had wrong:
+   **A needle canalises ONE strand, and that is the whole problem.** A Cathedral Fern
+   leaf canalises 373-470 veins with traffic spread over 3-7 of them (top strand
+   16-29%); a needle canalises 69-80 with **one carrying 77-99%**. That is correct
+   *Picea* and `test/venation.mjs` books it as a success — but the reticulate network
+   is the only channel through which this engine is visible, and a needle has none of
+   it. At each specimen's own framing a fern draws **190 vein ribbons per organ** and
+   this species **78**; the needle takes it to ~48. The blade got correct and the piece
+   got quieter. **This is xenobotany — the species is Ashfall Spire, not Norway
+   Spruce** — so fidelity to a genus nobody promised is not worth the only thing the
+   viewer can actually see. The wide blade stays.
 
-   - **Setting `ay` alone would have been worse than the Charlie Brown tree** — 0.419
-     resolved fill against the pre-#32 specimen's 0.576. This entry said it "walks the
-     specimen straight back toward the sparseness that was just fixed"; it walks past
-     it. The one-parameter version was never shippable.
-   - **`organLen` does not saturate on needles**, exactly as predicted, and it is the
-     whole recovery: +0.051, +0.041, +0.033, +0.029 per step at no extra organ.
-   - **ORGANS ARE THE WRONG LEVER AND THEY REVERSE.** Budget 1200 → 1800 → 2400 →
-     3200 gives fill 0.511 → 0.535 → 0.534 → 0.508, because crown radius goes
-     7.0 → 15.0 and the extra organs grow the silhouette as fast as they fill it —
-     **the same mechanism that falsified `maxGen: 2`**, on a different knob. So this
-     did *not* need ROADMAP 10b to fund it, and 10b should not be sized as though it
-     does.
+   Everything measured on the way is kept, because it is all reusable:
 
-   Left alone, measured rather than assumed: `organTilt` is nearly a dead axis
-   (0.92 → 1.40 moves fill by 0.009), so self-overlap is not what limits a needled
-   crown. Cost is about neutral — 92.9k line vertices → 58.1k from thinning, back to
-   89.1k once `organLen` is spent.
+   - **`test/crown.mjs`**, the quantity harness CLAUDE.md said did not exist. Ink over
+     the crown's own outline, five rasters, reproducing the lost scratch script at both
+     ends (0.772 vs 0.750 shipped; 0.576/0.493 vs 0.546 pre-#32).
+   - **`organLen` does not saturate on needles**, exactly as this entry predicted — but
+     it is the *only* lever that fills a needled crown and it spends the thinness
+     one-for-one, because half-width is aspect times length. That is the trade that
+     killed it.
+   - **Organs saturate near 1800 and then REVERSE** (fill 0.511/0.535/0.534/0.508 as
+     the budget goes 1200-3200, crown radius 7.0 -> 15.0) — the same mechanism that
+     falsified `maxGen: 2`. **So this never owed ROADMAP 10b anything.**
+   - **`minInternode` is the one lever that adds foliage without lengthening an axis**,
+     and it was untried. Worth reaching for before organs, on any species.
+   - **`tools/tree_shot.mjs` now takes `FIXDIST=`.** Every framing there was a fraction
+     of the specimen's own bounds, so a candidate that changed the specimen's SIZE was
+     photographed from further away and the A/B compared two different scales.
 
-   **It also broke a law nobody was watching**, see PITFALLS: `test/views.mjs` fails
-   its drawn-area conservation on a needled blade, and both CI runs of that file stay
-   green because neither names the conifer.
+   **What it exposed and left open:** `test/views.mjs` fails its drawn-area conservation
+   on a needled blade while both CI runs stay green, because neither names the conifer
+   (PITFALLS). That is latent rather than fixed — nothing needled ships today.
+
+0z. **THE ARCHITECTURE VIEW, and it is what would actually make the tree good.**
+   The finding above says the conifer's chemistry went into its skeleton, where none of
+   it is drawn: the dominance field that decides which buds escape, the vigour partition
+   down the crown, the gravitropic set point per axis. All computed every step, none of
+   it on screen. `Axis` already carries `vigour`, `gsa` and `iaa` as live scalars and
+   `drawSpecimen` already colours stems through a per-station callback, so a fifth
+   `VIEWS` entry that paints the axes by that field is a table entry and a callback
+   rather than a project. It is the specimen that most needs it and the one that would
+   show it best — a crown is a picture of a dominance gradient and nothing currently
+   says so. This is the same argument #12 was built on: **a computed-but-undrawn
+   channel is a view waiting to happen.**
+
 0a. **[#10b, and it is now the urgent item rather than the cheap one](#10-a-garden-2026-07-29)**
    — #32 filled the conifer's crown and made a grown stand of seven with two conifers
    20.8 → 7.8 fps. A grown background plant paying full `stepAuxin` cost to pattern

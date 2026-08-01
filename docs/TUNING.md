@@ -1465,11 +1465,12 @@ which is the whole reason the resolved column exists.
 that already overlap, exactly as ROADMAP 13 item 0 predicted, and it is the cheap axis
 because it costs no organs.
 
-### The shipped point, and the one knob to turn if it reads thin
+### The point it would have shipped at, and why it did not
 
-`ay .012` + `organLen 5.4` + `organBudget 1200` ships, and it is the **cost-neutral**
-point: no extra organs, 92.9k -> 89.1k line vertices. The ladder does go further, and
-this is the row to reach for if a person watching says it is still thin:
+**Nothing here ships. The needle was built, measured, drawn and rejected** — see the
+2026-07-31 JOURNAL entry, and note the reason is not in this table. `ay .012` +
+`organLen 5.4` was the cost-neutral candidate (no extra organs, 92.9k -> 89.1k line
+vertices) and the ladder runs past it:
 
     ay .012                              on screen        resolved     organs
     oL 5.4  bud 1200   <- SHIPS        0.725 0.712      0.618 0.567     1201
@@ -1478,10 +1479,20 @@ this is the row to reach for if a person watching says it is still thin:
     oL 6.5  bud 1800                   0.790 0.769      0.712 0.643     1800
     PADDLE, for reference              0.832 0.824      0.772 0.773     1201
 
-`oL 6.5, bud 1800` gets within 0.06 of the paddle it replaced and **costs +50% organs**,
-which is per-organ CPU on the species that already takes a stand of seven to 7.8 fps.
-That is a composition-against-frames trade and it wants the eye, not another sweep —
-which is why the cheap point ships and this row is written down rather than taken.
+**And then a person looked at it and the whole table stopped mattering.** What the
+candidate actually ships as a *picture* is a blade only **1.9x narrower than the
+paddle** (half-width 0.4251 -> 0.2211 world, 8.84 -> 4.51 px at the whole-tree framing),
+because half-width is aspect times length and `organLen` gave back more than half of
+what `ay` took away. Every ratio statistic in this file still said "needle" — aspect is
+preserved — and `fill` measures coverage, not width, so **nothing in the ladder could
+see it.** Ask what class of quantity the table measures, again.
+
+The frontier underneath is real and no row escapes it. At a true needle width (2 px)
+organs make fill *worse* (0.617 / 0.605 / 0.581 over budgets 1200 / 1800 / 2400), and
+`ay` stops responding below about 0.008, so width is floored near `0.044 * length`. You
+can have a thin needle or a full crown. `aspectFloor` was checked on suspicion and is
+**not** the cause — 0.04 and 0.012 give identical results, so this file's older claim
+that it never bites survives.
 
 ### Organs are the wrong lever, and past ~1800 they REVERSE
 
