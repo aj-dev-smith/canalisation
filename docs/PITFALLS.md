@@ -758,3 +758,67 @@ distance, a world position, a chord). It will pass for years, because nothing el
 the pose — and then something stiffens or softens a beam somewhere and the check reports
 a change in a mechanism that did not change. The assertion is on the schedule now and
 the distance is printed with a line saying what it is.
+
+## A level-of-detail law can hold on every specimen the gate names (2026-07-31)
+
+`test/views.mjs` asserts that a blade's cell view conserves drawn area from 6 to 96
+units — the same conservation the vein cull obeys, stated for discs. It does, on
+everything CI runs it against. Give `Ashfall Spire` a needle and it **fails**:
+
+    node test/views.mjs 'Ashfall Spire'
+      eye distance   cells drawn   total drawn area
+                6            58      1.000x
+               12            15      0.954x
+               24             4      0.990x
+               48             1      0.861x     <- FAIL, 8% tolerance
+               96             1      0.861x
+
+The law is `nDraw = max(1, round(T.n * shrink))` with each kept cell's radius scaled by
+`sqrt(T.n / nDraw)`, which conserves area exactly **if every cell in the prefix is
+drawn and every cell is the same size**. Neither is quite true: the loop skips cells
+that fall outside the outline, and a cell's drawn radius comes from its own baked
+half-width, so which cell survives at the one-cell floor decides the answer. A paddle
+has enough cells that the tail never gets that granular. A needle reaches one cell two
+distance-steps earlier and sits there.
+
+**It is a real weakness in the law rather than a wrong tolerance, and it should not be
+fixed by widening the 8%.** Conserving *count* is a proxy for conserving *area*; the
+honest version scales by the ratio of summed cell areas over the prefix, which is a
+prefix sum that could be baked into `cellTable` alongside everything else it bakes.
+
+**The part worth carrying, though, is how nearly nobody would have seen it.** CI runs
+this file twice and neither run names the conifer — one names `Cathedral Fern` and the
+other takes the garden, whose LOD section reads a fern. Both are green with this in the
+tree, and so is `smoke.mjs`. It was found only because the needle work ran the harness
+against the species it was changing.
+
+**So: after changing a species, run the whole `test/` suite against THAT species, not
+the suite.** A gate names its subjects, and a law that holds for the subjects it names
+is not a law you have checked.
+
+## The petiole's "one constant" claim does not survive a needle (2026-07-31)
+
+`test/petiole.mjs` section 2 asserts `freq spread < 0.5 * area spread`, on the pre-flight's
+strongest argument that the pipe model is the right law: stiffness goes as `(kappa*A)^2`
+and inertia goes as area too, so they nearly cancel and every species lands in a narrow
+frequency band off one constant. Its own comment says what a failure would mean — "if that
+band ever opens up, something has stopped scaling with area and the law is no longer doing
+the work."
+
+Giving the conifer a needle opens it up. Blade areas went 6.1x -> **7.7x** across the
+catalogue and the flap frequency 2.29x -> **4.34x** (6.8-29.5 Hz), so the assertion fails.
+
+**Nothing is broken and the number is not wrong.** A needle is a genuinely tiny blade on a
+genuinely thin stalk, and a high natural frequency is what that means. The cancellation was
+only ever approximate; eight broadleaf herbs spanning 4.5x of area kept the residual hidden,
+and a blade an order of magnitude smaller does not.
+
+**Do not fix this by loosening the 0.5.** It is the only thing in the tree watching whether
+the pipe model still explains the spread, and the flap mechanism it describes ships
+**disabled** (ROADMAP 9), so nothing visible depends on it today. What it is telling you is
+that the pre-flight's headline — "one constant puts every species at 6.3-9.5 Hz" — is a
+statement about a catalogue of broadleaf herbs and should be re-derived before ROADMAP 9
+reopens the flap on a catalogue that now contains a conifer.
+
+`petiole.mjs` is one of the eight harnesses that assert locally and are **not** wired into
+CI, so this is red on the branch and green on every required check.

@@ -1397,3 +1397,145 @@ crown, and the fill ladder above was measured on **paddles**, so it does not car
 `organLen` saturating at 3.0 is a statement about needles that already overlap. It is
 *cheaper* (92.9k -> 58.1k line vertices), so there is headroom to spend recovering the
 fill. ROADMAP 13 item 0.
+
+## The needle, and the ladder re-run on it (ROADMAP 13 item 0, 2026-07-31)
+
+**There is an instrument now.** Both ladders above were measured in a scratch script that
+no longer exists, which made "re-run the ladder from scratch" impossible to do honestly.
+`test/crown.mjs` is that measurement as a harness: ink over the crown's own rasterised
+outline, per row. It reads the shipped paddle tree at **0.772** against the lost script's
+0.750, and the pre-#32 Charlie Brown tree at **0.576/0.493** against its 0.546 — so the
+two instruments agree to a few percent at both ends of the range that matters.
+
+**Read two numbers, not one, and they answer different questions.** `fill` is pixel
+coverage, so it means nothing without a stated raster:
+
+- **ON SCREEN (960 rows)** is the whole-tree framing `tools/tree_shot.mjs` shoots at,
+  ~21 px per world unit. It is what "reads as sparse" is a statement about.
+- **HOW MUCH IS THERE (3840 rows)** is the finest raster at which a needle is still four
+  pixels across. Coarser than that and the number is the sampler's rounding.
+
+The two separate exactly when the ink stops being resolvable, which is what this change
+does: a needle at the whole-tree framing is **2 px across**, so the on-screen number
+flatters it. The viewer's eye has the same problem, which is why both are kept rather
+than one being called correct.
+
+### `ay` — and 0.012 is the place to sit, not 0.008
+
+Measured across three seeds on the shipped species' own margin chemistry, not a
+hand-passed config:
+
+    sp.ay    aspect (3 seeds)       n50   cells     spruce band 0.02-0.05
+    0.16     0.201 0.224 0.232       1    83-100    <- ships, a PADDLE
+    0.012    0.040 0.058 0.047       1    78-87     <- inside the band
+    0.008    0.047 0.054 0.040       1    71-82     <- inside the band
+
+Both candidates are in the band and both hold `n50 = 1`, the single unbranched bundle a
+*Picea* needle has. **0.012 is the better buy**: the same needle by every venation
+statistic, and it holds materially more crown. ROADMAP named 0.005-0.012 without
+distinguishing within it; the wide end is where to sit. Cells stay at 78-87, clear of the
+44-55 floor where the blade runs out of tissue to canalise — **that floor, not the
+aspect, is the real limit on this knob.**
+
+### The ladder, re-run on needles
+
+Two seeds, both arrested, `organBudget` untouched at 1200:
+
+    variant                                on screen        resolved
+    PADDLE ship      ay .16  oL 3.0      0.832 0.824      0.772 0.773
+    PADDLE pre-#32   budTake .35         0.673 0.562      0.576 0.493   <- "Charlie Brown"
+    NEEDLE           ay .008 oL 3.0      0.617 0.574      0.419 0.352
+    NEEDLE           ay .008 oL 3.8      0.644 0.616      0.470 0.388
+    NEEDLE           ay .008 oL 4.6      0.665 0.649      0.511 0.416
+    NEEDLE           ay .008 oL 5.4      0.683 0.671      0.544 0.440
+    NEEDLE           ay .008 oL 6.5      0.693 0.689      0.573 0.463
+    NEEDLE           ay .012 oL 4.6      0.712 0.678      0.586 0.526
+    NEEDLE           ay .012 oL 5.4      0.725 0.712      0.618 0.567
+
+**Setting `ay` alone is worse than the tree a person called a Charlie Brown tree.** At
+the shipped `organLen` the needle lands at 0.419/0.352 resolved against the pre-#32
+tree's 0.576/0.493. ROADMAP said this change "walks the specimen straight back toward the
+sparseness that was just fixed"; it walks **past** it. Do not ship the one-parameter
+version — and note that the on-screen column hides this, reporting 0.617 against 0.673,
+which is the whole reason the resolved column exists.
+
+**`organLen` does NOT saturate on needles.** The ladder above records it saturating at
+3.0, with 3.0 and 3.8 within 0.003 of each other. On needles every step still buys:
++0.051, +0.041, +0.033, +0.029 of resolved fill. That entry was a statement about needles
+that already overlap, exactly as ROADMAP 13 item 0 predicted, and it is the cheap axis
+because it costs no organs.
+
+### The point it would have shipped at, and why it did not
+
+**Nothing here ships. The needle was built, measured, drawn and rejected** — see the
+2026-07-31 JOURNAL entry, and note the reason is not in this table. `ay .012` +
+`organLen 5.4` was the cost-neutral candidate (no extra organs, 92.9k -> 89.1k line
+vertices) and the ladder runs past it:
+
+    ay .012                              on screen        resolved     organs
+    oL 5.4  bud 1200   <- SHIPS        0.725 0.712      0.618 0.567     1201
+    oL 5.4  bud 1800                   0.752 0.732      0.655 0.593     1800
+    oL 5.4  bud 2400                   0.751 0.727      0.658 0.592     2402
+    oL 6.5  bud 1800                   0.790 0.769      0.712 0.643     1800
+    PADDLE, for reference              0.832 0.824      0.772 0.773     1201
+
+**And then a person looked at it and the whole table stopped mattering.** What the
+candidate actually ships as a *picture* is a blade only **1.9x narrower than the
+paddle** (half-width 0.4251 -> 0.2211 world, 8.84 -> 4.51 px at the whole-tree framing),
+because half-width is aspect times length and `organLen` gave back more than half of
+what `ay` took away. Every ratio statistic in this file still said "needle" — aspect is
+preserved — and `fill` measures coverage, not width, so **nothing in the ladder could
+see it.** Ask what class of quantity the table measures, again.
+
+The frontier underneath is real and no row escapes it. At a true needle width (2 px)
+organs make fill *worse* (0.617 / 0.605 / 0.581 over budgets 1200 / 1800 / 2400), and
+`ay` stops responding below about 0.008, so width is floored near `0.044 * length`. You
+can have a thin needle or a full crown. `aspectFloor` was checked on suspicion and is
+**not** the cause — 0.04 and 0.012 give identical results, so this file's older claim
+that it never bites survives.
+
+### Organs are the wrong lever, and past ~1800 they REVERSE
+
+The obvious way to buy the rest of the fill back is more needles. It does not work, and
+this is the sharpest result of the re-run. At `ay .008, oL 4.6`, sweeping the pool:
+
+    organBudget   organs   crown R   resolved fill
+       1200        1202      7.01       0.5112
+       1800        1800      9.45       0.5345
+       2400        2402     11.87       0.5341
+       3200        3202     14.95       0.5080
+
+**It peaks around 1800 and then falls.** The crown radius more than doubles over that
+sweep, and `fill` is ink over the crown's own outline — so the extra organs grow the
+silhouette as fast as they fill it. That is **the same mechanism that falsified
+`maxGen: 2`** ("sub-branches grow the silhouette as fast as they fill it"), arriving on
+a different knob, and it is why this change needed no organ budget at all.
+
+`organTilt` is the other free axis and it is nearly dead: 0.92 -> 1.40 moves resolved
+fill by 0.009. Self-overlap is not what limits a needled crown.
+
+**What this means for ROADMAP 10b.** The needle did not have to be paid for in
+simulation cost, so 10b should not be sized as though item 0 owed it anything.
+
+**The free axes alone recover most of the loss.** `ay .012` with `oL 5.4` reaches
+0.618/0.567 resolved and 0.725/0.712 on screen with the organ budget untouched — clear of
+the Charlie Brown line without spending a single organ. Exhaust this before ROADMAP 10b
+has to pay for anything.
+
+### What overlap buys, and why any of this is affordable
+
+Across the change actually proposed, ay 0.16 -> 0.008 at fixed everything else:
+
+    blade tissue      673 ->  139 sq units     4.85x less
+    drawn ink         197 ->  140 sq units     1.41x less
+
+Tissue falls 4.9x and the picture only 1.4x, because at paddle width most of the foliage
+is behind other foliage. **That gap is the redundant tissue and it is what pays for this.**
+
+**A trap on the way to that number, and it is this file's own lesson arriving again.**
+The instrument's width-response check was first written as a 2x nudge from the shipped
+`ay`, and it passed while measuring nothing — it read a 1.03x ink change as "coverage has
+saturated". It is nothing of the kind: 0.16 -> 0.08 moves the *tissue* by 1.07x, because
+that is the flat top of the sweep this file already warns about by name. The ratio said
+nothing true until it was split into numerator and denominator. Same lesson, same knob,
+two documents apart.

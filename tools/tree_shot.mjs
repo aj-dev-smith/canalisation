@@ -99,8 +99,20 @@ const bb = await pg.evaluate(() => {
 });
 const fov = await pg.evaluate(() => window.__app.cam.fov);
 // fit HEIGHT into the portrait frame, not the larger of the two dimensions
-const whole = bb.h * 0.5 / Math.tan(fov / 2) * 1.15;
-console.log(`bounds ${bb.w.toFixed(1)} x ${bb.h.toFixed(1)}, framing at ${whole.toFixed(1)}`);
+//
+// FIXDIST= PINS THAT DISTANCE, AND AN A/B NEEDS IT. Every framing below is a
+// fraction of `whole`, so a candidate that changes the specimen's SIZE is
+// photographed from further away — and then every framing, including the
+// arm's-length one, is at a different scale from the shot it is being compared
+// with. `organLen 3.0 -> 5.4` moves the bounds 51.3 -> 56.0 and the close-up
+// 9.3% back, which is enough to make a real difference in blade shape read as
+// "about the same". TUNING already records this as a way to buy a false theory,
+// measured on geometry counts; it costs you a visual comparison the same way.
+// Take the A shot, read the `framing at` line, and pass it to the B shot.
+const auto = bb.h * 0.5 / Math.tan(fov / 2) * 1.15;
+const whole = process.env.FIXDIST ? +process.env.FIXDIST : auto;
+console.log(`bounds ${bb.w.toFixed(1)} x ${bb.h.toFixed(1)}, framing at ${whole.toFixed(1)}`
+  + (process.env.FIXDIST ? `  (PINNED; this specimen's own would be ${auto.toFixed(1)})` : ''));
 
 const FRAMINGS = [
   ['whole', { dist: whole, az: 0.6, el: 0.02, tgtY: bb.cy }],

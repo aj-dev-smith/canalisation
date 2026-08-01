@@ -74,6 +74,7 @@ node test/conifer.mjs                              # ROADMAP 13 pre-flight: does
 node test/plagio.mjs                               # ROADMAP 13 pre-flight: can gravity hold a branch out? (no)
 node test/taper.mjs                                # ROADMAP 14: what sizes a stem, swept and drawn (~3min)
 node test/tree.mjs                                 # ROADMAP 13: the crown — set point, taper, and an ASCII conifer (~4min)
+node test/crown.mjs '{"ay":0.008}'                 # HOW MUCH OF ANYTHING IS THERE — crown fill, at five rasters (~40s)
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -428,7 +429,7 @@ of its bugs were found, and none would have been visible on screen.
 - **A borrowed model has assumptions, and one of them is its dimensionality.** The plate aerodynamics was solving a cross-section — an infinitely long plate — while a leaf is a stub, which over-predicted lift roughly twofold and read as "flappy". Ask what a borrowed model assumes about the dimension you are *not* solving, and whether two of its coefficients are secretly one.
 - **Pre-flight the number before writing the solver.** The stem's frequencies were worked out analytically for all eight species on paper first. That table then caught three separate bugs in the solver, none of which was visible on screen and all of which produced a plant that swayed pleasantly at the wrong rate. A solver that cannot reproduce a number somebody computed beforehand is not the thing it claims to be.
 - **Green is a statement about what the gate imports, and about internal consistency only.** A name collision once shipped a bundle that did not parse while 47 checks passed. The wind field passed all 24 of its own assertions while every gust mode sat at vibration frequencies. Ask what the suite *cannot* see, then go and look at that.
-- **Ask what CLASS of quantity the suite measures at all.** The sharpest version of the above, and the 2026-07-31 instance. `test/tree.mjs` and `test/conifer.mjs` were entirely green on a conifer a person immediately called a Charlie Brown tree, because every statistic in them — branch angle, crown half-angle, taper slope, length fit — is a **shape** statistic and not one of them is a **quantity** statistic. A crown can be exactly the right shape with a tenth of the foliage. **There is still no harness here that measures how much of anything there is**; density was checked by rasterising a silhouette in a scratch script. Before believing a green suite about appearance, write down what it would still pass with.
+- **Ask what CLASS of quantity the suite measures at all.** The sharpest version of the above, and the 2026-07-31 instance. `test/tree.mjs` and `test/conifer.mjs` were entirely green on a conifer a person immediately called a Charlie Brown tree, because every statistic in them — branch angle, crown half-angle, taper slope, length fit — is a **shape** statistic and not one of them is a **quantity** statistic. A crown can be exactly the right shape with a tenth of the foliage. **`test/crown.mjs` is that missing quantity harness and it exists now** — ink over the crown's own rasterised outline, reproducing the lost scratch script at both ends of its range (0.772 against 0.750 shipped, 0.576/0.493 against 0.546 for the pre-#32 tree). Before believing a green suite about appearance, write down what it would still pass with. **And state the raster**: fill is pixel coverage, so a blade thinner than a cell is measured by the sampler rather than the tissue, which is why that file reports five rasters and separates "how it reads on screen" from "how much is there".
 - **Do not read a trend off the noisy end of a sweep, and split a ratio before calling a knob dead.** Same session: `marginBias.ay` was swept 0.16 → 0.02, flattened in the middle, and got written up in four files as "saturates — needs a new mechanism". It does not saturate; the signal starts exactly where the sweep stopped. The tell was available for free — `ay` is a *width* knob and the aspect it moves is width/length, so printing numerator and denominator separately shows length flat and width falling 17x, which is not what saturation looks like.
 - **Get a person to watch it.** Three times now the fastest path to a genuine modelling error was AJ watching for a few seconds — a wind field at vibration frequencies, a crown that was upside down, and a tree with a tenth of its foliage. When a report says "feels like a bug", measure it before explaining it — and take more than one measurement, because "too fast" has meant frequency once and amplitude once, in nearly the same words.
 - **Never fake it to make it look better.** The piece's entire claim is that nothing is drawn. A single hardcoded curve would make the whole thing a lie.
@@ -668,21 +669,42 @@ what would have to change instead.
 [docs/ROADMAP.md](docs/ROADMAP.md) is the ranked list and has the reasoning; the
 short version, in order:
 
-0. **THE NEEDLE IS A PADDLE (ROADMAP 13 item 0) — one parameter, and the work is paying
-   for it.** `marginBias.ay` is a pure width knob and `ay` ~0.005-0.012 puts the aspect
-   in a Norway spruce's 0.02-0.05 with the lattice still building. Rendered, it is
-   unmistakably a needle. What stops it shipping is that a needle 4.5x narrower covers
-   4.5x less crown, so **TUNING's fill ladder has to be re-run from scratch — it was
-   measured on paddles.** `organLen` saturating at 3.0 is a statement about needles that
-   already overlap; thin ones do not, so exhaust that free axis before spending organs.
-   Thin needles are *cheaper*, so there is headroom. **Draw it at both framings**: the
-   whole-tree and arm's-length views disagree about this change more than about anything
-   else so far.
+0. ~~**THE NEEDLE IS A PADDLE (ROADMAP 13 item 0)**~~ — **BUILT, MEASURED, DRAWN AND
+   REJECTED, 2026-07-31. Do not reopen it without reading the JOURNAL entry.** The knob
+   works: `marginBias.ay` 0.008 grows aspect 0.040-0.058, inside a Norway spruce's
+   0.02-0.05, with `n50 = 1`, and at arm's length it is unmistakably a needle.
+
+   **It is rejected because a needle canalises ONE strand.** A Cathedral Fern leaf
+   canalises 373-470 veins with traffic over 3-7 of them (top strand 16-29%); a needle
+   canalises 69-80 with one carrying 77-99%. That is correct *Picea* and
+   `test/venation.mjs` books it as a success — and the reticulate network is **the only
+   channel through which this engine is visible.** At each specimen's own framing a fern
+   draws 190 vein ribbons per organ against the conifer's 78, and the needle takes it to
+   ~48. **The paddle looked better because it was showing more chemistry.** This is
+   xenobotany; the species is Ashfall Spire, not Norway Spruce, and botanical fidelity to
+   a genus nobody promised is not worth the only thing a viewer can see. **Botanical
+   correctness and legibility of the mechanism point in opposite directions here, and
+   this project's whole claim is the second one.**
+
+   Four things it produced that outlive it: `test/crown.mjs`; the fact that `organLen` is
+   the only lever that fills a needled crown *and spends the thinness one-for-one*, so no
+   setting has both; that **organs saturate near 1800 and then reverse** (the `maxGen: 2`
+   mechanism again), so this never owed ROADMAP 10b anything; and `minInternode` as the
+   one lever that adds foliage without lengthening an axis.
 0a. **WHAT THE GARDEN OWES (ROADMAP 10b) IS NOW THE URGENT ONE, not the cheap one.**
    It was "the cheapest interesting work here"; #32 made it the thing standing between
    the piece and a stand that runs. A grown background plant pays full `stepAuxin` cost
    to pattern tissue that will never change again, and a conifer is now 1200 organs of
    exactly that. 20.8 → 7.8 fps on a stand of seven. Still not research.
+0aa. **THE ARCHITECTURE VIEW (ROADMAP 0z) — the thing that would actually make the tree
+   good.** The needle work's real finding is that the conifer's chemistry went into its
+   **skeleton**, where nothing draws it: the dominance field deciding which buds escape,
+   the vigour partition down the crown, the per-axis gravitropic set point. All computed
+   every step, none on screen. `Axis` already carries `vigour`, `gsa` and `iaa`, and
+   `drawSpecimen` already colours stems through a per-station callback, so a fifth
+   `VIEWS` entry is a table entry and a callback rather than a project. **A
+   computed-but-undrawn channel is a view waiting to happen** — the same argument
+   ROADMAP 12 was built on.
 0b. **THE CONE (ROADMAP 13c) — small, and the only thing the conifer does not have.**
    `Ashfall Spire` has no reproduction at all: `florigenRate: 0`, no flowers, no fruit.
    That is correct for a gymnosperm and it is a code path *removed*, but it means the
@@ -762,8 +784,9 @@ defect.** The petiole is physical, and at a physical stiffness the one-degree-of
 rigid blade snaps between face-on attitudes instead of rocking, so it ships disabled with
 its three measurements written down (ROADMAP 9). What a viewer reads is the stem, which
 bends for real at 0.56-0.64 Hz, and the hang, which is now a force balance. **If you are
-picking up work with no other instruction, pick up the needle (ROADMAP 13 item 0, small
-and specified), then what the garden owes (ROADMAP 10b, now the urgent one).** Also still
+picking up work with no other instruction, pick up the architecture view (ROADMAP 0z,
+small and specified), then what the garden owes (ROADMAP 10b). The needle was built and
+REJECTED — do not restart it.** Also still
 open is the other half of step 4: a falling blade's long axis snaps level on the frame it
 detaches on — by a median 15° now, down from 27°, because a derived droop hands the fall
 a smaller tilt exactly as ROADMAP 7b predicted — and the obvious fix was built and

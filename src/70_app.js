@@ -184,19 +184,34 @@ export const SPECIES = {
   //              paddle rather than the needle this comment used to claim. The
   //              VENATION is a needle's — one dominant bundle — and that is what
   //              `test/venation.mjs` measured. The SILHOUETTE is not.
-  //   marginBias.ay 0.16  AND THIS IS THE KNOB THAT FIXES IT — it is a pure
-  //              WIDTH knob, not a size knob. Over 0.16 -> 0.003 the margin's
-  //              length is flat (x0.66 to x1.07, no trend) while its half-width
-  //              falls 17x, so aspect runs 0.213 -> 0.0158 and a real spruce
-  //              needle's 0.02-0.05 sits at ay ~0.005-0.012. The lattice still
-  //              builds there (100 cells, 100 veins at 0.008).
+  //   marginBias.ay 0.16  A PURE WIDTH KNOB, and a needle was built on it,
+  //              measured, drawn, and DELIBERATELY NOT SHIPPED. Over 0.16 ->
+  //              0.003 the margin's length is flat (x0.66 to x1.07, no trend)
+  //              while its half-width falls 17x. At 0.008 it grows aspect
+  //              0.040-0.058 over three seeds — inside a Norway spruce's
+  //              0.02-0.05 — holding n50 = 1, and rendered at arm's length it is
+  //              unmistakably a needle. So the knob works and the biology is
+  //              right. The reason it is not here is in `docs/JOURNAL.md`
+  //              (2026-07-31) and it is worth reading before turning it down:
   //
-  //              It is NOT shipped yet, and the reason is a genuine tension
-  //              rather than a doubt: a needle 4.5x narrower covers 4.5x less
-  //              crown, so the silhouette gets right and the crown goes thin
-  //              again. The fill ladder below was measured on PADDLES and does
-  //              not carry over — `organLen` saturating at 3.0 is a statement
-  //              about needles that already overlap. ROADMAP 13 item 0.
+  //              A NEEDLE CANALISES ONE STRAND, AND THAT IS THE WHOLE PROBLEM.
+  //              A Cathedral Fern leaf canalises 373-470 veins with the traffic
+  //              spread over 3-7 of them (top strand 16-29%). A needle canalises
+  //              69-80 veins with ONE carrying 77-99%. Botanically that is
+  //              exactly right for *Picea* and `test/venation.mjs` verified it as
+  //              a success — but the reticulate network is the only channel
+  //              through which this engine is visible, and a needle has none of
+  //              it. Measured through the same harness at each specimen's own
+  //              framing, a fern draws 190 vein ribbons per organ and this
+  //              species 78; the needle takes it to ~48. The blade got correct
+  //              and the piece got quieter.
+  //
+  //              So this is not a defect waiting on a better parameter. It is a
+  //              choice between botanical fidelity to a genus nobody promised —
+  //              THIS IS XENOBOTANY, the species is Ashfall Spire and not Norway
+  //              Spruce — and legibility of the mechanism the whole project
+  //              exists to show. The wide blade shows more chemistry, so it
+  //              stays. `test/crown.mjs` has the numbers for both.
   //
   // WHAT SETS HOW FULL THE CROWN IS, and it is three numbers rather than one.
   // Shipped, this specimen was a Charlie Brown tree — a bare pole with tufts —
@@ -217,10 +232,35 @@ export const SPECIES = {
   //              budget goes into branches and not into a taller trunk: height
   //              stays at 46.1 to the digit while crown fill goes 0.56 -> 0.70.
   //
-  //   organLen 2.1  and this one is nearly free. Drawn area per organ, at no
-  //              extra organ: fill 0.70 -> 0.78 for 153.8k triangles against
-  //              153.6k. It does almost nothing on its own (0.561 -> 0.576) —
-  //              it is a multiplier on having branches to hang needles from.
+  //   organLen 3.0  nearly free, and on PADDLES it saturates here: 3.0 and 3.8
+  //              come out within 0.003 of each other. That is a statement about
+  //              needles that already OVERLAP, and it does not generalise — on a
+  //              needled blade the same knob never saturates, buying +0.051,
+  //              +0.041, +0.033, +0.029 of fill per step at no extra organ. Which
+  //              is worth knowing if the leaf is ever narrowed: `organLen` is the
+  //              only lever that fills a needled crown, and it does so by making
+  //              the needle proportionally WIDER on screen — half-width is aspect
+  //              times length, so it spends the thinness one-for-one.
+  //
+  //   organTilt 0.92  left alone, and MEASURED rather than assumed. Spreading
+  //              the blades further off the axis is the other free axis and it is
+  //              nearly dead: 0.92 -> 1.40 moves fill by 0.009. Self-overlap is
+  //              not what limits this crown.
+  //
+  //   minInternode 0.12  the one lever that adds foliage WITHOUT lengthening an
+  //              axis, found while sweeping the needle and untried before that.
+  //              Everything else that adds foliage grows the silhouette as fast
+  //              as it fills it; packing organs along a shoot does not. Left at
+  //              0.12 because the paddle does not need it, but it is the first
+  //              thing to reach for if this crown ever has to get denser.
+  //
+  // ORGANS ARE THE WORST OF THE THREE LEVERS and that matters for ROADMAP 10b:
+  // they SATURATE NEAR 1800 AND THEN REVERSE — fill 0.511 / 0.535 / 0.534 /
+  // 0.508 across budgets 1200 / 1800 / 2400 / 3200, while crown radius goes
+  // 7.0 -> 15.0. The extra organs grow the silhouette as fast as they fill it,
+  // which is the same mechanism that falsified `maxGen: 2`. So this crown cannot
+  // be bought denser with simulation cost, and 10b should not be sized as though
+  // it could. `test/crown.mjs` is the instrument for all of this.
   //
   // It has no florigen, so it never flowers and never sets fruit — which is the
   // right biology for a gymnosperm and is a code path REMOVED rather than added.
