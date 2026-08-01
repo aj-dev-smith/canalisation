@@ -1338,12 +1338,21 @@ including ones that plainly differ. That mistake cost two wrong diagnoses.
 **`organBudget` — and it is a POOL over the whole specimen.** This is the one that is not
 obvious. Raising `budTake` on its own divides the same 540 organs among three times as
 many branches and **the tree gets smaller**: 46.1 -> 35.3 units tall, crown radius
-7.9 -> 4.3. Ships at **1200**, up from 540.
+7.9 -> 4.3. It went 540 -> 1200 for `budTake`, and **1200 -> 3000 for `maxGen: 2`**
+(2026-08-01), which is the same trap arriving a second time: a change that multiplies
+axes has to be paid for out of the pool or it starves the leader's top. **Any time you
+add axes, budget in the same commit.**
+
+`fill` cannot referee that, and this is where two sessions have now gone wrong: fill is
+normalised by the crown's own outline, so it reports "denser per unit of outline" and
+never "more tree". **Read crown radius and blade area beside it.**
 
 **`maxOrgans` stays at 80, deliberately.** It caps the **leader**, so the extra budget
 goes into branches rather than into a taller trunk. With it left alone the height stays
 at 46.1 to the digit while fill moves 0.559 -> 0.752. Raise it and you get a taller
-tree, not a fuller one.
+tree, not a fuller one — measured twice now, and the second time was someone reaching for
+it as a **density** knob to fill the leader's bare top: **130 gives a 70.6-unit specimen
+with the same bare top.** It sets leader LENGTH. Whatever fixes the top is not this.
 
 **`organLen` — nearly free, and it saturates.** 1.45 -> **3.0**. Drawn area per organ at
 no extra organ: 153.6k triangles against 153.8k. It saturates hard — 3.0 and 3.8 are
@@ -1352,9 +1361,50 @@ organs). It is a multiplier on having branches to hang needles from. Because of 
 organs at 3.0 reaches the same fill as 1600 at 2.1, which is where the 25% saving came
 from.
 
-**`maxGen` stays at 1.** Second-order branching is the obvious idea and it is
-**falsified**: fill 0.281 -> 0.268 for 4.8x the simulation cost, because sub-branches grow
-the silhouette as fast as they fill it. JOURNAL has it.
+**`maxGen` IS 2 NOW, AND THE ENTRY THAT SAID OTHERWISE WAS MEASURED WITH A RETRACTED
+RULER (2026-08-01).** This block used to read *"stays at 1. Second-order branching is the
+obvious idea and it is falsified: fill 0.281 -> 0.268 for 4.8x the simulation cost."*
+
+**0.281 is the signature of the metric the JOURNAL entry it cited retracts three
+paragraphs later** — needle area over silhouette area, which "came back 0.28 for every
+variant including ones that plainly differed". Every fill number on this page comes from
+the raster metric that replaced it and they live at 0.51-0.77. Three rejected values
+(0.281 / 0.268 / 0.311) sat nowhere near any of them, which was visible for free on the
+page. And `maxGen` was never in `test/crown.mjs`'s sweepable knob list, so the working
+instrument had **never been pointed at the one change the broken one killed.**
+
+Re-measured with it, two seeds:
+
+    maxGen  axes  organs  height  crownR  blade area  fill @3840  on screen
+      1       77    1201   46.06    6.87       672.9      0.7721     0.8323
+      2      240    3002   46.06   11.53      1702.3      0.7361     0.7912
+
+Fill falls 4.7% while **crown radius nearly doubles and blade area goes up 2.5x at
+identical height.** The old sentence — "sub-branches grow the silhouette as fast as they
+fill it" — is arithmetically true and beside the point: fill is ink over the crown's
+**own** outline, normalised precisely so a crown cannot score by getting bigger, which is
+exactly what makes it unable to see this change. **When a metric is normalised, the
+normaliser is a statement about what it refuses to measure.**
+
+The outside evidence says this is nearer the floor than the ceiling. Fabrika, Scheer,
+Sedmak, Kurth & Schon 2019, *BioResources* 14(1):908-921, on a **10-year-old Norway
+spruce** stand, >12,000 growth units across 15 trees: **first order 26.7%, second 52.8%,
+third 16.6%, fourth 4.0%** — three quarters of a real sapling is second order or higher,
+and ours was 100% first. Kozlowski & Ward 1961 (Table 3.2 in Kozlowski & Pallardy,
+*Physiology of Woody Plants* 2nd ed.) found **quaternary** axes on six-year-old red pine,
+white pine, white spruce and black spruce.
+
+**BOTH CAPS HAVE TO MOVE WITH IT AND THAT IS THE WHOLE TRICK.** `maxGen: 2` alone hits
+`maxAxes` and the organ pool is spent low in the crown, starving the leader's top third —
+the same pool trap as raising `budTake` alone. Ships at `maxAxes` **240** and
+`organBudget` **3000**, which hold height at 46.06 to the digit while the crown fills.
+Pushed past it (4200 organs, `maxOrgans` 110) the triangle buffer saturates and drops
+27-38k triangles.
+
+**It costs 2.5x the organs and that is shipped knowingly**, same as #32's crown: linear in
+organs, so it belongs to ROADMAP 10b and 11. **Do not buy frames back by lowering
+`maxGen`** — that restores the defect, and a person watching called it out before any
+number here did.
 
 **What it costs, and it is shipped knowingly.** A grown stand of seven with two conifers,
 both fully arrested: 48.1 -> 127.5 ms/frame, 20.8 -> 7.8 fps, 1349 -> 2672 organs. Linear
@@ -1507,9 +1557,18 @@ this is the sharpest result of the re-run. At `ay .008, oL 4.6`, sweeping the po
 
 **It peaks around 1800 and then falls.** The crown radius more than doubles over that
 sweep, and `fill` is ink over the crown's own outline — so the extra organs grow the
-silhouette as fast as they fill it. That is **the same mechanism that falsified
-`maxGen: 2`** ("sub-branches grow the silhouette as fast as they fill it"), arriving on
-a different knob, and it is why this change needed no organ budget at all.
+silhouette as fast as they fill it. That is **the same mechanism that was read as
+falsifying `maxGen: 2`**, arriving on a different knob, and it is why this change needed
+no organ budget at all.
+
+⚠ **Read that comparison the other way round now (2026-08-01).** `maxGen: 2` was
+un-falsified and ships; see the `maxGen` block above. What the two cases share is real —
+fill is normalised by the crown's own outline, so **neither of them can be judged by fill
+alone.** What differs is that on this knob the crown got bigger and *emptier*, while
+second-order branching nearly doubles crown radius and multiplies blade area 2.5x for a
+4.7% fill cost. **A flat fill number means "denser per unit of outline", never "more
+tree".** Print crown radius and blade area beside it or the statistic will mislead you in
+whichever direction you were already leaning.
 
 `organTilt` is the other free axis and it is nearly dead: 0.92 -> 1.40 moves resolved
 fill by 0.009. Self-overlap is not what limits a needled crown.

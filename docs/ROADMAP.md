@@ -33,8 +33,13 @@ priority.** The list below is the priority.
      one-for-one, because half-width is aspect times length. That is the trade that
      killed it.
    - **Organs saturate near 1800 and then REVERSE** (fill 0.511/0.535/0.534/0.508 as
-     the budget goes 1200-3200, crown radius 7.0 -> 15.0) — the same mechanism that
-     falsified `maxGen: 2`. **So this never owed ROADMAP 10b anything.**
+     the budget goes 1200-3200, crown radius 7.0 -> 15.0) — a crown that got bigger and
+     emptier. **So this never owed ROADMAP 10b anything.** *(This used to read "the same
+     mechanism that falsified `maxGen: 2`". `maxGen: 2` was un-falsified on 2026-08-01
+     and ships — it nearly doubles crown radius and multiplies blade area 2.5x for a 4.7%
+     fill cost, which is the opposite case. What the two share is that **fill alone
+     cannot referee either of them**, because it is normalised by the crown's own
+     outline.)*
    - **`minInternode` is the one lever that adds foliage without lengthening an axis**,
      and it was untried. Worth reaching for before organs, on any species.
    - **`tools/tree_shot.mjs` now takes `FIXDIST=`.** Every framing there was a fraction
@@ -45,6 +50,42 @@ priority.** The list below is the priority.
    on a needled blade while both CI runs stay green, because neither names the conifer
    (PITFALLS). That is latent rather than fixed — nothing needled ships today.
 
+0y1. **A GROWTH RHYTHM — the tree's largest remaining gap, and it is one oscillator.**
+   There is no season, no flush and no bud dormancy anywhere in the engine, so the tree
+   grows the way the flowers do: continuously. Hence **no whorls**, and whorls are most of
+   what reads as "conifer" at a glance. Measured on the leader: gap CV **0.83**, against
+   1.0 for uniform-random (control measured 1.03) and √(k−1) ≈ 2.0 for a whorled leader —
+   so the crown is more regular than whorled *or* random, which is `minInternode` showing
+   through. **A bud is a compressed shoot**: hold elongation while organ founding
+   continues and primordia pile at one arc position, giving a whorl of buds and then a
+   bare internode out of the branching rule that already exists. Growth rings and bud
+   scars come off the same clock. A season is *environmental* — the category `39_fall.js`
+   established, the same as gravity and air — so it adds no spatial prior.
+
+   ⚠ **Pre-flight it before building, and there is a named obstacle.** `minInternode`
+   currently makes a non-elongating axis **discard** the primordia its meristem emits;
+   that is the stalled-shoot bug written up in the senescence notes. It would have to
+   queue them instead without disturbing the eight herbs. Kill criterion: if it cannot,
+   or if the measured gap CV does not climb well above 1, stop and take 0y2 alone.
+
+   ⚠ **And do not repeat the claim that our continuous branching is juvenile "free
+   growth".** Free growth is real and standard (Kozlowski & Pallardy p. 40, citing Pollard
+   & Logan 1974; "reported in firs and spruces up to 10 years old") but it **adds
+   internodal branches between whorls rather than removing the whorls** — whorls stay
+   countable at 10 years in the Fabrika stand. Checked and refuted 2026-08-01.
+0y2. **WOOD AS MEMORY — one term in `updateRadii`, and cheap.** Strip every leaf off the
+   grown conifer and re-run it: basal radius **0.7573 -> 0.2412, a 68.2% loss.** Radius is
+   a pure function of *current* traffic with no accumulation term, so a 2.9 m trunk is a
+   herbaceous pipe. The pipe-model proportionality is right at this size — a sapling is
+   all sapwood (heartwood starts at cambial age 15-17 in Scots pine) — so **the missing
+   property is irreversibility**, not the law. A cambium can only add. It would also make
+   a spent specimen leave a standing dead *tree* rather than a thin stick.
+
+   `EI` goes as r⁴, so the sway currently rests on a radius that moves with the foliage:
+   **`node test/stem.mjs` is not optional here.** And do not try to measure this by
+   running senescence — `updateRadii` counts dying organs too, so the load never comes off
+   and the radius holds perfectly. A first attempt reported exactly that and it was an
+   artifact of the harness.
 0z. **THE ARCHITECTURE VIEW, and it is what would actually make the tree good.**
    The finding above says the conifer's chemistry went into its skeleton, where none of
    it is drawn: the dominance field that decides which buds escape, the vigour partition
@@ -882,9 +923,18 @@ cannot split by construction. Building either gets you closer to the other.
 > a bud that escaped dominance took with probability `0.35`, hardcoded, so two in three
 > were retired. It is `sp.budTake` now (default 0.35, herbs unchanged; 1.0 here), and
 > with the organ budget raised to match — it is a **pool**, so branches alone make the
-> tree smaller — crown fill went 0.559 to 0.752 and 29 branches became 77. `maxGen: 2`
-> was tried and is **falsified** (+0.010 fill for 4.8x cost). It costs a grown stand of
-> seven 20.8 -> 7.8 fps, shipped knowingly, and that cost is item 3 below.
+> tree smaller — crown fill went 0.559 to 0.752 and 29 branches became 77. It costs a
+> grown stand of seven 20.8 -> 7.8 fps, shipped knowingly, and that cost is item 3 below.
+>
+> **⚠ THIS BOX USED TO SAY `maxGen: 2` WAS FALSIFIED. IT IS NOT, AND IT SHIPS
+> (2026-08-01).** The rejection read "+0.010 fill for 4.8x cost", off numbers
+> (0.281/0.268/0.311) that are the signature of the metric the JOURNAL entry retracts
+> three paragraphs after quoting them. `maxGen` was also never in `test/crown.mjs`'s
+> sweepable knobs. Re-measured: fill 0.772 -> 0.736 while **crown radius 6.87 -> 11.53 and
+> blade area 673 -> 1702, at identical height**, with `maxAxes` 240 and `organBudget` 3000
+> (both caps have to move or the pool starves the leader's top). A real 10-year-old Norway
+> spruce is 26.7% first order, **52.8% second**, 16.6% third, 4.0% fourth; ours was 100%
+> first. See the 2026-08-01 JOURNAL entry.
 >
 > **What is genuinely still open, in order:**
 >

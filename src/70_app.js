@@ -271,7 +271,43 @@ export const SPECIES = {
     mo: { R: 10, rCZ: 2.4, rPZ: 6.8, G: 0.0042 },
     sp: {
       elongation: 0.0034, organLen: 3.0, organTilt: 0.92, organRoll: 0.30,
-      maxOrgans: 80, organBudget: 1200, maxAxes: 140, maxGen: 1,
+      // BRANCHES ON BRANCHES, which this species did not have and a real one is
+      // mostly made of. Fabrika, Scheer, Sedmak, Kurth & Schon 2019, BioResources
+      // 14(1):908-921, measured branching order on a 10-year-old Norway spruce
+      // stand over 12,000 growth units: first order 26.7%, second 52.8%, third
+      // 16.6%, fourth 4.0%. **Roughly three quarters of a real juvenile spruce's
+      // growth units are second order or higher**, and ours were 100% first,
+      // because `maxGen` was 1 — BELOW the herbs' default of 2, on the one
+      // species in the catalogue that most needed it. Kozlowski & Ward 1961
+      // (Kozlowski & Pallardy, Physiology of Woody Plants 2nd ed., Table 3.2)
+      // found QUATERNARY axes on 6-year-old red pine, white pine, white spruce
+      // and black spruce, so this is closer to the floor than the ceiling.
+      //
+      // ⚠ IT IS RECORDED AS FALSIFIED IN JOURNAL AND TUNING AND THAT RESULT DOES
+      // NOT HOLD. It was rejected on "fill 0.281 -> 0.268", and 0.281 is the
+      // signature of the metric the very next paragraph of that entry retracts —
+      // needle area over silhouette area, which "came back 0.28 for every variant
+      // including ones that plainly differed". Every fill number the project
+      // quotes today comes from the raster metric that replaced it and they live
+      // at 0.51-0.77. `maxGen` was also never in `test/crown.mjs`'s sweepable knob
+      // list, so the working instrument had never been pointed at it. Measured
+      // properly: fill 0.772 -> 0.736 while crown radius goes 6.87 -> 11.53 and
+      // blade area 673 -> 1702, at IDENTICAL height. Fill is normalised by the
+      // crown's own outline precisely so a crown cannot score by getting bigger,
+      // which is what makes it unable to see this change. See PR #35.
+      //
+      // THE TWO CAPS HAVE TO MOVE WITH IT AND THAT IS THE WHOLE TRICK. At
+      // `maxGen: 2` alone the axis count slams into `maxAxes` and the organ pool
+      // is spent low in the crown, so the leader's top third starves — measured,
+      // and it is the same trap as raising `budTake` on its own. `maxAxes` 240
+      // and `organBudget` 3000 are what hold height at 46.06 to the digit while
+      // the crown fills. Pushed further (4200 organs, `maxOrgans` 110) the
+      // triangle buffer saturates and drops 27-38k triangles.
+      //
+      // IT COSTS 2.5x THE ORGANS AND THAT IS SHIPPED KNOWINGLY, for the same
+      // reason #32's crown was: the cost is linear in organs and belongs to
+      // ROADMAP 10b and 11, not here. Do not buy it back by lowering `maxGen`.
+      maxOrgans: 80, organBudget: 3000, maxAxes: 240, maxGen: 2,
       branching: 0.94, budRelease: 60, dominance: 6.0, budTake: 1.0,
       apicalControl: 0.80, agoGain: 1.0, agoK: 0.90,
       // a conifer's leader is straight, and wander and circumnutation are what

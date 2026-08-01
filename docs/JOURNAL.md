@@ -2656,6 +2656,46 @@ measured, **falsified**: fill 0.281 -> 0.268, i.e. slightly *worse*, for 4.8x th
 simulation cost. At `maxGen: 3`, 0.311 for 6.7x. Sub-branches grow the crown's silhouette
 exactly as fast as they fill it, so the ratio does not move. **Do not rebuild this.**
 
+> ## ⚠ RETRACTED 2026-08-01. THIS ONE WAS NOT A WRONG DIAGNOSIS — IT WAS THE RIGHT ONE, KILLED BY THE BROKEN RULER.
+>
+> Read the paragraph immediately below this box, which was written on the same day as the
+> one above: needle area over silhouette area "came back **0.28 for every variant
+> including ones that plainly differed**". Then read the three numbers that rejected
+> second-order branching — **0.281, 0.268, 0.311.** They are that metric's signature
+> value. Every fill number this project quotes today comes from the raster metric that
+> replaced it, and they live at 0.51-0.77. **The retraction was written one paragraph
+> after the result it invalidates, and neither this entry nor TUNING noticed for a day.**
+>
+> `maxGen` was also never added to `test/crown.mjs`'s sweepable knob list, so the
+> instrument built to replace the broken one had **never been pointed at the one change
+> the broken one killed.** Fixed in the same PR.
+>
+> Re-measured properly, two seeds, both arrested:
+>
+>     maxGen  axes  organs  height  crownR  blade area  fill @3840
+>       1       77    1201   46.06    6.87       672.9      0.7721
+>       2      240    3002   46.06   11.53      1702.3      0.7361
+>
+> Fill falls 4.7% while **crown radius nearly doubles and blade area goes up 2.5x, at
+> identical height.** The sentence above — "sub-branches grow the silhouette as fast as
+> they fill it" — is arithmetically *true* and beside the point. Fill is ink over the
+> crown's **own** outline, normalised exactly so a crown cannot score by getting bigger.
+> **That normalisation is what makes it structurally incapable of rewarding a
+> better-architected crown.** It answers "is this crown solid"; it can never answer "is
+> this a tree".
+>
+> **The lesson, and it is the sharper form of this entry's own:** when a metric is
+> normalised, *the normaliser is a statement about what the metric refuses to see.*
+> Before quoting a falsification, check which instrument produced it, what it divides by,
+> and whether its number is in the same band as the ones the project quotes now.
+>
+> And the outside evidence says the rejected thing is most of a real tree. Fabrika,
+> Scheer, Sedmak, Kurth & Schon 2019, *BioResources* 14(1):908-921, **10-year-old Norway
+> spruce**, >12,000 growth units over 15 trees: first order 26.7%, **second 52.8%**,
+> third 16.6%, fourth 4.0%. Kozlowski & Ward 1961 found **quaternary** axes on
+> *six*-year-old red pine, white pine, white spruce and black spruce. Ours were 100%
+> first order. See the 2026-08-01 entry.
+
 **And the metric was the reason both survived as long as they did.** The first fill
 statistic was needle area over silhouette area, and it came back **0.28 for every variant
 including ones that plainly differed**, because both terms move together — a ratio of two
@@ -2926,3 +2966,174 @@ purpose rather than deferred, and ROADMAP 13 item 0 is dissolved rather than don
 constructive half is ROADMAP 0z: the dominance field, the vigour partition and the
 per-axis set point are computed every step and never drawn, and `Axis` already carries
 `vigour`, `gsa` and `iaa` where `drawSpecimen` could read them.
+
+## The tree was not a tree, and the ruler that said otherwise measured nothing (2026-08-01)
+
+AJ, on the ninth species: *"I feel like the actual tree branches suck. Doesn't feel like a
+real tree in the same way that the other plants feel like real plants?"* Then, a step
+later and more precisely: *"are we growing crappy trees modeled after how a vine or a
+flower grows?"*
+
+Yes. And the answer had been sitting in this file, in almost his words, marked falsified.
+
+### The observation was already written down
+
+The 2026-07-31 entry above says it outright — *"A spruce bough is a flattened spray of
+sub-shoots and ours was a bare stick"* — and then closes it: `maxGen: 2`, **fill 0.281 ->
+0.268**, `maxGen: 3` at 0.311.
+
+**Those three numbers are the retracted metric's signature.** Three paragraphs later the
+same entry throws that metric out: needle area over silhouette area *"came back 0.28 for
+every variant including ones that plainly differed, because both terms move together"*.
+Every fill number this project quotes comes from the raster metric that replaced it and
+they live at 0.51-0.77. The retraction was written on the same day, one paragraph after
+the result it invalidates, and **nothing caught it for a day** — not this file, not
+TUNING, which copied the number forward, and not the two follow-on entries that cited it
+as settled precedent.
+
+`maxGen` was also never in `test/crown.mjs`'s sweepable knob list. So the instrument built
+*because* of the broken one had never been pointed at the change the broken one killed.
+
+### What it is when you measure it properly
+
+    maxGen  axes  organs  height  crownR  blade area  fill @3840  on screen
+      1       77    1201   46.06    6.87       672.9      0.7721     0.8323
+      2      240    3002   46.06   11.53      1702.3      0.7361     0.7912
+
+Fill falls 4.7% while crown radius nearly doubles and blade area goes up 2.5x, **at
+identical height**. Drawn at the same raster, seed 11: 46.2 tall x 12.5 wide becomes 46.8
+x 21.3 — the same conic profile, 1.7x the width, and the fill statistic went *down* over
+it.
+
+So the old sentence, *"sub-branches grow the silhouette as fast as they fill it"*, is
+arithmetically true and beside the point. **Fill is ink over the crown's OWN outline,
+normalised precisely so a crown cannot score by getting bigger — which is exactly what
+makes it unable to reward a better-architected one.** It answers "is this crown solid". It
+can never answer "is this a tree".
+
+**When a metric is normalised, the normaliser is a statement about what it refuses to
+see.** That is the third instalment of this project's recurring failure: the conifer
+harnesses measured *shape* and not *quantity* (2026-07-31), so a quantity harness was
+built; the quantity harness measures *density* and divides out *architecture*. Each fix
+was correct and each one carried its own blind spot in the denominator.
+
+### And the rejected thing is most of a real tree
+
+Fabrika, Scheer, Sedmak, Kurth & Schon 2019, *BioResources* 14(1):908-921 — a **10-year
+old Norway spruce** stand, >12,000 growth units across 15 trees:
+
+    first order 26.7%   second 52.8%   third 16.6%   fourth 4.0%
+
+Three quarters of a real juvenile spruce is second order or higher. Ours was 100% first,
+because `maxGen` sat at **1 — below the herbs' default of 2**, on the one species in the
+catalogue that most needed it. Kozlowski & Ward 1961 (Table 3.2 in Kozlowski & Pallardy,
+*Physiology of Woody Plants*, 2nd ed.) found **quaternary** axes on *six*-year-old red
+pine, eastern white pine, white spruce and black spruce.
+
+Two numbers from the same source that cost nothing and are worth keeping: branch angles in
+that stand were "left-skewed and varied between **40 and 70 degrees**", and ROADMAP 13's
+derived set point measures 58.4 mean — **the angle work holds up against real trees.** And
+Kozlowski & Ward give an apical-control ladder to assert against, 6-year-olds, leader vs
+successive whorls in cm: red pine 57.7 / 34.6 / 32.5 / 27.7 / 15.4; white spruce 33.5 /
+19.8 / 17.4 / 15.3 / 11.8.
+
+Ships at `maxGen: 2`, `maxAxes: 240`, `organBudget: 3000`. **Both caps had to move**: at
+`maxGen: 2` alone the axis count hits the cap and the pool is spent low in the crown,
+starving the leader's top — the same pool trap as raising `budTake` alone, arriving a
+second time. It costs 2.5x the organs, shipped knowingly, linear in organs, ROADMAP 10b.
+
+### The specimen is a sapling, and the ruler for that was already in the world
+
+`WORLD.unitM` is 0.0625 m per world unit, fixed months ago by the wind field and the
+falling blade because both need real physics. Against it:
+
+    Ashfall Spire   2.88 m tall   trunk 9.5 cm   crown 0.85 m across   leaf 13.4 cm
+    Cathedral Fern  1.39 m tall   trunk 4.6 cm   crown 0.70 m across   leaf 20.4 cm
+
+**2.88 m is a sapling**, not a forest tree, and that reframes three "defects" as correct
+biology for the life stage — verified against literature rather than assumed:
+
+- **No cones, ever.** [D] *Silvics of North America*: white spruce "seed production in
+  quantity begins at age 30 or older"; Sitka "usually does not begin until ages 20 to 40".
+  `florigenRate: 0` is right at this size.
+- **Branches retained to the ground.** [D] Kozlowski & Pallardy p. 59: self-pruning
+  "occur[s] in many forest trees growing in dense stands... favored by high stand
+  density". Schoonmaker, Lieffers & Landhausser 2014 (*PLoS ONE* 9(8):e104187) measured
+  white spruce and lodgepole at **3.3-3.4 m** and found full lower-branch expansion in
+  open-grown controls.
+- **Strong straight leader.** Correct for an excurrent juvenile conifer.
+
+Age at 2.88 m: sources disagree, so say **8-20 years depending on species and site**.
+*Silvics* on white spruce: "10 to 20 years" to breast height under open conditions.
+
+### ⚠ Two things checked and REFUTED, recorded so they do not get repeated
+
+**1. "Our continuous non-whorled branching is correct free growth."** It is not. Free
+growth is real and is standard terminology — Kozlowski & Pallardy p. 40, citing Pollard &
+Logan 1974, verbatim: *"'free growth' involves elongation of a shoot by simultaneous
+initiation and elongation of new (neoformed) stem units"*, and p. 42: *"Free growth has
+been reported in firs and spruces up to 10 years old."* **But it adds internodal branches
+BETWEEN whorls; it does not remove the whorls.** Whorls stay countable at 10 years in the
+Fabrika stand.
+
+The gap statistic says the same independently, and is worth keeping because it is cheap:
+for a whorled leader with *k* branches per whorl the gaps are (k-1) near-zeros plus one
+annual increment, so **gap CV = sqrt(k-1)** — 2.0 at five per whorl. Uniform-random gives
+exponential gaps, **CV = 1.0**, which matched our measured control of 1.03. **Ours is
+0.83 — BELOW random**, i.e. more regular than whorled *or* random. That is `minInternode`
+showing through. The engine has no growth rhythm and whorls are genuinely missing.
+
+**2. "The trunk has no wood."** Too strong, and wrong in the interesting direction. A
+2.9 m conifer stem is essentially *all* secondary xylem — rings from year one. Worse for
+the claim, the pipe-model proportionality we use is *right* at this size: sapwood area is
+proportional to leaf area above (Shinozaki 1964; Lehnebach et al. 2018, *Ann Bot*
+121(5):773-795), and a sapling is all sapwood — Antonova et al. 2024 (*IAWA J*
+45(3):375-390) detect true heartwood in Scots pine only at **cambial age 15-17**.
+
+**The actual error is irreversibility.** Strip every leaf off the grown specimen and
+re-run `updateRadii` and the basal radius goes **0.7573 -> 0.2412, a 68.2% loss.** Wood is
+a permanent deposit; a cambium can only add. A real sapling stripped of foliage does not
+thin, it stops thickening. That is the missing physical property and it is one term, not a
+mechanism — and note the first attempt to measure it was worthless: running the plant
+through senescence showed the radius holding perfectly, because `updateRadii` counts every
+organ in `this.organs` whether or not it is dying, so the load never came off.
+
+### What is still missing, ranked
+
+1. **A growth rhythm.** No season, no flush, no bud dormancy anywhere. It buys whorls,
+   bare internodes, growth rings and bud scars from one oscillator, because a bud is a
+   compressed shoot — hold elongation while organ founding continues and primordia pile up
+   at one arc position. A season is environmental, the same category as the air in
+   `37_wind.js`, so it costs nothing against the one rule. ⚠ **One obstacle, unproven:**
+   `minInternode` currently makes a non-elongating axis *discard* the primordia its
+   meristem emits. It would have to queue them instead, without disturbing the eight herbs.
+2. **Wood as memory**, per above. One term in `updateRadii`. `EI` goes as r^4, so the sway
+   currently rests on a radius that moves with the foliage — run `test/stem.mjs`.
+3. **The leader's top third is a bare whip.** Pre-existing, not a regression from the
+   branching, and it only reads worse now the crown below it is full. `maxOrgans` is **not**
+   the lever: at 130 the specimen is 70.6 units with the same bare top.
+
+### And the palette, which was a separate defect arriving from the same direction
+
+Ashfall Spire was **the only species in the catalogue whose stem hue fought its foliage** —
+`stem1 [0.34, 0.31, 0.27]`, a warm neutral with red highest, under cool green blades, where
+the fern is teal-on-teal, Sun Coral orange-on-orange and Ember red-on-red. It is also the
+only species whose stems are a large share of the frame rather than a thin support for the
+blades, so **the defect every herb hid, the tree put in the middle of the picture.**
+
+Two things were wrong and only one was hue: pulling the stem into the foliage's family
+fixed the colour and left it reading as dark rods, because `stem1` also sat well below the
+blades in **value**. Lightening it toward the foliage's midtone is what actually worked.
+The ground is warm now and the tree cold — the only cold-on-warm pairing in the catalogue,
+so the species stops living in Cathedral Fern's hue family "only greyer".
+
+**One more thing that turned up while looking**, and it is unresolved: at the whole-tree
+framing this specimen draws **92,864 vein ribbons against 87,402 triangles**, and `vein` is
+the brightest entry in its palette while `blade1` is the darkest. Sweeping the vein weight
+to zero on one grown tree in one session reveals a legible green conifer underneath the
+white haze. **At that distance the crown you are looking at IS the vein network, not the
+foliage.** The veins must not be culled — they are the only channel through which the
+engine is visible, which is what killed the needle — but they have no perceptual distance
+fade in `natural`, where the `cells` view's needles already have exactly that law. Not
+built. It also means crown fill measures blade footprints while the *impression* of
+fullness comes substantially from ribbons.

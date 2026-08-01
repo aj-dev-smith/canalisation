@@ -822,3 +822,71 @@ reopens the flap on a catalogue that now contains a conifer.
 
 `petiole.mjs` is one of the eight harnesses that assert locally and are **not** wired into
 CI, so this is red on the branch and green on every required check.
+
+## `updateRadii` counts a dying organ, so senescence is not a way to unload a stem (2026-08-01)
+
+Asking "does the trunk remember what it once carried?" — i.e. is this stem wood or a
+pipe? — the obvious experiment is to grow the specimen, let the senescence wave strip it,
+and watch the basal radius. Run it and the radius holds at 0.7573 for six thousand steps,
+dead flat, through `senescing` and out the other side. **Wood, apparently.**
+
+It is an artifact. `updateRadii` builds its traffic list with
+
+```js
+for (const org of this.organs) bl.push([org.birthLen, sp.organFlow]);
+```
+
+and nothing there consults `org.sen` or `org.shed`. A senescing organ is still in
+`this.organs` and still contributes full flow, so **the load never came off** and the
+harness measured a constant against a constant. The organ census printed alongside it said
+1201 the whole way, which was the tell and was ignored for one iteration.
+
+The real test removes the organs and re-sizes:
+
+```js
+for (const a of axes) a.organs.length = 0;
+for (const a of axes) a.updateRadii(sp);
+```
+
+Basal radius **0.7573 -> 0.2412, a 68.2% loss.** It is a pipe. See ROADMAP 0y2 — the
+missing property is *irreversibility*, not the pipe model, which is right at sapling size.
+
+**The general form:** before believing a null result, check that the independent variable
+actually moved. A quantity that is "unchanged" because the thing you meant to change is
+still being counted looks exactly like a quantity that is robust.
+
+## `WORLD`, not `WIND_DEFAULTS`, holds the exchange rates — and the wrong one is silent (2026-08-01)
+
+`37_wind.js` exports both. The world's scales live in `WORLD`:
+
+```js
+export const WORLD = { unitM: 0.0625, ptPerSec: 125, gEarth: 9.81, rhoAir: 1.2 };
+```
+
+`WIND_DEFAULTS` is the *field's* configuration and has no `unitM`. Importing the wrong one
+does not throw — `WIND_DEFAULTS.unitM` is `undefined`, every derived length becomes `NaN`,
+and a scratch harness happily prints a table of them. This was caught only because the
+conversion factor was printed on its own line at the top of the output; every specimen
+dimension below it was `NaN` and would otherwise have been read as "the script is still
+warming up".
+
+**Print the constant you converted with, not just the converted numbers.** One line at the
+top of any harness that crosses between world units and metres.
+
+## `tools/tree_shot.mjs` asserts `OVER=` landed for `sp`, and NOT for `pal` (2026-08-01)
+
+The tool patches any top-level key of the preset —
+
+```js
+for (const k of Object.keys(over)) Object.assign(S[k], over[k]);
+```
+
+— so `OVER='{"pal":{...}}'` works. But the assertion loop that follows only walks
+`over.sp`, so **a malformed or misspelled `pal` override is a silent no-op** and you will
+compare a candidate against itself and conclude "no difference" — the most expensive wrong
+answer a capture tool can give, and the exact failure the `sp` assertion was added to
+prevent.
+
+Until that is fixed, a `pal` A/B is only trustworthy if the resulting images visibly differ
+from each other, so **shoot at least two candidates and check they are not identical**
+rather than shooting one against a remembered baseline.
