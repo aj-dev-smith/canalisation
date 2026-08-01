@@ -7884,16 +7884,40 @@ const SPECIES = {
       leafOpts: { fenestrate: 0, aspectFloor: 0.04, nv: 5 },
       marginBias: { ay: 0.16, g1: 1.30, D: 0.70 },
     },
+    // THE ONE PALETTE IN THE CATALOGUE WHOSE STEM FOUGHT ITS OWN FOLIAGE, and
+    // the only species where that could matter. Shipped, this was `stem1
+    // [0.34, 0.31, 0.27]` — a warm neutral, RED channel highest — under cool
+    // green blades. Every other species keeps stem and blade in one hue family:
+    // the fern's stem is teal under teal, Sun Coral's is orange under orange,
+    // Ember's red under red. Ashfall Spire was the exception, and it is the one
+    // specimen whose stems are a large share of the frame rather than a thin
+    // support for the blades — 77 axes and a 2.9 m trunk against a herb's four
+    // or five. So the defect every herb hid, the tree put in the middle of the
+    // picture, and the branches read as brown dowels with pale fuzz stuck on.
+    //
+    // TWO THINGS WERE WRONG AND ONLY ONE OF THEM WAS HUE. Pulling the stem into
+    // the foliage's family fixed the colour and left it reading as dark rods,
+    // because `stem1` also sat well below the blades in VALUE. It is lightened
+    // toward the foliage's midtone here, and that is what actually made the
+    // branches stop looking foreign. Checked at the whole-tree and mid framings,
+    // both pinned with `FIXDIST=` so the A/B is at one scale.
+    //
+    // AND IT WAS IN CATHEDRAL FERN'S HUE FAMILY, ONLY GREYER — which is the
+    // worst of both, neither distinct nor vivid. The ground is warm now and the
+    // tree is cold: the only cold-subject-on-warm-field pairing in the
+    // catalogue, so this species reads as itself at a glance, and the name
+    // finally means something. Nothing here is a shape; a background is
+    // atmosphere, in the same category as the air in `37_wind.js`.
     pal: {
-      blade0: [0.05, 0.12, 0.11], blade1: [0.13, 0.28, 0.24],
-      veinTint: [0.06, 0.14, 0.16], vein: [0.55, 0.88, 0.80],
-      stem0: [0.14, 0.13, 0.12], stem1: [0.34, 0.31, 0.27],
-      cell0: [0.05, 0.10, 0.11], cell1: [0.70, 0.95, 0.85],
-      bgTop: [0.020, 0.024, 0.026], bgBot: [0.004, 0.005, 0.006],
-      bgGlow: [0.05, 0.07, 0.07], fog: [0.030, 0.036, 0.038], fogD: 0.068,
+      blade0: [0.05, 0.11, 0.09], blade1: [0.17, 0.32, 0.26],
+      veinTint: [0.06, 0.15, 0.13], vein: [0.62, 0.95, 0.80],
+      stem0: [0.14, 0.19, 0.16], stem1: [0.38, 0.46, 0.41],
+      cell0: [0.05, 0.11, 0.09], cell1: [0.72, 0.96, 0.82],
+      bgTop: [0.026, 0.020, 0.017], bgBot: [0.005, 0.004, 0.003],
+      bgGlow: [0.075, 0.042, 0.024], fog: [0.032, 0.027, 0.024], fogD: 0.070,
       key: [0.38, 0.80, 0.44], keyCol: [0.86, 0.90, 0.88],
       ambTop: [0.14, 0.18, 0.20], ambBot: [0.03, 0.038, 0.042],
-      glow: 0.92, spore: [0.70, 0.90, 0.82],
+      glow: 0.92, spore: [0.85, 0.82, 0.62],
       pin: [0.62, 0.90, 0.85], spark: [0.90, 0.98, 0.94],
       fruit0: [0.10, 0.14, 0.13], fruit1: [0.60, 0.70, 0.62],
       petal0: [0.22, 0.28, 0.28], petal1: [0.72, 0.84, 0.80], petalVein: [0.85, 0.92, 0.90],
