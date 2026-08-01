@@ -95,7 +95,15 @@ function grow(over, seed) {
     // HOW DENSELY NEEDLES PACK ALONG A SHOOT, which is the axis that does not
     // widen the crown. Every other way of adding foliage lengthens an axis and
     // grows the silhouette as fast as it fills it.
-    'minInternode', 'internode', 'elongation'])
+    'minInternode', 'internode', 'elongation',
+    // HOW MANY ORDERS OF BRANCHING, and it was missing from this list — which
+    // matters more than a missing knob usually does. `maxGen: 2` was rejected on
+    // "fill 0.281 -> 0.268", and 0.281 is the signature of the metric the very
+    // next paragraph of that JOURNAL entry retracts: needle area over silhouette
+    // area, which "came back 0.28 for every variant including ones that plainly
+    // differed". This raster metric is the replacement, and until now it could
+    // not be pointed at the one change the broken metric killed.
+    'maxGen'])
     if (over[k] !== undefined) sp[k] = over[k];
 
   const P = new Plant({ ...DEFAULT_PRM, ...S.prm }, { ...MERISTEM_DEFAULTS, ...S.mo }, sp, seed);
