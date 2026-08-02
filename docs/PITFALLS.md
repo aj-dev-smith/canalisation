@@ -890,3 +890,53 @@ prevent.
 Until that is fixed, a `pal` A/B is only trustworthy if the resulting images visibly differ
 from each other, so **shoot at least two candidates and check they are not identical**
 rather than shooting one against a remembered baseline.
+
+## `Bend` copies `STEM_DEFAULTS` at construction, so a sweep of it measures nothing (2026-08-02)
+
+`Bend`'s constructor is `this.o = { ...STEM_DEFAULTS, ...(opts || {}) }`. Every axis
+therefore holds its **own snapshot** of the options, taken when the axis was created.
+Mutating the module object afterwards —
+
+```js
+STEM_DEFAULTS.subCap = 8;      // changes nothing on any bend that already exists
+```
+
+— is a silent no-op. A `subCap` sweep written that way ran seven configurations and
+measured one, seven times.
+
+**The tell was in the output and was nearly missed.** Sway rms came back *bit-identical*
+at 32, 16, 8, 4, 2 and 1 substeps — `0.0017` in every row, six times over. A physical
+quantity that does not move at all across a 32-fold change in temporal resolution is not
+a converged quantity, it is a disconnected knob, and the "convergence" it appeared to
+show was the harness measuring the same run repeatedly. Only the first row differed, and
+that was a settling artefact, which made the table look *more* convincing rather than
+less: it read as "converges immediately below 64".
+
+Two general forms of this, both worth carrying:
+
+- **Ask whether the knob you are sweeping is READ at the moment you change it.** Options
+  snapshotted into per-object state at construction are the common case. To sweep this
+  one you have to walk the objects: `for (const a of plant.axes) a.bend.o.subCap = c`.
+- **Identical is not converged.** Convergence is values *approaching* each other from
+  different starting points. Values that are equal to the last printed digit across every
+  setting mean the setting is not connected to the computation. This is a cousin of the
+  `domin` trap in `test/venation.mjs` and of the fill metric that "came back 0.28 for
+  every variant including ones that plainly differed".
+
+This one cost nothing because the sweep it invalidated was not load-bearing — the two
+changes that shipped alongside it are identities and needed no sweep. **It would have
+cost a great deal if `subCap` had been lowered on the strength of that table.**
+
+## Do not profile a specimen that is still senescing (2026-08-02)
+
+The same shape as "measure an ARRESTED stand", one step further on. A harness that grows
+a conifer and then runs several timed variants back to back is **advancing the plant
+through its own senescence between variants**. A geometry-build measurement taken after
+~3,600 extra steps read 8.1 ms against the 57.9 ms the same specimen cost at the start of
+the run, and 128k triangle vertices against 564k — not because anything got faster, but
+because the tree had dropped most of its canopy while being measured.
+
+`tools/tree_shot.mjs` polls for the crown for exactly this reason, and its first run
+photographed a dead tree. The harness-side version is: **if a run mutates the specimen,
+either snapshot and restore between variants or re-grow, and print an organ count beside
+every timing so a shrinking plant announces itself.**
