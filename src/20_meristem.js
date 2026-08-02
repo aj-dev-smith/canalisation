@@ -292,10 +292,16 @@ export class Meristem {
     }
 
     // --- solve ---------------------------------------------------------------
+    // An agent, if one is resident, deforms the rates this function just wrote
+    // and is put back immediately afterwards — so nothing downstream can read a
+    // deformed value and no baseline can go stale. See 15_pathogen.js.
+    const inf = F.inf;
+    if (inf) inf.apply();
     for (let s = 0; s < prm.substeps; s++) {
       stepAuxin(F, prm, 'grad');
       if (prm.rhoI > 0) stepInhibitor(F, prm);
     }
+    if (inf) { inf.revert(); inf.step(prm.dt * prm.substeps); }
 
     if (!o.detectOff) this.detect();
   }

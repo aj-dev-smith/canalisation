@@ -116,6 +116,10 @@ export class Infection {
     this.comp0 = new Float32Array(cap);
     this.applied = false;
     this.t = 0;
+    // The field carries its own infection, so an organ does not need to be told
+    // about one — it checks `F.inf` around its solve loop and is otherwise
+    // unchanged. Uninfected tissue pays one null test per step.
+    F.inf = this;
   }
 
   // Inoculate the cell nearest (x, y). Returns the cell index, or -1.

@@ -874,6 +874,10 @@ class Infection {
     this.comp0 = new Float32Array(cap);
     this.applied = false;
     this.t = 0;
+    // The field carries its own infection, so an organ does not need to be told
+    // about one — it checks `F.inf` around its solve loop and is otherwise
+    // unchanged. Uninfected tissue pays one null test per step.
+    F.inf = this;
   }
 
   // Inoculate the cell nearest (x, y). Returns the cell index, or -1.
@@ -1287,10 +1291,16 @@ class Meristem {
     }
 
     // --- solve ---------------------------------------------------------------
+    // An agent, if one is resident, deforms the rates this function just wrote
+    // and is put back immediately afterwards — so nothing downstream can read a
+    // deformed value and no baseline can go stale. See 15_pathogen.js.
+    const inf = F.inf;
+    if (inf) inf.apply();
     for (let s = 0; s < prm.substeps; s++) {
       stepAuxin(F, prm, 'grad');
       if (prm.rhoI > 0) stepInhibitor(F, prm);
     }
+    if (inf) { inf.revert(); inf.step(prm.dt * prm.substeps); }
 
     if (!o.detectOff) this.detect();
   }
@@ -1917,7 +1927,10 @@ class Leaf {
     this.scale = Math.min(1, this.scale + o.grow * dt);
     // the blade keeps recruiting sources while it is still expanding
     if (this.age % o.srcEvery < dt && this.sources.length < o.maxSources) this.addSource();
+    const inf = this.F.inf;
+    if (inf) inf.apply();
     for (let s = 0; s < this.prm.substeps; s++) stepAuxin(this.F, this.prm, 'flux');
+    if (inf) { inf.revert(); inf.step(this.prm.dt * this.prm.substeps); }
     if (this.age > o.matureAt) this.bake();
   }
 
