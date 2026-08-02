@@ -142,7 +142,7 @@ export function cantileverHz(rM, lM, o) {
 
 // Prefixed, because the bundle is one shared scope and `_a`/`_d` were already
 // taken elsewhere — build.js caught it, which is what it is for (PITFALLS).
-const _bnA = v3(), _bnB = v3(), _bnC = v3(), _bnD = v3(), _bnW = v3(), _bnF = v3(), _bnQ = v3();
+const _bnA = v3(), _bnB = v3(), _bnC = v3(), _bnD = v3(), _bnF = v3(), _bnQ = v3();
 
 // CHOLESKY, not a general inverse, and the reason is accuracy rather than speed.
 //
@@ -422,38 +422,77 @@ export class Bend {
     const rhs = this._rhs || (this._rhs = []);
     rhs.length = M * 3;
 
+    // THE WIND DOES NOT CHANGE ACROSS THE SUBSTEPS OF ONE CALL, AND IT WAS BEING
+    // ASKED UP TO 64 TIMES ANYWAY.
+    //
+    // `windAt` is a pure function of position and time. `t` is this call's argument
+    // and does not advance inside the loop; a station's `p` is written by `sync` and
+    // an organ's `frame.o` by `updateRadii`, neither of which runs again until this
+    // call has returned. So every one of those repeats returned a bit-identical
+    // answer. Sampling once per load point per call is not an approximation of the
+    // field, it is the same numbers fetched once — and it was 20.8% of a step.
+    //
+    // (The tempting version of this IS an approximation — freezing a field that
+    // genuinely moves because its fastest gust mode is slow. That argument is not
+    // needed and is not being made. If `t` ever starts advancing per substep, this
+    // cache has to move back inside the loop.)
+    const wst = this._wst || (this._wst = []);
+    const worg = this._worg || (this._worg = []);
+    while (wst.length < M) wst.push(v3());
+    while (worg.length < org.length) worg.push(v3());
+    const topSt = this._topSt || (this._topSt = []);
+    const topOrg = this._topOrg || (this._topOrg = []);
+    topSt.length = M; topOrg.length = org.length;
+    for (let i = 0; i < M; i++) {
+      const q = this.st[i];
+      windAt(wst[i], wind, q.p[0], q.p[1], q.p[2], t);
+      // a station's own range is itself: `s_j <= s_i` first fails at j = i+1
+      topSt[i] = i;
+    }
+    for (let i = 0; i < org.length; i++) {
+      const fr = org[i].frame;
+      windAt(worg[i], wind, fr.o[0], fr.o[1], fr.o[2], t);
+      topOrg[i] = this._topAt(org[i].bendS);
+    }
+
+    const fb = this._fb || (this._fb = []);
+    const pb = this._pb || (this._pb = []);
+    while (fb.length < M) { fb.push(v3()); pb.push(v3()); }
+
     for (let n = 0; n < sub; n++) {
-      for (let j = 0; j < M; j++) v3set(this.st[j].tq, 0, 0, 0);
+      for (let j = 0; j < M; j++) { v3set(fb[j], 0, 0, 0); v3set(pb[j], 0, 0, 0); }
+      // the velocities every load point below is carried by, in one pass
+      this._velPrefix();
 
       // --- the load -----------------------------------------------------------
       // Stem segments: a cylinder only feels the crossflow, so the along-axis
       // component of the relative wind does nothing.
       for (let i = 0; i < M; i++) {
         const q = this.st[i];
-        windAt(_bnW, wind, q.p[0], q.p[1], q.p[2], t);
-        this._pointVel(_bnB, q.p, q.s);
-        v3sub(_bnA, _bnW, _bnB);                       // relative wind
+        this._pointVelAt(_bnB, q.p, topSt[i]);
+        v3sub(_bnA, wst[i], _bnB);                     // relative wind
         const along = v3dot(_bnA, q.t);
         v3addScaled(_bnA, _bnA, q.t, -along);        // crossflow only
         const sp = v3len(_bnA);
         v3scale(_bnF, _bnA, 0.5 * o.cdStem * (2 * q.r * this.ds) * sp);
-        this._addTorqueAt(q.p, _bnF, q.s);
+        this._addTorqueAt(q.p, _bnF, topSt[i]);
       }
       // Blades. Each one presents the drag its own attitude earns — resolved on its
       // normal and in its plane with the plate model's own two coefficients — so
       // nothing here has to say how much of the canopy is facing the wind.
-      for (const g of org) {
-        const fr = g.frame;
-        windAt(_bnW, wind, fr.o[0], fr.o[1], fr.o[2], t);
-        this._pointVel(_bnB, fr.o, g.bendS);
-        v3sub(_bnA, _bnW, _bnB);
+      for (let i = 0; i < org.length; i++) {
+        const g = org[i], fr = g.frame;
+        this._pointVelAt(_bnB, fr.o, topOrg[i]);
+        v3sub(_bnA, worg[i], _bnB);
         const vn = v3dot(_bnA, fr.y);
         v3scale(_bnF, fr.y, 0.5 * o.cPerp * g.bendArea * Math.abs(vn) * vn);
         v3addScaled(_bnC, _bnA, fr.y, -vn);          // in-plane component
         const vt = v3len(_bnC);
         v3addScaled(_bnF, _bnF, _bnC, 0.5 * o.cPar * g.bendArea * vt);
-        this._addTorqueAt(fr.o, _bnF, g.bendS);
+        this._addTorqueAt(fr.o, _bnF, topOrg[i]);
       }
+      // ...and one scan down the axis turns those accumulators into station torques
+      this._resolveTorques();
 
       // --- integrate -----------------------------------------------------------
       // Backward Euler on  M w' = Q - K theta - C w,  theta' = w, which rearranges to
@@ -499,6 +538,32 @@ export class Bend {
     }
   }
 
+  // THE LOAD LOOPS ARE PREFIX SUMS, NOT NESTED LOOPS, AND THAT IS ALGEBRA RATHER
+  // THAN AN APPROXIMATION.
+  //
+  // Both quantities below are sums over "every station below this point", evaluated
+  // once per station AND once per organ, inside the substep loop. Written directly
+  // that is O(stations x (stations + organs)) per substep, and on a conifer it is the
+  // whole frame: 240 axes, 3002 organs, and 123 of those axes pinned at `subCap`
+  // (below) came to 138,311 load-point evaluations per plant step. `_addTorqueAt` and
+  // `_pointVel` measured 21.0% and 11.4% of a step between them.
+  //
+  // Both are linear in the thing being summed, so the station index factors out:
+  //
+  //   torque    sum_L proj_j( (p_L - p_j) x f_L )  =  proj_j( SUM(p x f) - p_j x SUM(f) )
+  //   velocity  sum_j om_j x (p - p_j)             =  ( SUM om_j ) x p - SUM( om_j x p_j )
+  //
+  // so one scan over the stations replaces the inner loop and every load point reads
+  // its answer in constant time. The torque sums run from the top down (a load point
+  // torques everything BELOW it) and the velocity sums from the bottom up (a point is
+  // carried by everything below IT); that asymmetry is the only bookkeeping here.
+  //
+  // This is an identity, not a model change: same arithmetic, different association
+  // order, so the answer moves only in the last bits of the mantissa. `test/stem.mjs`
+  // is what says so out loud — it checks this solver against frequencies computed on
+  // paper before it existed, which is the only reason a rewrite of its hot loop is
+  // safe to make at all.
+
   // Velocity of a material point at arc `s`, from the stations below it. This is what
   // makes the air damp the stem rather than only push it — without it a gust sets the
   // plant ringing with nothing but the structural damping to stop it, and plants are
@@ -506,32 +571,60 @@ export class Bend {
   //
   // A station at exactly `s` contributes nothing (zero arm), so the same arc rule
   // serves for both a station and an organ and there is no index bookkeeping.
-  _pointVel(out, p, s) {
-    v3set(out, 0, 0, 0);
-    for (let j = 0; j < this.n; j++) {
+  // `_velPrefix` must have been rebuilt for the current `om` — `step` does that once
+  // per substep.
+  _velPrefix() {
+    const M = this.n;
+    const vw = this._vw || (this._vw = []);
+    const vp = this._vp || (this._vp = []);
+    while (vw.length < M) { vw.push(v3()); vp.push(v3()); }
+    for (let j = 0; j < M; j++) {
       const st = this.st[j];
-      if (st.s > s) break;
-      v3sub(_bnQ, p, st.p);
-      v3cross(_bnD, st.om, _bnQ);
-      v3add(out, out, _bnD);
-    }
-    return out;
-  }
-
-  // A force applied at `p`, which sits at arc `s`, torques every station below it.
-  _addTorqueAt(p, f, s) {
-    for (let j = 0; j < this.n; j++) {
-      if (this.st[j].s > s) break;
-      this._torqueOn(this.st[j], p, f);
+      v3cross(_bnD, st.om, st.p);
+      if (j === 0) { v3copy(vw[0], st.om); v3copy(vp[0], _bnD); }
+      else { v3add(vw[j], vw[j - 1], st.om); v3add(vp[j], vp[j - 1], _bnD); }
     }
   }
 
-  _torqueOn(st, p, f) {
-    v3sub(_bnQ, p, st.p);
-    v3cross(_bnD, _bnQ, f);
-    // bending only — a moment about the axis itself is torsion and is not modelled
-    v3addScaled(_bnD, _bnD, st.t, -v3dot(_bnD, st.t));
-    v3add(st.tq, st.tq, _bnD);
+  // ...and the read, for a point at `p` whose lowest-station index is `top`.
+  _pointVelAt(out, p, top) {
+    if (top < 0) return v3set(out, 0, 0, 0);
+    v3cross(out, this._vw[top], p);
+    return v3sub(out, out, this._vp[top]);
+  }
+
+  // The index of the highest station at or below arc `s`, which is exactly the range
+  // both sums run over. -1 means nothing below it.
+  _topAt(s) {
+    let top = -1;
+    for (let j = 0; j < this.n; j++) { if (this.st[j].s > s) break; top = j; }
+    return top;
+  }
+
+  // A force applied at `p`, which sits at station range `0..top`, deposited into the
+  // suffix accumulator rather than pushed to each station.
+  _addTorqueAt(p, f, top) {
+    if (top < 0) return;
+    const fb = this._fb, pb = this._pb;
+    v3add(fb[top], fb[top], f);
+    v3cross(_bnD, p, f);
+    v3add(pb[top], pb[top], _bnD);
+  }
+
+  // Scan the accumulators down the axis and resolve each station's torque.
+  _resolveTorques() {
+    const M = this.n, fb = this._fb, pb = this._pb;
+    for (let j = M - 2; j >= 0; j--) {
+      v3add(fb[j], fb[j], fb[j + 1]);
+      v3add(pb[j], pb[j], pb[j + 1]);
+    }
+    for (let j = 0; j < M; j++) {
+      const st = this.st[j];
+      v3cross(_bnD, st.p, fb[j]);
+      v3sub(st.tq, pb[j], _bnD);
+      // bending only — a moment about the axis itself is torsion and is not modelled
+      v3addScaled(st.tq, st.tq, st.t, -v3dot(st.tq, st.t));
+    }
   }
 
   // Compose the station rotations from the base up and carry the whole polyline with
