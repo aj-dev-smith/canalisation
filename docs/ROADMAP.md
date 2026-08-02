@@ -6,6 +6,37 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
+0z0. **WATCH THE INFECTED PLANT, THEN TRY `rCZ` — the agent is built and has never
+   been looked at.** `src/15_pathogen.js` landed 2026-08-02 and every number about it
+   is headless. On a whole specimen the agents span **+6.8% organs (`gall`) to −91.5%
+   (`invert`)**, so there is certainly something to see; whether any of it reads as
+   *disease* rather than as a broken renderer is the question no harness here can
+   answer, and this project has been wrong about exactly that three times.
+   `app.plant.inoculate('lesion')` from the console. **Do this before building
+   anything else on it.**
+
+   Then the one experiment the falsification named. `dComp > 0` was supposed to give
+   *Rhodococcus*'s leafy gall — organised iterated shoots — and gives −8.5% organs
+   instead, because `comp` gates how sharply a cell polarises and **not whether a
+   region is an organ-founding domain**. It sharpens domains; it does not create them.
+   The variable that decides *where* a competent region is, is **`rCZ`**, the
+   central-zone radius — SCIENCE.md's one spatial prior. An agent that shrinks the
+   incompetent centre would add founding sites rather than over-sharpening existing
+   ones. Untried, cheap, and it is the difference between a sick plant and a
+   differently-built one.
+
+   Two more from the literature sweep, both better-evidenced than what ships:
+   **cyst nematodes relocate PIN3 basal→lateral** (Grunewald 2009), the one documented
+   pathogen-driven PIN *repolarisation* and a stronger model for `invert` than the
+   reflection currently implemented; and **HopM1 destroys AtMIN7, which is required
+   for polar PIN localisation** — two demonstrated results with nobody having looked
+   at PIN in HopM1-infected tissue, which the brief calls the most interesting untried
+   experiment in the sweep.
+
+   ⚠ **Do not route phyllody through this.** SAP54/phyllogen degrades ABCE-class
+   MADS-box proteins via RAD23; auxin is not measured or implicated in any of the four
+   primary papers. Phyllody belongs on `q`.
+
 0. ~~**[#13 item 0, the needle](#13-a-conifer--built-and-on-screen-2026-07-30)**~~ —
    **DISSOLVED 2026-07-31, not done.** It was built, measured, rendered at both
    framings, and then deliberately not shipped. `marginBias.ay` 0.008 puts the aspect
