@@ -80,6 +80,7 @@ export class CellField {
     this.comp = new Float32Array(cap);   // PIN competence (0..1) — tissue identity
     this.organ = new Int32Array(cap);    // id of the organ this cell was recruited to
     this.inh = new Float32Array(cap);    // second, slower signal made by organs
+    this.vir = new Float32Array(cap);    // pathogen titre (0..1), see 15_pathogen.js
     this.nextId = 1;
     this.aux0 = new Float32Array(cap);   // scratch
     this.aux1 = new Float32Array(cap);   // scratch
@@ -101,7 +102,7 @@ export class CellField {
     this.p[i] = 1; this.rho[i] = 0; this.mu[i] = 0;
     this.flag[i] = 1; this.age[i] = 0; this.deg[i] = 0;
     this.id[i] = this.nextId++; this.sz[i] = 1; this.comp[i] = 1; this.organ[i] = 0;
-    this.inh[i] = 0;
+    this.inh[i] = 0; this.vir[i] = 0;
     const o = i * MAXNB;
     for (let k = 0; k < MAXNB; k++) { this.pi[o + k] = 0.05; this.P[o + k] = 0; this.J[o + k] = 0; }
     return i;
@@ -118,6 +119,9 @@ export class CellField {
       this.id[i] = this.id[last]; this.sz[i] = this.sz[last];
       this.comp[i] = this.comp[last]; this.organ[i] = this.organ[last];
       this.inh[i] = this.inh[last];
+      // Miss this one and a pruned rim cell teleports its titre into whatever
+      // cell took its slot — an infection that spreads by array bookkeeping.
+      this.vir[i] = this.vir[last];
     }
   }
 

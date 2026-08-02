@@ -75,6 +75,7 @@ node test/plagio.mjs                               # ROADMAP 13 pre-flight: can 
 node test/taper.mjs                                # ROADMAP 14: what sizes a stem, swept and drawn (~3min)
 node test/tree.mjs                                 # ROADMAP 13: the crown — set point, taper, and an ASCII conifer (~4min)
 node test/crown.mjs '{"maxGen":2}'                 # HOW MUCH OF ANYTHING IS THERE — crown fill, at five rasters (~40s)
+node test/infect.mjs                               # a pathogen in the meristem: four closed forms, then the phenotype (~5min)
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -113,11 +114,11 @@ when a stand that heavy could not exist. Read its **median and p99** instead (21
 raise its threshold to make it pass** — that deletes the only signal anyone has about
 the thing 10b exists to fix.
 
-**Ten of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+**Eleven of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
 `petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`, `plagio.mjs`, `taper.mjs`,
-`tree.mjs`.** Only
-**two of the ten are wired into CI** and therefore gate a merge — `smoke.mjs` and
-`views.mjs`. The other eight assert locally and *nothing runs them for you*, which is worth
+`tree.mjs`, `infect.mjs`.** Only
+**two of the eleven are wired into CI** and therefore gate a merge — `smoke.mjs` and
+`views.mjs`. The other nine assert locally and *nothing runs them for you*, which is worth
 knowing before treating a green PR as evidence about the stem or the air. The rest print
 and never fail.
 
@@ -248,6 +249,19 @@ because it swept two meristem options that no longer exist, so two thirds of its
 grid was duplicate rows wearing distinct labels. If you add a sweep, assert the
 knob still moves the number before trusting the table.
 
+`test/infect.mjs` is the pathogen, and it is worth reading for one trap before writing
+any harness that perturbs the meristem. Its flagship claim — suppress polarisation
+competence and you get a **pin-formed apex**, which is what NPA does to a real meristem —
+was first measured with organ count, which looked right and was worthless: `detect()`
+gates on `F.comp[i] < 0.5`, so **the instrument was switched off by the variable under
+test.** Measured on the field instead (`patternStats().contrast`, no competence gate) the
+claim is true and monotone, 9.00 → 1.20. **Before measuring the effect of perturbing X,
+grep the measurement for X** — the same shape as `test/taper.mjs` finding stem thickness
+depending on the wind. Its sections 1-3 are four closed forms checked against numbers
+worked out first; section 4 is chemistry and is printed rather than pinned. The pathogen
+is meristem-only and nothing draws it — `vir` is a computed-but-undrawn channel, which is
+ROADMAP 0z's argument for a `VIEWS` entry.
+
 **Always test the science headlessly before touching the renderer.** A visual bug
 and a simulation bug look identical on screen, and the headless harnesses give you
 numbers in seconds instead of minutes.
@@ -369,6 +383,9 @@ arriving from GitHub, and it leads with the one rule above.
 ```
 src/00_math.js      vec3/mat4, seeded PRNG (mulberry32), smoothstep
 src/10_auxin.js     THE ENGINE. CellField + stepAuxin(). Everything else is geometry
+src/15_pathogen.js  SOMETHING THAT REPLICATES. A scalar that spreads through the
+                    walls and multiplies rates the tissue already had — it draws
+                    nothing and knows no organ. Opt-in and absent by default
 src/20_meristem.js  growing tip: dividing cell sheet, organ initiation, divergence measurement
 src/25_margin.js    leaf outline grown from margin convergence points
 src/30_leaf.js      blade: interior lattice, vein canalisation, bake

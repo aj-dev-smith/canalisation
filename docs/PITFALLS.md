@@ -890,3 +890,73 @@ prevent.
 Until that is fixed, a `pal` A/B is only trustworthy if the resulting images visibly differ
 from each other, so **shoot at least two candidates and check they are not identical**
 rather than shooting one against a remembered baseline.
+
+## An instrument that gates on the thing you are perturbing (2026-08-02)
+
+The pathogen work's flagship claim was that suppressing PIN polarisation competence
+should give a **pin-formed apex** — a naked spike that founds no organs, which is what
+NPA does to a real meristem. The obvious measurement is `Meristem.emitted.length`, and
+it produced a clean-looking result immediately.
+
+It is worthless. `detect()` reads
+
+```js
+if (ai < keepT || F.comp[i] < 0.5) continue;
+```
+
+so **the organ detector itself gates on competence.** Push `comp` below 0.5 and the
+detector stops seeing maxima by fiat, whatever the tissue is doing. "Full suppression
+founds no organs" would have passed with the tissue patterning perfectly well
+underneath it, and the assertion was written and about to ship.
+
+The tell was in the sweep and was easy to wave away: the count did not fall smoothly,
+it fell off a **cliff between `compMul` 0.5 and 0.25** — exactly where the perturbation
+crosses the detector's own threshold — and it never reached zero, sticking at 18. A
+mechanism gives you a curve; an instrument switching off gives you a step at the value
+written in the instrument.
+
+`patternStats()` has no such gate: `contrast` is max/mean of the auxin field itself.
+Measured with it, the claim is *true* and monotone — 9.00 → 3.77 → 1.66 → 1.25 → 1.21 →
+1.20 — and 1.20 is a flat field. The right answer for the right reason, and the two were
+not the same experiment.
+
+**Before measuring the effect of perturbing X, grep the measurement for X.** This
+project has now hit the same shape twice: `test/taper.mjs` found stem thickness
+depending on the wind, and this found organ count depending on the detector's opinion
+of the variable under test.
+
+## Two bookkeeping traps in adding a per-cell field (2026-08-02)
+
+Adding `vir` to `CellField` needs three edits, and only one of them is obvious.
+
+- `add()` must initialise it — a `Float32Array` slot is reused after swap-removal, so a
+  new cell inherits whatever the dead one had. A brand-new cell born infected.
+- **`remove()` must copy it in the swap.** Miss this and a pruned rim cell teleports its
+  titre into whatever cell took its slot: an infection that spreads by array bookkeeping,
+  at the speed of the prune loop, and which looks exactly like fast viral movement.
+- `Meristem.divide()` must hand it to the daughter. It already does this for `organ` and
+  the comment there says "founder-cell identity is heritable" — the same line is where
+  an infection becomes heritable too.
+
+`inh` had all three and was the template. The general form: **grep the existing per-cell
+arrays for every place one of them is assigned, and match the list.**
+
+## A reaction term with no threshold cannot be excluded from anything (2026-08-02)
+
+The pathogen shipped its first version with logistic replication, `rep·v·(1−v)`. It was
+measured immediately: an inoculum on the flank was swept off the rim by frame 100 —
+correct meristem exclusion — and then **the whole meristem was infected anyway by frame
+1000, from a residue of 0.004 left behind by diffusion.**
+
+That is not a bug in the code, it is the model being wrong: with no threshold, `v = 0` is
+unstable, diffusion makes every cell nonzero within a few hundred frames, and exponential
+growth in place beats any travelling front. The infection never has to *travel*, so every
+race is over before it starts and no exclusion result means anything.
+
+The fix is biological rather than numerical — a **minimum infective dose** `vA`, below
+which a cell clears itself, making `v = 0` stable. Real plant viruses establish a cell
+through a founder bottleneck of very few virions, so it is a real quantity.
+
+It also turns the equation into Nagumo's, which hands over two closed forms for free (a
+front speed and a critical nucleus) where the logistic version had one that did not apply.
+**A model that cannot be checked against a number is often one term away from one.**

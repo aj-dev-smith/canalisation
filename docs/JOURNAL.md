@@ -3137,3 +3137,140 @@ engine is visible, which is what killed the needle — but they have no perceptu
 fade in `natural`, where the `cells` view's needles already have exactly that law. Not
 built. It also means crown fill measures blade footprints while the *impression* of
 fullness comes substantially from ribbons.
+
+## A pathogen: four laws, one confounded instrument, one phenotype nobody predicted (2026-08-02)
+
+Prompted by a suggestion from outside the project — "make a series of auxin deforming
+viruses/proteins and inject them into plants" — the question was whether this engine can
+host something that **replicates in the tissue and deforms what the auxin engine does,
+without deforming a shape.** It can, and cheaply: `src/15_pathogen.js` is 120 lines, and
+the wiring into the meristem is four lines.
+
+The argument for it costing nothing against the one rule is `39_fall.js`'s: a pathogen is
+environmental, chemistry the plant is subject to. The test that keeps it honest is that
+every parameter is a rate or a concentration. SCIENCE.md books the two things that *are*
+choices — the inoculation site, and the dose below.
+
+### The first version was unfalsifiable, and it took one measurement to see
+
+Logistic replication, `rep·v·(1−v)`, plus diffusion on the wall graph. The flank
+inoculation behaved beautifully: swept off the rim by frame 100, which is exactly the
+meristem exclusion the experiment was for. Then the whole meristem was infected by frame
+1000 regardless, **from a residue of 0.004 that diffusion had left in every cell.**
+
+With no threshold, `v = 0` is unstable and growth in place beats any front, so the
+infection never needs to travel and no race can be lost. The fix was biological: a
+**minimum infective dose** `vA` making `v = 0` stable, which real plant viruses have as a
+founder bottleneck. That turns the equation into Nagumo's, which is bistable, and hands
+over closed forms the logistic version did not have.
+
+### Four laws, all checked against numbers worked out first
+
+`test/infect.mjs`, sections 1-3. Everything here was derived before the solver ran.
+
+| law | closed form | measured |
+|---|---|---|
+| front speed | `c = sqrt(rep·Deff/2)(1−2vA)` | ratio **0.77–1.21** over 4 cases |
+| retreating front | `c < 0` when `vA > 1/2` | −0.145 at `vA = 0.6` |
+| critical nucleus | `R* = Deff/c` | **+0.39 to +1.11 cells**, always above |
+| capture radius | `r = c/Gt` | apex 1.000, flank 0.000 |
+
+`Deff = Dv·wbar·3/2` is the hexagonal-lattice Laplacian, not `Dv` — the geometric factor
+is real and the front speed is 22% wrong without it.
+
+The critical nucleus is the one worth reading. **A 2D bistable front has curvature, so an
+infection smaller than `R*` heals over under its own boundary** — the tissue recovers with
+no immune response of any kind, purely because the patch is small. The measured threshold
+sits *above* the closed form in all four cases, which is expected rather than error: an
+inoculated disc is a step profile and spends radius forming its own front before it can
+move. Asserting that ordering, plus a bound of 1.5 cells, is a stronger claim than a fitted
+tolerance would have been.
+
+**A unit-granularity sweep "falsified" this law by 0.07 of a cell.** The first run scanned
+integer radii, reported a threshold of 4 against a prediction of 2.93, and failed. The
+prediction was fine; the ruler had one significant figure. Re-scanned at 0.25.
+
+### Meristem exclusion is a race, and the shipped pathogen cannot lose it
+
+An infection holds ground only inside `r = c/Gt`, and must exceed `R*` to be viable at all.
+Both are lengths, so whether exclusion is *observable* is geometry:
+
+```
+PI = rep (1 - 2 vA)^2 / (2 Gt)          — depends on Dv not at all
+exclusion is reachable only when  c/Gt + 2 R* < R
+```
+
+At the shipped defaults `R* = 4.14` against a meristem radius of 10, so **any inoculum
+large enough to survive necessarily covers the apex** — the tissue is all-or-nothing and
+the race cannot be watched. It can be, at `rep 0.2, Dv 0.244, vA 0.05`: `R* = 1.78`,
+capture radius 0.76, and the same inoculum takes on the apex (frac 1.000) and is thrown off
+the rim at r = 6.5 (frac 0.000). That contrast is section 3 and it is the result.
+
+### The instrument was gated on the variable under test
+
+The flagship claim was the **pin-formed apex**: suppress polarisation competence and the
+tissue should found no organs, which is what NPA does to a real meristem. Measured by organ
+count it looked immediately right, and it was worthless — `detect()` reads
+`F.comp[i] < 0.5`, so **suppressing competence switches the organ detector off by fiat.**
+The assertion was written and about to ship.
+
+The tell was there and was easy to wave away: the count fell off a cliff between `compMul`
+0.5 and 0.25 — precisely the detector's own threshold — and stuck at 18 instead of reaching
+zero. *A mechanism gives you a curve; an instrument switching off gives you a step at the
+number written in the instrument.*
+
+`patternStats().contrast` (max/mean of the auxin field, no competence gate anywhere) says
+the claim is true and monotone:
+
+```
+                peaks  contrast  spacing   aMean
+healthy           4.9      9.00     5.56    1.31
+passenger         4.9      9.00     5.56    1.31     <- control, bit-identical
+compMul=0.75      7.0      3.77     6.16    1.47
+compMul=0.5       9.6      1.66     3.45    1.94
+compMul=0.25      5.4      1.25     2.56    1.49
+compMul=0.1       2.0      1.21     1.57    1.35
+compMul=0         0.8      1.20     0.51    1.29     <- the pin
+rhoMul=8          3.5      1.22     3.72   14.05     <- the gall
+```
+
+Right answer, right reason, different experiment.
+
+### Two flat fields, ten times apart in auxin
+
+The pin and the gall arrive at the same place — contrast 1.20 against 1.22, both flat —
+**by opposite routes, and the auxin budget is what separates them.** A pin has the healthy
+budget (1.29 against 1.31) and cannot pattern it. A gall has drowned: 14.05, ten times the
+budget, and cannot spend it, because `phi(a) = a/(Km+a)` saturates and a saturated carrier
+cannot make a gradient. Section 5 draws both and they are visibly the same smooth radial
+field, which is the point: *contrast alone cannot tell you which disease you are looking
+at, and one more column can.*
+
+### The result nobody predicted: partial suppression MULTIPLIES organs
+
+Halving competence does not thin the pattern out on the way to a pin. It goes the other
+way — **peaks 4.9 → 9.6 while spacing tightens 5.56 → 3.45 and contrast collapses 9.00 →
+1.66.** Weak polarisation cannot build a few strong maxima, so it builds many weak ones,
+closer together. It is non-monotone in organ count (386 organs at `compMul` 0.75 against
+167 healthy) while contrast falls monotonically throughout, which is a second reason not
+to read that column.
+
+Nobody wrote this down in advance and it is the most interesting thing in the file. It is
+also the correct direction for real partial loss of polar transport, which fasciates rather
+than depilating.
+
+### What is not done
+
+The pathogen exists in the **meristem only**. Organs each build their own `CellField`, and
+the only thing that ever spanned them is `38_shoot.js`, which is falsified and disabled —
+so there is no substrate for systemic spread. The cheap route is founder inheritance: an
+organ starts with the titre of the meristem cells that founded it, which is also the correct
+biology (phloem-borne arrival, and meristems that are often virus-free). Nothing renders it
+either; `vir` is a computed-but-undrawn channel, which by ROADMAP 0z's argument is a `VIEWS`
+entry waiting to happen.
+
+And the honest framing of the suggestion that prompted this: **infection is built, speciation
+is not.** Heritable variation over the species presets is nearly free — a preset is a dict of
+rates with no shapes in it, which is the whole point of the project — but selection needs a
+fitness, and the only defensible one here would be light interception, which is not computed.
+Do not let the demo imply otherwise.

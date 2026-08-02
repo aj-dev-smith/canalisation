@@ -145,6 +145,38 @@ Keep this list short. Every entry is a debt.
    than a new one — see the 2026-07-26 JOURNAL entry, and the honest limitation it
    left behind, below.
 
+**A PATHOGEN IS NOT ON THE NUMBERED LIST, and the argument for that is the same
+one `39_fall.js` runs on.** `15_pathogen.js` is a scalar that replicates in the
+tissue, moves through the walls, and multiplies rates the tissue already had. It
+draws nothing, it has no target organ, and it does not know what a leaf is. Every
+parameter in it is a rate or a concentration — that is the test that keeps it
+honest, and the moment one of them is a geometry the file is a lie. Like the air,
+it is something the plant is *subject to* rather than shape the plant is told to
+have.
+
+Two things about it belong here anyway, because they are choices:
+
+- **The inoculation site is stated.** Where the needle went in is a position, and
+  nothing derives it. It is environmental in the same way the wind's direction is,
+  and `inoculate(F, {r: 0})` — systemic arrival everywhere at once, which is how a
+  real infection reaches an apex through the phloem — needs no position at all.
+- **The minimum infective dose `vA` is a real quantity, and it was added because
+  the model demanded it rather than because a paper did.** A purely logistic
+  pathogen cannot be excluded from anything: diffusion leaves a residue in every
+  cell within a few hundred frames and any residue grows in place. `vA` makes
+  `v = 0` stable. The founder bottleneck it stands for is documented in real plant
+  viruses, so the number is defensible — but the *reason it exists here* is that
+  without it every race is won before it starts.
+
+What that buys is not imposed at all, and is the interesting half: **meristem
+exclusion falls out as a race rather than a rule.** An infection spreads as a
+bistable front at `c = sqrt(rep·Deff/2)(1−2vA)` while the meristem carries tissue
+outward at `v(r) = Gt·r`, so a front holds only inside `r = c/Gt` — and an
+infection smaller than the critical nucleus `R* = Deff/c` heals over under its own
+curvature. Real meristems exclude real viruses, which is why meristem-tip culture
+cleans infected stock. Nothing here says so; two length scales do. `test/infect.mjs`
+checks both against closed forms.
+
 **Stem thickness is emergent; its taper is mostly one tuned constant, and the
 emergent list should not be read as claiming otherwise.** Radius answers traffic —
 that part is real and it is Murray's law. But two things measured on 2026-07-30

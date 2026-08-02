@@ -12,6 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { CellField, stepAuxin, stepInhibitor, MAXNB } from './10_auxin.js';
+import { PATHOGEN_DEFAULTS, stepPathogen, dose } from './15_pathogen.js';
 import { TAU, mulberry32, angDelta, clamp, smoothstep } from './00_math.js';
 
 class HashGrid {
@@ -70,6 +71,9 @@ export class Meristem {
   constructor(prm, opts = {}, seed = 1) {
     this.o = { ...MERISTEM_DEFAULTS, ...opts };
     this.prm = prm;
+    // A pathogen is opt-in and absent by default: no field is stepped and no
+    // rate is multiplied unless somebody inoculates this tissue.
+    this.vp = opts.pathogen ? { ...PATHOGEN_DEFAULTS, ...opts.pathogen } : null;
     this.rnd = mulberry32(seed);
     this.F = new CellField(this.o.maxCells);
     this.grid = new HashGrid(this.o.d0 * this.o.linkR, this.o.maxCells);
@@ -196,6 +200,7 @@ export class Meristem {
       F.p[j] = F.p[i];
       F.sz[j] = F.sz[i];
       F.organ[j] = F.organ[i];   // founder-cell identity is heritable
+      F.vir[j] = F.vir[i];       // ...and so is an infection
       this._crowd[i] = 6; this._crowd[j] = 6;
     }
   }
@@ -257,9 +262,15 @@ export class Meristem {
     // depletion halo that diffusion carves around that sink, and its reach is
     // sqrt(D/mu), a real length scale of the tissue.
     const cw = o.czWidth;
+    const vp = this.vp;
     for (let i = 0; i < F.n; i++) {
-      F.rho[i] = prm.rho * this._jitter(i);
-      let m = prm.mu;
+      // The pathogen never writes a rate — it scales one the tissue already had,
+      // by its own local titre. An uninfected cell multiplies by exactly 1.
+      const vv = vp ? F.vir[i] : 0;
+      F.rho[i] = prm.rho * this._jitter(i) * (vv ? dose(vv, vp.rhoMul) : 1);
+      // Only the baseline turnover is host metabolism; the drains below are
+      // export into other tissue and are not the pathogen's to scale.
+      let m = prm.mu * (vv ? dose(vv, vp.muMul) : 1);
       const xi = F.x[i], yi = F.y[i];
       // PIN competence: the central zone's stem cells do not polarise the way
       // peripheral-zone cells do, so patterning is confined to the flank.
@@ -274,6 +285,11 @@ export class Meristem {
         const q = F.inh[i] / prm.kI;
         cmp *= 1 / (1 + q * q);
       }
+      // Competence is the flagship target: it is how sharply a cell can polarise
+      // its PIN, so suppressing it removes the tissue's ability to sharpen a
+      // gradient into a maximum without touching how much auxin is there. That
+      // is what NPA does to a real apex, and what `pin1` does to a real plant.
+      if (vv) cmp *= dose(vv, vp.compMul);
       F.comp[i] = cmp;
       // Founder cells of an organ keep exporting auxin downward into the
       // provasculature for as long as they exist. They are anchored in the
@@ -295,6 +311,7 @@ export class Meristem {
     for (let s = 0; s < prm.substeps; s++) {
       stepAuxin(F, prm, 'grad');
       if (prm.rhoI > 0) stepInhibitor(F, prm);
+      if (vp) stepPathogen(F, vp, prm.dt);
     }
 
     if (!o.detectOff) this.detect();
