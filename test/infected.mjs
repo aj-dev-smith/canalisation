@@ -58,12 +58,42 @@ function growLeaf(agent, at = [0.5, 0.0], seed = SEED) {
 
 // What a viewer actually receives from a blade: how many strands, how much
 // traffic the biggest one takes, and how many carry half of it.
+//
+// ⚠ DO NOT REPORT L.veins.length AS A COUNT. `veinMax` is a hard cap (260) and
+// every configuration tried here — control, saturated, and everything between —
+// produces more candidates than that, so `L.veins.length` reads 260 in every
+// row and looks like a strong "no effect" result that is pure arithmetic. It is
+// the same trap as the unreachable-maximum metric in test/venation.mjs, and it
+// survived one round of this harness before being noticed. `canals` below
+// re-derives the count from the field with the cap taken off.
 function veinStats(L) {
   const mg = L.veins.map(v => v.mag).sort((a, b) => b - a);
   const tot = mg.reduce((a, b) => a + b, 0);
   let acc = 0, n50 = 0;
   for (const m of mg) { acc += m; n50++; if (acc >= tot / 2) break; }
-  return { veins: L.veins.length, top: tot ? mg[0] / tot : 0, n50, traffic: tot };
+
+  const F = L.F, o = L.o;
+  let maxPi = 1e-9;
+  for (let i = 0; i < F.n * MAXNB; i++) if (F.pi[i] > maxPi) maxPi = F.pi[i];
+  let canals = 0;
+  for (let i = 0; i < F.n; i++) {
+    const d = F.deg[i], off = i * MAXNB;
+    let tot2 = 0;
+    for (let k = 0; k < d; k++) tot2 += F.pi[off + k];
+    if (tot2 <= 1e-9) continue;
+    for (let k = 0; k < d; k++) {
+      const e = off + k, j = F.nbr[e];
+      if (j <= i) continue;
+      let t3 = 0;
+      const dj = F.deg[j], oj = j * MAXNB;
+      for (let q = 0; q < dj; q++) t3 += F.pi[oj + q];
+      const fr = Math.max(F.pi[e] / tot2, t3 > 1e-9 ? F.pi[F.rev[e]] / t3 : 0);
+      const mag = Math.max(F.pi[e], F.pi[F.rev[e]]);
+      if (fr < o.veinFrac || mag < maxPi * o.veinFloor) continue;
+      canals++;
+    }
+  }
+  return { drawn: L.veins.length, canals, top: tot ? mg[0] / tot : 0, n50, traffic: tot };
 }
 
 function draw(L, inf, W = 62, H = 22) {
@@ -95,14 +125,14 @@ console.log('\n=== 1. AN UNINFECTED LEAF IS UNCHANGED ===\n');
 // clean path moved at all, nothing below this line would mean anything.
 const ctrl = growLeaf(null);
 const cs = veinStats(ctrl.L);
-console.log(`  control leaf (seed ${SEED}): ${ctrl.steps} steps, ${cs.veins} veins, ` +
-  `top strand ${(cs.top * 100).toFixed(1)}%, n50 ${cs.n50}`);
+console.log(`  control leaf (seed ${SEED}): ${ctrl.steps} steps, ${cs.canals} canals ` +
+  `(${cs.drawn} drawn, capped at veinMax), top strand ${(cs.top * 100).toFixed(1)}%, n50 ${cs.n50}`);
 {
   const again = growLeaf(null);
   const bs = veinStats(again.L);
-  ok(again.steps === ctrl.steps && bs.veins === cs.veins &&
+  ok(again.steps === ctrl.steps && bs.canals === cs.canals &&
     Math.abs(bs.traffic - cs.traffic) < 1e-9,
-    'two clean runs are identical', `${bs.veins} veins, traffic ${f(bs.traffic, 6)}`);
+    'two clean runs are identical', `${bs.canals} canals, traffic ${f(bs.traffic, 6)}`);
 }
 {
   // an agent that cannot establish must leave no trace at all
@@ -117,24 +147,28 @@ console.log(`  control leaf (seed ${SEED}): ${ctrl.steps} steps, ${cs.veins} vei
 // =========================================================================
 console.log('\n=== 2. WHAT EACH AGENT DOES TO A BLADE ===\n');
 // =========================================================================
-console.log('  agent        veins   d%      top strand   n50   burden   inoc');
-console.log(`  ${'(control)'.padEnd(12)} ${String(cs.veins).padStart(4)}    --      ` +
-  `${(cs.top * 100).toFixed(1).padStart(5)}%      ${String(cs.n50).padStart(3)}     --`);
+console.log('  agent       canals    d%     top strand   n50   burden   drawn');
+console.log(`  ${'(control)'.padEnd(12)} ${String(cs.canals).padStart(4)}    --      ` +
+  `${(cs.top * 100).toFixed(1).padStart(5)}%      ${String(cs.n50).padStart(3)}     --     ${cs.drawn}`);
 const grown = {};
 for (const name of Object.keys(AGENTS)) {
   const r = growLeaf(name);
   const st = veinStats(r.L);
   grown[name] = r;
   const b = r.inf ? r.inf.burden(0.35) : { frac: 0 };
-  const d = ((st.veins - cs.veins) / cs.veins * 100);
-  console.log(`  ${name.padEnd(12)} ${String(st.veins).padStart(4)}  ${(d >= 0 ? '+' : '') + d.toFixed(1).padStart(5)}%      ` +
-    `${(st.top * 100).toFixed(1).padStart(5)}%      ${String(st.n50).padStart(3)}    ${f(b.frac, 2)}    ${r.inocCell}`);
+  const d = ((st.canals - cs.canals) / cs.canals * 100);
+  console.log(`  ${name.padEnd(12)} ${String(st.canals).padStart(4)}  ${(d >= 0 ? '+' : '') + d.toFixed(1).padStart(5)}%      ` +
+    `${(st.top * 100).toFixed(1).padStart(5)}%      ${String(st.n50).padStart(3)}    ${f(b.frac, 2)}    ${st.drawn}`);
 }
-console.log('\n  `veins` is how many strands the blade canalised and `top strand` is the');
+console.log('\n  `canals` is how many strands the blade committed, and `top strand` is the');
 console.log('  share of traffic the biggest one carries. Those two are the channel the');
 console.log('  engine is visible through — a blade that loses its reticulation is a');
 console.log('  blade the viewer can no longer read the chemistry off. See ROADMAP 13');
 console.log('  item 0, which is where the needle died on exactly this measurement.');
+console.log('');
+console.log('  blind and invert sit at exactly +0.0% because dComp cannot act in flux');
+console.log('  mode. That is section 4, and it is a derivation confirmed by two agents');
+console.log('  independently rather than an absence of effect.');
 console.log('');
 console.log('  ⚠ READ THE BURDEN COLUMN BEFORE THE REST. Every agent here reaches 1.00,');
 console.log('  meaning it has saturated the whole blade — so these rows are a GLOBAL');
@@ -143,10 +177,11 @@ console.log('  strands instead of 10 is what uniform overproduction does (every 
 console.log('  source, so no gradient, so no hierarchy). A real gall needs a PATCH, and');
 console.log('  a patch needs the front slow against blade maturation. Unswept.');
 console.log('');
-console.log('  Note also that vein COUNT is unmoved at 260 in every row while traffic');
-console.log('  redistributes hugely. Drawn width is a RELATIVE quantity, so a uniform');
-console.log('  change to the whole blade is invisible to it — the same lesson as');
-console.log('  crown.mjs\'s normalised fill, arriving this time through the renderer.');
+console.log('  The `drawn` column is veinMax and is NOT a measurement — it reads 260');
+console.log('  for every row including the control, because every configuration makes');
+console.log('  more candidates than the cap. An earlier pass of this file reported it');
+console.log('  as "veins" and read a flat 260 as "the agent changes nothing". `canals`');
+console.log('  is the count with the cap taken off, and it is the one that moves.');
 
 // =========================================================================
 console.log('\n=== 3. DRAWN, because four numbers agreeing is not evidence of shape ===\n');
@@ -174,10 +209,10 @@ console.log('\n\n=== 4. WHERE dComp CAN AND CANNOT BITE ===\n');
 // it is not obvious from the parameter list.
 {
   const g0 = veinStats(grown['blind'].L), g1 = veinStats(grown['invert'].L);
-  ok(g0.veins === cs.veins && Math.abs(g0.traffic - cs.traffic) < 1e-6 &&
-    g1.veins === cs.veins && Math.abs(g1.traffic - cs.traffic) < 1e-6,
+  ok(g0.canals === cs.canals && Math.abs(g0.traffic - cs.traffic) < 1e-6 &&
+    g1.canals === cs.canals && Math.abs(g1.traffic - cs.traffic) < 1e-6,
     'dComp is exactly inert on a blade (flux mode multiplies g by zero)',
-    `blind ${g0.veins}/${f(g0.traffic, 3)}, invert ${g1.veins}/${f(g1.traffic, 3)}`);
+    `blind ${g0.canals}/${f(g0.traffic, 3)}, invert ${g1.canals}/${f(g1.traffic, 3)}`);
 
   // The clamp renormalises rather than discarding carriers. The failure mode is
   // an inverted cell quietly allocating less PIN than it holds.
