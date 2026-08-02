@@ -940,3 +940,64 @@ because the tree had dropped most of its canopy while being measured.
 photographed a dead tree. The harness-side version is: **if a run mutates the specimen,
 either snapshot and restore between variants or re-grow, and print an organ count beside
 every timing so a shrinking plant announces itself.**
+
+## `L.veins.length` is a CAP, so a flat column there is not a null result (2026-08-02)
+
+`Leaf.bake()` ends with `this.veins = segs.slice(0, o.veinMax)` and `veinMax` is
+**260**. Every configuration this project has run produces more candidate canals
+than that, so `L.veins.length` reads 260 for a control, a saturated blade, an
+inverted one, and everything in between.
+
+`test/infected.mjs` reported it as "veins" for a full round and read the flat 260
+as *the agent does not change the network*. It changes it enormously — recounted
+with the cap taken off, the control commits **410** canals and a gall **628**,
++53%, while the top strand's share of traffic falls 7.1% → 0.8%.
+
+This is the mirror image of `test/venation.mjs`'s documented trap. There, a metric
+whose **maximum was unreachable** reported a strong effect that was pure
+arithmetic. Here, a metric **pinned at its cap** reported no effect that was
+equally arithmetic. Both are the same question and it is worth asking out loud:
+
+> **Before reading a flat column as a null result, check that the number is
+> capable of moving.** Print the uncapped quantity beside the drawn one.
+
+`veinStats()` in `test/infected.mjs` re-derives the count from `F.pi` with the cap
+removed, and both are printed — `drawn` is labelled as the cap in the table so
+nobody re-derives the wrong conclusion from it.
+
+## `sum(P)/p` is one step stale, so PIN conservation cannot be measured on a grown field (2026-08-02)
+
+`stepAuxin` allocates `P` over each cell's walls in section 1 and updates `p` in
+section 4 — the *same call*. So after any step, `sum(P)` reflects the **previous**
+`p`, for every cell, infected or not.
+
+Checking whether inverted-polarity cells (`comp < 0`, `15_pathogen.js`) still
+allocate all their PIN by measuring `sum(P)/p` on a grown meristem and comparing
+against a control run gave **1.4e-3**, over tolerance, and looked exactly like a
+leak in the clamp. It is not a leak. It is how far two different simulations'
+auxin trajectories had drifted.
+
+The tell was available for free and was nearly missed: **the inverted cells came
+out NEARER 1.0 than the clean ones**, which is not the sign a discarded-carrier
+bug produces. A leak can only lose PIN.
+
+The fix is to test the claim at the scale the claim is about. It is a statement
+about one allocation, so check one allocation: build a small field, set `comp`
+negative, capture `p`, call `stepAuxin` once, sum `P`. Error is then exactly 0.
+
+> **When a conservation check needs a tolerance, ask what else moved.** A
+> quantity that is conserved *within* an operation is not conserved *across* one.
+
+## `comp` cannot do anything in `'flux'` mode, so a leaf is the wrong test for it (2026-08-02)
+
+`P[e] = p * ((1 - s) * g + s * c)`, and `comp` gates `g` only. A blade runs
+`stepAuxin(F, prm, 'flux')`, which pins `s = 1` and multiplies `g` by zero.
+
+So any agent or experiment that works through `comp` — competence knockout,
+polarity inversion, central-zone identity — is **exactly inert on a leaf, by
+construction**, and will return byte-identical results that read as a broken
+wiring-up. It is a *meristem* mechanism. `20_meristem.js` runs `'grad'`, where
+`s = 0` and `g` is the whole allocation.
+
+`test/infected.mjs` section 4 asserts this rather than commenting it, so the
+byte-identical rows are a confirmed derivation rather than a suspicious null.

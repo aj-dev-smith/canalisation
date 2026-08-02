@@ -1633,3 +1633,75 @@ saturated". It is nothing of the kind: 0.16 -> 0.08 moves the *tissue* by 1.07x,
 that is the flat top of the sweep this file already warns about by name. The ratio said
 nothing true until it was split into numerator and denominator. Same lesson, same knob,
 two documents apart.
+
+## The agent in the tissue (`15_pathogen.js`, 2026-08-02)
+
+**Read the top of the fall's section first — this one is closer to that than to the
+rest of this file.** Most of these numbers are not free parameters to be swept
+into place. Four of them come off literature anchors, two are properties of the
+*agent* rather than the plant (so they are the disease's species definition, not a
+tuning target), and one is a genuinely new stated constant booked in SCIENCE.md.
+
+### What each number is, and whether you may sweep it
+
+| knob | what it is | may I sweep it? |
+|---|---|---|
+| `r`, `clr` | replication and host clearance | **as a ratio only.** `R0 = r/clr` is the meaningful quantity; nothing invades below 1 |
+| `Dv` | plasmodesmal spread rate | **derive it, do not dial it** — see below |
+| `chi` | carried by the auxin flux `J` | ⚠ **not literature-supported.** Nothing pathogenic moves in the polar transport stream. `[OURS]`; ships only on `systemic` |
+| `dRho`, `dMu`, `dComp` | which variable the agent deforms, and its sign | **no.** This is the agent's genome — `iaaM` is a `rho` gene, `iaaL` is a `mu` gene. Pick, do not sweep |
+| magnitude of the above | how hard it pushes | **pick from the table, do not sweep.** Free IAA moves 2.5x under iaaM despite a 945x precursor; PAT falls 50-80% under `6b`; PIN2 rises 35x under *Pantoea* |
+| `pdGate`, `pdN` | auxin closing plasmodesmata | shape is demonstrated; the half-point is ours |
+| `clampMu`, `clampK` | the host's GH3/DAO response | ⚠ **`clampK` is a new stated constant.** SCIENCE.md books it |
+
+### The endemic titre is not the carrying capacity
+
+`r v (1 - v) = clr v` settles at **`v* = 1 - clr/r`**, not at `vCap`. This matters
+for every threshold you write: an agent at `R0 = 1.29` establishes permanently at
+a titre of **0.222**, and a detector looking above 0.5 reports it as failing to
+invade. A mild agent is a low-grade permanent deformation, not an all-or-nothing
+one. `burden(thresh)` takes the threshold for exactly this reason — pass a
+fraction of `v*`, not a fixed number.
+
+### Sizing `Dv` from the organ, which is the only honest way to do it
+
+The extent of a lesion is set by how far a slow front gets before the organ stops
+developing, so `Dv` is derived from the organ's own clock rather than chosen:
+
+- a blade's interior lattice appears at step ~1401 and it matures at ~2302, so the
+  agent has **37.8 time units** (`dt` 0.014 x 3 substeps x 901 steps)
+- the lattice is ~22 hops from its middle to its edge
+- a third-of-a-blade lesion therefore wants a front near **0.19 cells/tu**
+- `c = 2 sqrt(Dv (r - clr))`, so **`Dv (r - clr) ~ 9e-3`**
+
+At `r = 0.85, clr = 0.05` that is `Dv ~ 0.011`; the gate takes another ~23% off,
+so `lesion` ships at **`Dv: 0.008`** and measures burden **0.36**. The sweep that
+confirms it, inoculated mid-blade:
+
+| `Dv` | `r` | predicted `c` | burden |
+|---|---|---|---|
+| 0.300 | 0.85 | 0.980 | 1.000 |
+| 0.080 | 0.85 | 0.506 | 1.000 |
+| 0.030 | 0.85 | 0.310 | 0.810 |
+| 0.010 | 0.85 | 0.179 | 0.518 |
+| 0.004 | 0.85 | 0.113 | 0.323 |
+| 0.030 | 0.25 | 0.155 | 0.101 |
+
+Two orders of magnitude below the other agents is **not** a fudge: real
+plasmodesmal movement is slow next to polar transport. TMV manages ~6 cells/day
+against PAT at 5-20 mm/h, roughly two orders of magnitude slower, which is the
+regime this sits in.
+
+### Do not use the plasmodesmal gate to bound a lesion
+
+`pdGate` is worth having — it takes ~23% off the front speed and the auxin doing
+it is the agent's own, confirmed by a `dRho = 0` control that is unchanged. But
+**it does not self-limit**, whatever the research brief's `[OURS]` paragraph says.
+The medium is homogeneous and every coupling is local, so the system admits a
+travelling wave and a travelling wave has one speed; the front *accelerates*
+toward its asymptote (0.570 → 0.742 → 0.794 cells/tu) rather than decaying.
+`test/pathogen.mjs` section 6 asserts this so it cannot quietly stop being true.
+
+If you want a genuinely self-limiting lesion you need something that breaks
+translation invariance — clearance that rises with cumulative damage is the
+obvious candidate and it is not built.

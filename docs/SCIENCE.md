@@ -145,6 +145,66 @@ Keep this list short. Every entry is a debt.
    than a new one — see the 2026-07-26 JOURNAL entry, and the honest limitation it
    left behind, below.
 
+**AN INJECTED AGENT IS NOT ON THE NUMBERED LIST, AND THE ARGUMENT IS THE SAME ONE
+THE FALLING BLADE MADE.** `src/15_pathogen.js` is something that arrives after the
+plant has started, spreads through it, and deforms the auxin machinery it finds.
+It is a thing the plant is *subject to* — the category `37_wind.js` and
+`39_fall.js` are in — rather than chemistry the plant does, and nothing in it
+says what an infected plant looks like. It says what the agent does to three
+per-cell numbers, and `stepAuxin` decides the rest. **No entry above grows.**
+
+What that buys, and it is most of the point: the lesion's internal vein pattern,
+whether its strands connect to the host's, which organs are affected and in what
+order, and the severity gradient away from the arrival point are all *free* —
+they are what a canalisation solver already produces from a source placed in
+tissue. The literature agrees that this is the right free/paid split: a gall's
+own vasculature is continuous with the host's pre-existing bundles, and its two
+morphologies are the two solutions a canalisation model gives for a source with
+a drain and a source without one (Aloni; see `docs/research_8_02_26_pathogen.md`
+§3). ⚠ That document also notes that **"canalisation" is itself a contested
+hypothesis** rather than settled ground (Ravichandran & Scarpella 2020; Bennett
+2019) — worth knowing, since this whole project is built on it.
+
+**What IS stated, and these are real debts even though they are not shape:**
+
+- **Where the agent arrives, and when.** One position and one time per infection.
+  Irreducible: it is an event in the environment, not a property of the plant —
+  *Agrobacterium* needs a wound, the leafhopper chooses a leaf. Same defence as
+  the wind, and it costs nothing against the one rule. Removing it needs a model
+  of vector behaviour, which is a different project.
+- **Which variable the agent touches, and its sign.** One enum per agent. This is
+  the agent's *genome* and it is not derivable from transport: `iaaM` is a `rho`
+  gene, `iaaL` is a `mu` gene, *Agrobacterium* `6b` is a conductance gene, the
+  nematode syncytium's is a per-wall PIN gene. It is the species definition of a
+  disease the way `marginBias.ay` is the species definition of a leaf.
+- **The magnitude of that perturbation, and the agent's diffusivity.** Two
+  scalars — but both are *lookups rather than dials*, which is the standard
+  `39_fall.js` set for leaf mass per area. Free IAA moves 2.5x under iaaM despite
+  a 945x precursor; PAT falls 50-80% under `6b`; TMV moves ~6 cells/day against
+  polar transport at 5-20 mm/h, i.e. **two orders of magnitude slower than
+  transport**, which is the regime worth building. `AGENTS` in `15_pathogen.js`
+  is that table.
+- ⚠ **`clampMu` / `clampK` — the host's auxin-dependent clamp — is a genuinely
+  new constant and it is booked here.** The *shape* is given by the biology
+  (GH3 conjugation and DAO oxidation, saturating and auxin-activated, and it is
+  the difference between a 2.5x and a 945x deformation, so leaving it out is not
+  an option). **The half-saturation point is not given by anything we could
+  find**, and `clampK: 2.0` is chosen. It is one number and it is a real debt.
+
+**And one thing that is NOT free, contrary to the first write-up.** The research
+brief argued the lesion's *boundary* came for nothing: auxin closes plasmodesmata
+[demonstrated], so an agent diffusing through an auxin-modulated conductance
+should decelerate in tissue it has already deformed and self-limit. That
+paragraph was flagged `[OURS]` — untested — and `test/pathogen.mjs` section 6
+tested it and **it is false.** The front settles to a *slower constant* speed
+rather than decelerating, because the medium is homogeneous and every coupling
+is local, so the system admits a travelling wave and a travelling wave has one
+speed. The gate is worth having (it takes ~23% off the front, and the auxin doing
+it is the agent's own) but it does not bound anything. What bounds a lesion here
+is that **an organ is finite** — the front stops where it has got to when the
+blade stops developing. That is still not a drawn boundary, but it is geometry
+doing the work, not the mechanism, and the difference is worth being honest about.
+
 **Stem thickness is emergent; its taper is mostly one tuned constant, and the
 emergent list should not be read as claiming otherwise.** Radius answers traffic —
 that part is real and it is Murray's law. But two things measured on 2026-07-30

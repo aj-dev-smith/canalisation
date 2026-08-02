@@ -3273,3 +3273,182 @@ one of two roughly equal halves.
   garden of *eight*. One plant is 42% of the line buffer on its own. That is ROADMAP 11
   (instancing a ribbon as twelve floats), a rewrite rather than a tuning — and it is
   **not** an argument for widening the vein cull.
+
+## An agent in the tissue, and three instruments that lied (2026-08-02)
+
+From a reply on the Twitter post — "make a series of auxin deforming
+viruses/proteins and inject them into plants" — and it turned out to be a
+sharper suggestion than a compliment. A **species preset** and a **pathogen**
+are not the same object: a preset is global to an organism and fixed at
+germination, while an agent is *local*, arrives *mid-life*, and *spreads*. The
+engine had never had the second category. Every knob in it was global to a
+specimen and constant for that specimen's life.
+
+`src/15_pathogen.js` is that category, and it adds nothing to SCIENCE.md's
+numbered list for the same reason `39_fall.js` does not: it is a thing the plant
+is subject to, not a shape anybody drew.
+
+### The pre-flight caught three of my own errors and no bugs in the code
+
+An invasion front has a closed-form speed, so `test/pathogen.mjs` worked the
+number out before asking the solver for it. Everything it flagged was the
+derivation, not the implementation — which is the whole argument for writing the
+derivation down first.
+
+- **Asserting `sqrt(2)` scaling.** That is the *continuum* limit of
+  `c = 2 sqrt(Dv rho)`. On a lattice the front obeys
+  `c* = min_L [2 Dv (cosh L - 1) + rho] / L`, whose ratios are **x1.367 and
+  x1.491**, not 1.414. Measured x1.3669 and x1.4919 — agreeing to 0.02-0.06%,
+  an order of magnitude tighter than the absolute band, because the Bramson log
+  correction largely cancels between two runs.
+- **Reading advection as a shift of `c*`.** The agent is carried by an *upwind*
+  difference, the only stable way to advect on a graph with no preferred axis,
+  so it enters the relation as `adv*(e^L - 1)` and not `adv*L`. Upwind
+  differencing carries its own numerical diffusion; an advected front is
+  genuinely faster than "still-air speed plus wind". Predictions were 19-29% low
+  until that was fixed.
+- **Detecting invasion above titre 0.5.** Tissue behind the front settles at the
+  **endemic** level `1 - clr/r`, not at carrying capacity. An agent with
+  `R0 = 1.29` had invaded perfectly well, to a titre of 0.222, and read as a
+  failure to establish. A mild agent is a permanent low-grade deformation rather
+  than an all-or-nothing one, which is a modelling fact the wrong detector hid.
+
+Front speeds land **1.2-2.1% under** the discrete closed form in every case —
+the right sign and size for Bramson. Invasion has a genuine threshold at
+`R0 = r/clr` with nothing scheduling it, the same category as `Plant.spent()`.
+
+### The result: inverted polarity is the interesting perturbation
+
+`comp` gates how far a cell's PIN may depart from uniform:
+`g = uni + (g_raw - uni) * comp`. Every species ships in [0,1], where that is a
+convex combination of two non-negative numbers. **Below zero it stops being a
+pull toward uniform and becomes a reflection through it** — PIN goes to the wall
+the gradient rule would have avoided. That is not a sicker plant, it is inverted
+polarity, and it is the only perturbation here that reaches a body plan the
+parameter space does not otherwise contain.
+
+It costs **one clamp** in `stepAuxin`, provably a no-op for every shipped species,
+and `smoke.mjs` passes its 73 checks unchanged.
+
+Inoculating a meristem at its centre:
+
+| agent | organs | live | divergence | aMean | burden |
+|---|---|---|---|---|---|
+| (control) | **167** | 4 | 94.7° | 1.31 | 0.00 |
+| blind (`dComp -1`) | **103** | 1 | 97.2° | 0.88 | 0.69 |
+| invert (`dComp -2`) | **56** | 0 | 108.3° | 1.57 | 0.67 |
+| gall (`dRho +2.4`) | 149 | 1 | 71.4° | 2.13 | 0.66 |
+| chlorosis (`dMu +1.6`) | 61 | 1 | 120.3° | 0.50 | 0.45 |
+
+Organ count is the column to read, and it was predicted before it was measured:
+founding an organ **is** sharpening an auxin maximum, which is exactly the
+operation `comp` gates. Divergence is **not** evidence of anything here — it
+wanders 90-160° uninfected, which is this project's headline limitation, so a
+shifted mean in that column means nothing on its own.
+
+### THREE INSTRUMENTS LIED, and all three lied in the direction of "no effect"
+
+This is the part worth keeping. Every one of them produced a confident,
+plausible, wrong reading, and two survived a full round of the harness.
+
+**1. `veinMax` is a cap, not a count.** Section 2 reported `L.veins.length` and
+got **260 for every single row** — control, saturated, inverted, everything. It
+reads exactly like a clean negative result. `veinMax: 260` is a hard cap in
+`Leaf.bake()` (`segs.slice(0, o.veinMax)`) and every configuration tried produces
+more candidates than it. Recounted with the cap taken off: **410 canals in the
+control against 628 under the gall, +53%.** The agent was reorganising the blade
+enormously the whole time.
+
+This is the same trap `test/venation.mjs` documents — a metric whose extreme is
+unreachable by construction — arriving from the opposite side. There, a maximum
+that could not be reached reported a strong effect that was arithmetic; here, a
+cap that was always reached reported *no* effect that was equally arithmetic.
+**Before believing a flat column, check whether the number can move at all.**
+
+**2. PIN conservation cannot be measured on a grown field.** The claim was that
+the clamp renormalises rather than discarding carriers, so an inverted cell must
+still allocate exactly its own PIN. Measuring `sum(P)/p` on a grown meristem and
+comparing an infected run to a control gave **1.4e-3 apart** — over tolerance,
+and it looked like a real leak. It is not: `p` is updated at the *end* of the
+same `stepAuxin` call that allocated `P`, so the ratio is one step stale for
+every cell, infected or not, and comparing two runs measures how far two auxin
+trajectories have diverged. The tell was free and nearly missed: **the inverted
+cells were nearer 1.0 than the clean ones**, which is not the sign a leak gives.
+Checked instead on a single isolated allocation with `p` captured immediately
+before the call: error exactly 0.
+
+**3. A blade solves in flux mode, so `dComp` cannot do anything to it.** `blind`
+and `invert` came back byte-identical to the control on a leaf. In `'flux'` mode
+`s = 1`, and `P = p * ((1-s)*g + s*c)` multiplies the gradient weight — the only
+thing `comp` touches — by zero. So a competence agent is a **meristem** agent,
+by construction. That row is now an assertion rather than an absence, and the
++0.0% is a second independent confirmation of the mechanism rather than a null.
+
+### The literature corrected the design, and then one of its own claims failed
+
+A research brief (`docs/research_8_02_26_pathogen.md`, flagged `[D]`/`[I]`/
+`[OURS]`/`⚠` like the 2026-07-30 sweep) changed three things:
+
+- **`chi` — advecting the front along `J` — is not supported.** *Nothing
+  pathogenic moves in the polar auxin transport stream.* Phytoplasmas are
+  sieve-element only, wilt fungi xylem-lumen only, viruses go plasmodesmata then
+  phloem source-to-sink, galls do not move at all. This was the design decision
+  I liked most — "the infection goes where the plant's own polarity sends it" —
+  and it is a nice idea with no evidence under it. It ships, because it is
+  measurable and the systemic *pattern* does track a source-sink topology our
+  vein hierarchy approximates, but it is labelled `[OURS]` in the table now
+  rather than implied physics.
+- **A pure `rho` bump over-predicts by two to three orders of magnitude.** In
+  iaaM plants the auxin *precursor* moves 945-2014x while free IAA moves **2.5x**
+  — the host conjugates (GH3) and oxidises (DAO) the excess, and that response is
+  itself auxin-driven. Measured here: auxin behind the front 30.76 with no clamp,
+  6.83 with the gate, 2.60 with both.
+- **Phyllody is NOT auxin** and must not be routed through this. SAP54/phyllogen
+  degrades ABCE-class MADS-box proteins via RAD23; auxin is not measured or
+  implicated in any of the four primary papers. It belongs on `q`.
+
+**And then the brief's own `[OURS]` construction was falsified, which is exactly
+what the flags are for.** It argued the lesion's boundary came for free: auxin
+raises plasmodesmal callose and closes plasmodesmata [demonstrated, Han 2014 /
+Sager 2020], so an agent diffusing through an auxin-gated conductance should
+*decelerate in the tissue it has already deformed* and self-limit.
+
+| agent | c @25% | c @55% | c @90% | final front | a behind |
+|---|---|---|---|---|---|
+| no gate | 1.0212 | 1.0280 | 1.0303 | 419.0 | 30.76 |
+| gate 1.2 | 0.5698 | 0.7420 | **0.7938** | 295.1 | 6.83 |
+| gate + clamp | 0.6515 | 0.8140 | 0.9552 | 333.7 | 2.60 |
+| gate, no dRho | 1.0132 | 0.9627 | 1.0257 | 419.0 | 0.02 |
+
+**It does not decelerate — the speed rises toward an asymptote and holds.** The
+medium is homogeneous and every coupling is local, so the system admits a
+travelling wave, and a travelling wave has one speed. The slow early window is
+just the transient at the inoculation site, where auxin has had longest to pile
+up. Bounding a lesion needs something that breaks translation invariance.
+
+What survives is worth having, and the fourth row is what makes it a mechanism
+rather than a brake: with the gate on but `dRho = 0` the front is **unchanged**
+at 1.026 against an ungated 1.030. The auxin closing the road is the agent's own.
+
+### A bounded lesion, and it is geometry doing it
+
+An organ *is* finite, which is the translation invariance the chain lacked. Sizing
+`Dv` from the blade rather than by eye — 37.8 time units of development after the
+lattice appears, ~22 hops from the middle, so a third-of-a-blade lesion wants a
+front near 0.19 cells/tu, i.e. `Dv*rho ~ 9e-3` — gives burden **0.36**, and a
+lesion with a visible edge in the ASCII drawing. It changes the network hard
+(+46.3% canals, top strand 7.1% → 1.8%) without swallowing the blade.
+
+Nothing bounds it. It stops where a slow front has got to when the blade stops
+developing. **But the boundary is emergent by geometry, not by the mechanism the
+brief proposed**, and the two should not be confused in a write-up.
+
+### What is not built
+
+Two things the brief rates highly and this pass did not touch. **Cyst nematodes
+relocate PIN3 from the basal to the lateral membrane** (Grunewald 2009) — the one
+documented pathogen-driven PIN *repolarisation*, and a much better-evidenced
+model for `invert` than the reflection currently implemented. And **HopM1
+destroys AtMIN7, which is required for polar PIN localisation** — two demonstrated
+results with nobody having looked at PIN in HopM1-infected tissue, which the brief
+calls the most interesting untried experiment in the sweep.
