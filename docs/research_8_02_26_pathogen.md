@@ -1,7 +1,9 @@
 # An injectable auxin-deforming agent: what the literature actually supports
 
-Answer to the research brief of 2026-08-02. Four parallel literature sweeps plus a
-primary-source pass on the two priority questions (Q3 and Q4).
+Answer to the research brief of 2026-08-02. Four parallel literature sweeps plus a primary-source
+pass on the two priority questions, Q3 and Q4, which are answered from papers we read ourselves.
+The clubroot/nematode sweep died and was re-run under degraded conditions; **its output is the
+Appendix, it is held to a lower standard than everything above it, and it says so at its head.**
 
 **How to read this.** Same flags as [research_7_30_26.md](research_7_30_26.md):
 
@@ -17,7 +19,7 @@ that is what the flags are for.
 
 ---
 
-## Executive summary — the nine findings that change what you build
+## Executive summary — the eleven findings that change what you build
 
 1. **Q3 is YES, and it is the strongest result in the brief — but at the vascular layer, not
    the tumour-outline layer.** A gall's *own vascular network* is continuous with the host's
@@ -79,6 +81,18 @@ that is what the flags are for.
    pathogen-induced *morphology* has no documented case, and its nearest literature has a
    published failure to replicate. §5.
 
+10. **"WHERE THE AGENT ARRIVES" IS PROBABLY NOT A PARAMETER, and assuming it was is this brief's
+    own first-draft error.** Every structure in this literature initiates in **provascular,
+    undifferentiated tissue**, selected by a *developmental-state* criterion rather than a
+    coordinate — syncytia incorporate undifferentiated xylem precursors and never differentiated
+    ones; giant cells come from the xylem-pole pericycle; clubroot amplifies pre-existing cambial
+    activity. **`comp` is that criterion.** A `comp`-weighted draw replaces a stated position.
+    ⚠ Appendix, lower evidentiary standard — verify before building. §7.1.1.
+
+11. **Clubroot is NOT an auxin disease and should not be modelled.** The free-IAA measurements
+    disagree with each other across four studies, both de novo synthesis routes are dispensable
+    [D, negative], and what survives is cytokinin. ⚠ Appendix. §1.4.
+
 ---
 
 ## Part 0 — The mapping table
@@ -100,6 +114,7 @@ per-wall PIN allocation; `comp` is PIN competence.**
 | Phytoplasma SAP11/SWP1/SJP1-2 | destabilise class II TCPs incl. BRC1/TB1 | **bud `comp`/`P` — the canalisation switch at the bud** | [D] BRC1→PIN in jujube |
 | Phytoplasma SAP05 | RPN10 hijack, degrades SPL+GATA, ubiquitin-independent | **none — phase/juvenility, needs an age signal** | [D] structures |
 | Phytoplasma TENGU | 38aa peptide, escapes the phloem; lowers IAA and ARF6/8 | **flux-response `b` ↓ (signalling gain), not transport** | [C] 2009 → [D] 2014 titre |
+| *P. brassicae* (clubroot) | **NOT an auxin disease — IAA reports disagree, both synthesis routes dispensable** | **none — it is cytokinin. Do not model it** | [D, negative] §1.4 |
 | Cyst nematode (syncytium) | PIN1↓, PIN3/PIN4 ↑ **and relocated basal→lateral** | **`P` — per-wall reallocation. THE polarity case** | [D] §4.1 |
 | Root-knot nematode (gall) | AUX1/LAX3 import at the basipetal face + PIN3 | **`w` on influx + `P`** | [D] `aux1`, `lax3` mutants |
 | Cyst nematode Hs19C07 | effector binds the LAX3 influx carrier directly | **`w` ↑ on specific walls, agent-encoded** | [D] interaction; [I] flux consequence |
@@ -375,9 +390,34 @@ doi:10.1073/pnas.2310664120.
 pathway, so this one costs a second signal. Its "prolonged lifespan" phenotype is tantalising
 against our senescence machinery and we should note it and not build it.
 
-## 1.4 *Plasmodiophora brassicae* (clubroot)
+## 1.4 *Plasmodiophora brassicae* (clubroot) — **DO NOT MODEL IT. It is not an auxin disease.**
 
-*Pending — see Part 6.*
+The clubroot sweep failed on an API error and was re-run; **its results are in the Appendix**, which
+carries author-year citations without DOIs and which **we did not personally verify** — read the
+caveat at the head of that appendix before relying on any of it. The headline is a retraction of
+what this brief originally assumed:
+
+- **The free-IAA measurements do not agree with each other.** No change then a *reduction*
+  (Devos 2005), reduced (Wei 2021), *increased* (Xu 2016), reduced (Jayasinghege 2023) — all in
+  *Brassica*. The 2025 review's own phrase is "**fluctuating IAA levels rather than consistently
+  higher levels**". **[C]**
+- **Both de novo synthesis routes are dispensable. [D, negative]** `cyp79b2 cyp79b3` doubles make no
+  detectable IAOx and show **no difference in clubroot susceptibility** (Siemens 2008); `PbGH3`
+  overexpression "neither significantly affected hormone levels nor altered clubroot susceptibility"
+  (Smolko 2024).
+- **What survives is cytokinin. [D]** CKX1/CKX3 overexpression is disease-*resistant* (Siemens 2006);
+  the pathogen carries its own IPTs (Schwelm 2015).
+
+**We have one hormone.** Clubroot lands in the same column as the auxin:cytokinin ratio (§7.1.8):
+a real mechanism that costs a second signal and buys us nothing we cannot get elsewhere.
+
+**[OURS] This does not block anything.** The two nematode systems (§1.5, §3.3, §4.1) are far better
+resolved on exactly the axis we care about — PIN-family resolution, subcellular polarity imaging,
+and transporter mutants with quantified phenotypes. The one thing clubroot *does* contribute is in
+the Appendix and it is architectural rather than chemical: gall formation is **amplification of
+pre-existing meristematic activity in the vascular cambium**, and disrupting cambial activity
+significantly decreases gall size (Malinowski 2012) **[D]**. See §7.1.1 — that result, with two
+others, is why "where the agent arrives" may not have to be a stated coordinate after all.
 
 ## 1.5 Nematode feeding sites — the best-resolved auxin-transport pathology in plant biology
 
@@ -648,6 +688,14 @@ strand network to it, continuous with what was already there.**
   crown-gall transcriptome PIN hits and found nothing; the standard review (Gohlke & Deeken 2014)
   contains no discussion of PIN, PAT, AUX1/LAX, NPA, canalisation, GH3, IAA-Asp or oxIAA at all.
   **Treat crown-gall PIN biology as open.**
+- ⚠ **EVERY "auxin accumulation" RESULT IN PARTS 3 AND 4 IS A TRANSCRIPTIONAL OUTPUT REPORTER, NOT
+  A FLUX AND NOT A CONCENTRATION.** DR5 and its GUS variants report *signalling output*, which is
+  downstream of ARF/Aux-IAA degradation and can move without auxin moving. **There is no DII-VENUS
+  or R2D2 study of any nematode feeding site or clubroot gall**, and none of a crown gall.
+  **Nobody has measured a flux at an infection site.** This does not overturn Dolzblasz's
+  DR5-precedes-anatomy result (§3.2) or Grunewald's model (§4.1) — but it means the whole Q3 case
+  rests on where the *response* is, and our engine's `J` is a quantity nobody has observed here.
+  ⚠ Appendix, unverified. **Say this in any write-up rather than letting "auxin accumulates" stand.**
 - ⚠ **Canalisation itself is contested.** Ravichandran SJ, Linh NM, Scarpella E (2020). The
   canalization hypothesis — challenges and alternatives. *New Phytol*, doi:10.1111/nph.16605,
   argues against the standard account; Bennett T et al. (2019), *Ann Bot* 123(3):429, "Auxin
@@ -835,6 +883,15 @@ literature backs them:
    organ class. Cheapest of all and not as boring as it sounds.
 4. **`rho` with a saturating `mu`.** [D] and it is what *Agrobacterium* does — but the host clamp
    means the visible effect is small, and it carries no spatial information of its own.
+
+⚠ **And one hard constraint on all four, from the Appendix.** NPA does **not** abolish a nematode
+feeding site — it *deranges* it, specifically removing "absence of radial expansion of the syncytium
+initial toward the vascular bundle" (Goverse 2000) **[D]**; blocking lateral auxin transport gives
+"small malformed cysts" (Grunewald 2009) **[D]**; the same inhibitor moves a clubroot gall's
+*position* (Xu 2016) **[D]**. **Shape is downstream of the transport field; identity is not.** A
+transport perturbation should change what a structure looks like and where it extends, and should
+**not** be expected to decide whether one forms at all. If we wire an agent so that turning
+transport down makes the disease *disappear*, we have built something the literature says is wrong.
 
 ---
 
@@ -1061,6 +1118,14 @@ Read this before citing anything above.
 - **Thomashow et al. (1986) *FEBS Lett*** on gene 1 tryptophan 2-monooxygenase — indexed but author
   line, volume and pages unverified. **Cite the *Science* 231:616-618 paper instead.**
 
+**The whole Appendix is at a lower standard than Parts 0-7.** Its sweep died on an API error, was
+re-run after the search budget was exhausted, and **its citations are author-year only with no DOIs
+and were not independently checked.** It is load-bearing in two places — §1.4 (do not model
+clubroot) and §7.1.1 (site selection may not be a parameter) — and both say so. Resolve
+**Siemens 2006/2008, Cabrera 2014, Malinowski 2012, Goverse 2000, Karczmarek 2004, Sobczak 1997,
+Liu & Mitchum 2024, Absmanner 2013, Olmo 2017, Oosterbeek 2026** to real citations before building
+on them.
+
 **Experiments that appear never to have been done (absence of evidence, not evidence of absence):**
 
 - **PIN expression, localisation or polarity inside an *Agrobacterium* crown gall.** Searched
@@ -1097,14 +1162,25 @@ This is the cost sheet. It is deliberately short, and each line says what would 
 
 ## 7.1 Irreducible — no amount of transport modelling gives these
 
-1. **WHERE THE AGENT ARRIVES. One position, per infection.**
-   Irreducible because it is an *event in the environment*, not a property of the plant. Every
-   system in Part 1 has this: *Agrobacterium* needs a **wound**; the nematode J2 **selects** a
-   provascular cell by criteria nobody has identified ("yet unknown vascular cells"); the leafhopper
-   **chooses** a leaf. This is the same category as `37_wind.js` — a thing the plant is subject to —
-   so it costs nothing against the one rule, exactly as the falling blade did not. **Removing it
-   would require a model of vector behaviour or of wound distribution, which is a different project.**
-   *Cheapest honest form: a seeded random position on the plant surface, and a time.*
+1. **THAT AN INFECTION HAPPENS AT ALL. One event.**
+   Irreducible because it is an *event in the environment*, not a property of the plant —
+   *Agrobacterium* needs a **wound**, the leafhopper **chooses** a plant. Same category as
+   `37_wind.js`, so it costs nothing against the one rule, exactly as the falling blade did not.
+
+   ⚠ **BUT "WHERE" IS PROBABLY NOT A PARAMETER, AND THIS BRIEF'S FIRST DRAFT WAS WRONG ABOUT IT.**
+   The Appendix's second finding is that every structure in this literature initiates in
+   **provascular, undifferentiated tissue**, selected by a **developmental-state criterion rather
+   than a position**: cyst syncytia in procambium or pericycle, always next to xylem, incorporating
+   *undifferentiated* xylem precursors and never fully differentiated xylem; root-knot giant cells
+   from the **xylem-pole pericycle**, with LBD16 knockouts and an XPP-defective line showing
+   significantly reduced infection **[D]**; clubroot as amplification of **pre-existing cambial
+   meristematic activity**, with gall size falling when cambial activity is disrupted **[D]**.
+
+   **`comp` is our tissue-identity variable and "undifferentiated, competent, not yet committed" is
+   exactly what it means.** An agent that picks its site by sampling `comp` is choosing a
+   developmental state, which is what the literature says actually happens — and the coordinate
+   stops being stated. *Cheapest honest form: a seeded time, and a `comp`-weighted draw. One
+   number, not three.*
 
 2. **WHEN IT ARRIVES. One time.**
    Same category and the same defence. **Note it interacts with the life cycle** — arrival before
@@ -1175,6 +1251,9 @@ These are the wins, and they are the reason to build this at all.
   decides.
 - **Phyllody.** [D] §1.3 — a `q` perturbation. We already sweep `q`. **The cheapest visible symptom
   in the whole brief, and it needs no auxin machinery at all.**
+- ⚠ **WHERE the agent takes hold** — probably not a parameter, see §7.1.1. A `comp`-weighted draw
+  is what the literature describes and it removes a stated coordinate. **Verify the Appendix's
+  citations first.**
 
 ## 7.3 The one-line recommendation
 
@@ -1182,9 +1261,11 @@ These are the wins, and they are the reason to build this at all.
 agent (§4.1), with a saturating `mu` (§7.1.6) and a plasmodesmal-conductance front (§2.2).** Every
 piece is [D] in the literature, every piece is expressed in variables the solver already carries,
 and together they give a witches' broom whose branch count, branch placement, front shape and
-internal venation are all emergent. The stated parameters are **where, when, how fast, which
-variable, how much** — five numbers, four of which are environmental and one of which is the
-species definition of the disease.
+internal venation are all emergent. The stated parameters are **when, how fast, which variable, how
+much** — four numbers, two of which are environmental and one of which is the species definition of
+the disease. ⚠ **"Where" is a fifth only if the Appendix's `comp`-selection result does not hold
+up** (§7.1.1); check that before writing the number down, because the difference is whether the
+infection site is drawn or grown, and this project cares about exactly that difference.
 
 **What we should NOT build**: gall surface morphology (needs ethylene), the rooty/shooty phase
 diagram (needs cytokinin), the SAP05 phase effect (needs an age pathway), or anything that claims
@@ -1196,6 +1277,15 @@ the infection front rides the polar auxin transport stream (not supported by any
 
 A second sweep on the two systems Part 1 covered thinnest. **Three of its results
 change how the model should work; one retracts a claim in Part 0.**
+
+> ⚠ **READ THIS FIRST. This appendix is held to a lower evidentiary standard than the rest of the
+> document.** Its first run died on an API error and it was re-run after the session's web search
+> budget was exhausted; **its citations are author-year only, with no DOIs or PMIDs, and none of
+> them were independently checked by the author of Parts 0-7.** The flags are the sweep's own. Its
+> conclusions are used in §1.4 and §7.1.1, and both places say so. **Before acting on anything here
+> — especially the `comp`-selection argument in §7.1.1, which pays down a booked debt — resolve at
+> least Siemens 2006/2008, Cabrera 2014, Malinowski 2012, Goverse 2000 and Karczmarek 2004 to real
+> citations.** That is a morning's work and it is the difference between a finding and a rumour.
 
 ## The retraction: clubroot is not an auxin disease
 
