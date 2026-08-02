@@ -3137,3 +3137,139 @@ engine is visible, which is what killed the needle — but they have no perceptu
 fade in `natural`, where the `cells` view's needles already have exactly that law. Not
 built. It also means crown fill measures blade footprints while the *impression* of
 fullness comes substantially from ribbons.
+
+## Where one conifer's frame actually goes (2026-08-02)
+
+Prompted by a plain report — *even a single conifer drags the framerate to a grind* —
+which is the fourth time a person watching has been the fastest route to a real problem.
+The diagnosis in CLAUDE.md and ROADMAP 0c was **per-organ CPU work in the geometry
+build**, measured on a stand of seven. That is true of a stand. It is not the whole story
+for one plant, and the simulation half was nobody's suspect.
+
+### The measurement
+
+One **arrested** Ashfall Spire, seed 11, 9000 steps — 240 axes, 3002 organs, 1912 stem
+stations, **zero live axes** — framed whole as `tools/tree_shot.mjs` frames it:
+
+| | ms |
+|---|---|
+| geometry build (`natural`) | 57.9 |
+| — veins off | 33.4 |
+| — lamina off | 32.2 |
+| — stems and petioles only | 6.7 |
+| `plant.step(1)` | **39.4** |
+
+The app takes up to six steps a frame, so one specimen is ~294 ms/frame worst case. Note
+the plant is **arrested**: not one meristem is alive, and it still costs 39 ms a step.
+
+V8 sampler on the step (`node:inspector`, 200 µs interval, around the region of interest
+only — profiling the whole process buries this under six minutes of growth):
+
+```
+21.0%  8.44 ms  _addTorqueAt   39a_stem.js
+20.8%  8.35 ms  windAt         37_wind.js
+15.6%  6.29 ms  step           39a_stem.js
+11.4%  4.57 ms  _pointVel      39a_stem.js
+ 8.4%  3.39 ms  cholSolve      39a_stem.js
+ 3.9%  1.55 ms  updateRadii    40_plant.js
+ 1.1%  0.46 ms  bladeAreaOf    39_fall.js
+```
+
+**77% of a step is the stem bend solver.** Not `stepAuxin`, not the meristem, not
+senescence.
+
+### The wrong first answer, kept because it was confidently reasoned
+
+The first diagnosis, written before the profiler was run, was that an arrested plant
+recomputes frozen geometry every step: `updateRadii` twice per step per axis, `bend.sync`
+rebuilding and re-inverting a mass matrix that cannot have changed, and
+`tagOrgansForBend` calling `bladeAreaOf` twice per organ — each a 24-sample integral over
+the margin — for ~276,000 margin evaluations a step. It even had the right precedent:
+`bladeSection` is a pure function of a **mature** margin, the specimen wears five distinct
+library leaves across 3002 organs, and that is exactly the situation `cellTable` was built
+for.
+
+Every part of that is true and it is **5% of the step**. Caching it would have bought
+about 2 ms and taken a day. The reasoning was sound, the precedent was real, and the
+answer was wrong — which is the argument for running the sampler *before* the refactor,
+not after it, and is why the numbers above are in this file rather than a commit message.
+
+### What shipped, and why neither half needed a sweep
+
+Both changes are **identities**, which is the only reason a rewrite of this solver's hot
+loop was safe to attempt at all.
+
+**The load loops are prefix sums.** `_addTorqueAt` and `_pointVel` are each a sum over
+"every station below this point", evaluated once per station *and* once per organ, inside
+the substep loop — `O(stations × (stations + organs))` per substep. Both are linear in
+what they sum, so the station index factors out:
+
+```
+torque    Σ_L proj_j((p_L − p_j) × f_L)  =  proj_j( Σ(p×f) − p_j × Σf )
+velocity  Σ_j ω_j × (p − p_j)            =  ( Σω_j ) × p − Σ( ω_j × p_j )
+```
+
+One scan down the stations replaces the inner loop and every load point reads its answer
+in constant time. The torque sums run top-down (a load point torques everything *below*
+it) and the velocity sums bottom-up (a point is carried by everything below *it*); that
+asymmetry is the only bookkeeping in it.
+
+**The wind was being asked for the same number up to 64 times.** `windAt` is pure in
+position and time. `t` is the call's argument and does not advance inside the substep
+loop; a station's `p` is written by `sync` and an organ's `frame.o` by `updateRadii`, and
+neither runs again until the call returns. So every repeat returned a **bit-identical**
+answer. On this specimen: **93,848 `windAt` calls per step became 1,920, 48.9x fewer.**
+
+Worth stating what was *not* done, because it is the tempting version and it is a
+different claim: freezing the field across substeps on the grounds that its fastest gust
+mode is 1.78 Hz. That is an approximation and would need defending. It was not needed —
+the field is genuinely constant here — and if `t` ever starts advancing per substep the
+cache has to move back inside the loop.
+
+### Result
+
+| | before | after | |
+|---|---|---|---|
+| `plant.step(1)` | 39.42 ms | **26.25 ms** | 1.50x |
+| 9000 steps of growth | 393.6 s | **316.9 s** | 1.24x |
+
+and the grown specimen is identical: 240 axes, 3002 organs, 1912 stations.
+
+**The verification is the point.** `test/stem.mjs` checks this solver against frequencies
+worked out on paper before the solver existed, and it has already caught three invisible
+bugs in this same file. Run on `main` in a git worktree and on the branch: 82/82 both,
+and **every printed figure is identical** — all nine species' mode 1, ringdown, ratio and
+zeta, and the whole Beaufort-band sway table. An empty `diff` is a much stronger claim
+than a tolerance, and it is available only because an identity was chosen over an
+approximation. `smoke` 73/73, `views` 23/23, `wind` 27/27, `petiole` 31/31.
+
+### What is still there, so nobody reads this as solved
+
+The step is **still 26 ms** and the geometry build **still ~58 ms**. This bought 1.5x on
+one of two roughly equal halves.
+
+- **`subCap: 64` is the largest remaining simulation lever and it is UNTESTED.** 138,311
+  load-point evaluations per step, of which **67.2% come from the 123 of 240 axes that
+  are pinned at the cap** — gen-2 twigs 0.76-0.81 units long with ω₁ of 66-75. At one
+  substep the same work is 3,897 evaluations, 35.5x fewer. The residual per-substep cost
+  is the integrate block: an M² matvec plus a Cholesky solve.
+
+  **The sweep written to answer this was invalid** and the failure is in PITFALLS: `Bend`
+  copies `STEM_DEFAULTS` in its constructor, so mutating the module object changed
+  nothing and seven configurations were one configuration measured seven times. Unlike
+  the two changes above, lowering `subCap` is **not** an identity — backward Euler is
+  unconditionally stable, so fewer substeps means more numerical damping of exactly the
+  modes those twigs have. It is a genuine resolution-versus-dial question of the same
+  kind `test/stem.mjs` section 3 already asks of `stations`, and it deserves the same
+  treatment.
+- **`bladeMesh` has no distance term** (`70_app.js`). It scales by scene organ count and
+  by blade length relative to the largest blade in the scene, and never by how far the
+  blade is from the camera — while the vein cull and the cell thinning are both
+  distance-anchored. At the whole-tree framing every one of 3002 needles still gets a
+  13×6 quad grid with three `bladePoint` evaluations per vertex for finite-differenced
+  normals. That is ~880k evaluations a frame, and `bladePoint` + `blade` + `wAt` +
+  `half` is 44% of the draw.
+- **One conifer emits 1,006,500 line vertices**, against the 664k this file records for a
+  garden of *eight*. One plant is 42% of the line buffer on its own. That is ROADMAP 11
+  (instancing a ribbon as twelve floats), a rewrite rather than a tuning — and it is
+  **not** an argument for widening the vein cull.

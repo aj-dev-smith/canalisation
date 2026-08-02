@@ -867,7 +867,42 @@ zeta       0.10   -       structural damping, as the petiole. Same tissue
 cdStem     1.2    -       circular cylinder in crossflow. Textbook
 cPerp/cPar 1.95/0.18      the plate model's, so a blade earns the drag its attitude gives
 stations   8      -       a RESOLUTION, and section 3 of test/stem.mjs proves it
+sub        6      -       integrator substeps per radian of the axis's OWN first mode
+subCap     64     -       a flat ceiling on that, and the one number here NOBODY HAS SWEPT
 ```
+
+### `subCap` is the unmeasured one, and on a conifer it is most of the cost (2026-08-02)
+
+Every other number above is either physics with a citation or a resolution with a
+convergence plot. `subCap` is neither. It is a flat ceiling with no derivation, and until
+the conifer existed it never bound anything — a herb's axes are few and slow.
+
+Measured on one arrested Ashfall Spire (240 axes, 3002 organs):
+
+```
+138,311  load-point evaluations per plant.step(1)
+  3,897  the same work at subCap 1                    (35.5x fewer)
+    123  of 240 axes PINNED AT THE CAP                (67.2% of all load points)
+```
+
+The pinned axes are gen-2 twigs 0.76-0.81 units long with ω₁ of 66-75 — the substep rule
+is doing exactly what it says (a stiff tip refines itself) on axes whose motion nobody
+can see. After the prefix-sum rewrite the residual per-substep cost is the integrate
+block, an M² matvec plus a Cholesky solve, so this is the largest remaining lever on the
+simulation half.
+
+**It has not been swept and must not be lowered on a hunch.** Backward Euler is
+unconditionally stable, so fewer substeps buys numerical damping of precisely the modes
+those twigs have rather than instability — which means a wrong value here does not crash,
+it quietly deadens part of the plant. That makes it a resolution-versus-dial question of
+the same kind section 3 of `test/stem.mjs` already asks of `stations`, and it wants the
+same instrument: sway trajectory against substep count, converged or not.
+
+⚠ **The first attempt at that sweep was invalid and is written up in PITFALLS.** `Bend`
+copies `STEM_DEFAULTS` in its constructor, so mutating the module object after the axes
+exist changes nothing; sweeping this requires walking the objects
+(`for (const a of plant.axes) a.bend.o.subCap = c`). The invalid run reported bit-identical
+sway at every setting, which reads as "converged" and means "disconnected".
 
 ### The check that mattered
 

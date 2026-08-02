@@ -534,6 +534,30 @@ browser on Metal): **48.1 → 127.5 ms/frame, 20.8 → 7.8 fps**, 1349 → 2672 
 above is unchanged and it is still ROADMAP 10b and 11 — but **do not quote 25-28 fps for
 a stand that contains conifers.**
 
+**AND THE PER-PLANT VERSION OF THAT DIAGNOSIS WAS INCOMPLETE — THE SIMULATION HALF WAS
+NOBODY'S SUSPECT (2026-08-02).** Asked why even ONE conifer grinds, the answer is that an
+**arrested** Ashfall Spire — 240 axes, 3002 organs, *zero live axes* — cost **39.4 ms a
+step and 57.9 ms to build geometry for**, and the app takes up to six steps a frame. The
+sampler put **77% of the step in `39a_stem.js`**, not in `stepAuxin`, the meristem or
+senescence. Two identities shipped (#37) and took the step to **26.25 ms**: the bend
+solver's load loops are prefix sums rather than nested loops, and `windAt` was returning
+a bit-identical answer up to 64 times per step because `t` does not advance inside the
+substep loop. `test/stem.mjs` reproduces every printed figure exactly, before and after.
+Three things not to relearn, all in JOURNAL 2026-08-02:
+
+- **The confidently-reasoned first answer was 5% of the step.** `updateRadii` and
+  `bladeAreaOf` recomputing frozen geometry on an arrested plant is real, has an exact
+  precedent in `cellTable`, and is worth about 2 ms. **Run the sampler before the
+  refactor, not after it.**
+- **`subCap: 64` is now the largest remaining simulation lever and it is UNSWEPT** — 123
+  of 240 axes sit pinned at it, 67% of all load-point evaluations. It is *not* an
+  identity; see TUNING before touching it, and PITFALLS for why the first sweep of it
+  measured nothing.
+- **`bladeMesh` is the only level of detail in the piece with no distance term**, which
+  is most of the remaining 58 ms draw. And **one conifer emits 1,006,500 line vertices**
+  against the 664k recorded for a garden of *eight* — that is ROADMAP 11, and it is still
+  not an argument for widening the vein cull.
+
 **⚠ `tools/garden_hitch.mjs` EXITS NON-ZERO ON `main`, AND IT IS NOT YOUR FAULT.** Worst
 frame gap ~292ms against its 250ms budget, where `main` before #32 was 141ms. It is not
 reporting a stall: the worst frames all land at `debt 0`, which is the *grown* stand's
@@ -778,6 +802,15 @@ short version, in order:
    aimed slightly off it. **Measure before optimising, and measure an ARRESTED stand** —
    a live meristem is a different program from a retired one, and a sweep that mixes
    them reports cost going *down* as the specimen gets bigger.
+
+   ⚠ **That is a STAND-level diagnosis and it does not carry to one plant (2026-08-02).**
+   Profiled per specimen, an arrested conifer splits roughly evenly: 57.9 ms of geometry
+   against 39.4 ms *per simulation step*, six of which can land in a frame. #37 took the
+   step to 26.25 ms with two identities in `39a_stem.js`. What is left is `subCap`
+   (unswept, not an identity, see TUNING), `bladeMesh`'s missing distance term, and the
+   line-vertex count. **And do not profile a specimen that is still senescing** — a run
+   that times several variants back to back advances the plant through its own leaf drop
+   and reports the draw getting 7x cheaper. PITFALLS 2026-08-02.
 0b. ~~**MURRAY'S LAW IS WRONG FOR SELF-SUPPORTING AXES (ROADMAP 14)**~~ — **DONE
    2026-07-30, and it was a minor term.** The literature was right about the mechanism
    and wrong about the size: `radiusExp` exists and ships at 3, because the exponent

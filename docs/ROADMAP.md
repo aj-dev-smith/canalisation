@@ -104,6 +104,39 @@ priority.** The list below is the priority.
    tissue that will never change again is now 1200 organs per conifer of exactly that.
    Still not research. **`tools/garden_hitch.mjs` exits non-zero on `main` because of
    this** and will until it lands — that is expected, not a regression you introduced.
+
+   **A first bite landed 2026-08-02 (#37) and it was not where this entry points.** The
+   cost of an arrested plant is not only `stepAuxin` patterning frozen tissue: profiled
+   per specimen, **77% of a conifer's step was the bend solver in `39a_stem.js`**, on a
+   plant with zero live axes. Two identities — prefix sums for the load loops, and one
+   `windAt` call where there had been up to 64 identical ones — took `plant.step(1)` from
+   39.42 to 26.25 ms with every figure in `test/stem.mjs` bit-identical. So a background
+   plant's simulation bill has two payers, not one, and **the cheaper of the two has been
+   collected.** The rest of this entry stands. See JOURNAL 2026-08-02, and note that the
+   confidently-reasoned first diagnosis (`updateRadii`/`bladeAreaOf` recomputing frozen
+   geometry) profiled at 5% — **run the sampler before the refactor.**
+
+0a-i. **`subCap` — the largest remaining SIMULATION lever, and it is unswept.** 123 of a
+   conifer's 240 axes sit pinned at `subCap: 64`, accounting for 67.2% of all load-point
+   evaluations; the same work at one substep is 35.5x smaller. These are gen-2 twigs
+   0.8 units long with ω₁ of 66-75 — the substep rule refining axes nobody can see.
+   ⚠ Unlike #37 this is **not** an identity: backward Euler is unconditionally stable, so
+   too few substeps deadens those modes rather than blowing up. It is a
+   resolution-versus-dial question and wants the instrument `test/stem.mjs` section 3
+   already applies to `stations`. **The first sweep of it was invalid** — `Bend` copies
+   `STEM_DEFAULTS` at construction — and reported bit-identical sway at every setting,
+   which reads as convergence and means disconnection. TUNING and PITFALLS, 2026-08-02.
+
+0a-ii. **`bladeMesh` has no distance term, and it is the only LOD in the piece that
+   doesn't.** It scales by scene organ count and by blade length relative to the largest
+   blade in the scene (`70_app.js`), while the vein cull and the cell thinning are both
+   anchored to the camera's framing distance. At the whole-tree framing all 3002 needles
+   still get a 13×6 quad grid with three `bladePoint` evaluations per vertex for
+   finite-differenced normals — `bladePoint`/`blade`/`wAt`/`half` is 44% of a 58 ms draw.
+   Cheap to state, and it wants a browser and an eye rather than a table, because the
+   lamina is what a viewer reads as the plant's surface. **Do not reach for the vein cull
+   instead**; one conifer already emits 1,006,500 line vertices against 664k for a garden
+   of eight, and that is #11's problem, not the cull's.
 0b. **[#13c, the cone](#13-a-conifer--built-and-on-screen-2026-07-30)** — **small.** The conifer is built and on screen; what it does not have is
    reproduction of any kind. A cone is a short determinate axis bearing spirally
    arranged scales, which is what the floral meristem already makes — plausibly a
