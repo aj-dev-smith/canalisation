@@ -293,6 +293,101 @@ console.log('\n=== 5. THE NAMED AGENTS, and whether each one establishes ===\n')
   }
 }
 
+// =========================================================================
+console.log('\n=== 6. AUXIN CLOSES THE ROAD THE AGENT IS TRAVELLING ON ===\n');
+// =========================================================================
+// The one coupling between agent and host transport that the literature
+// actually demonstrates (Han 2014; Sager 2020): auxin raises plasmodesmal
+// callose and lowers symplastic permeability. An agent that raises `rho`
+// therefore shuts the plasmodesmata behind itself.
+//
+// PREDICTION, written before running it: an agent with dRho > 0 and the gate
+// ON must DECELERATE, because the tissue behind its front is the tissue whose
+// auxin it raised. With the gate OFF, or with dRho = 0, the front is Fisher-KPP
+// and its speed is constant. The lesion should therefore stop at a radius
+// nobody specified.
+{
+  const dt = DEFAULT_PRM.dt, sub = 3;
+  const run = (opts, T = 260) => {
+    const N = 420;
+    const F = chain(N);
+    const prm = { ...DEFAULT_PRM };
+    for (let i = 0; i < F.n; i++) { F.rho[i] = 0.05; F.mu[i] = 0.30; F.a[i] = 0.15; }
+    const inf = new Infection(F, { ...PATHOGEN_DEFAULTS, ...opts });
+    inf.inoculateIndex(0);
+    const track = [];
+    let t = 0;
+    while (t < T) {
+      // the host's rates are constant here, so apply/revert brackets the solve
+      inf.apply();
+      for (let s = 0; s < sub; s++) stepAuxin(F, prm, 'flux');
+      inf.revert();
+      inf.step(dt * sub);
+      t += dt * sub;
+      track.push([t, frontPos(F, 0.25), F.a[Math.max(0, Math.round(frontPos(F, 0.25)) - 3)]]);
+    }
+    return { F, inf, track };
+  };
+
+  const base = { r: 0.85, clr: 0.05, Dv: 0.30, dRho: 2.40 };
+  const cases = [
+    ['no gate          ', { ...base, pdGate: 0 }],
+    ['gate 1.2         ', { ...base, pdGate: 1.2, pdN: 2 }],
+    ['gate 1.2 + clamp ', { ...base, pdGate: 1.2, pdN: 2, clampMu: 1.10, clampK: 2.0 }],
+    ['gate, no dRho    ', { ...base, dRho: 0, pdGate: 1.2, pdN: 2 }],
+  ];
+  console.log('  agent                 c @25%   c @55%   c @90%   final front   a behind');
+  const out = [];
+  for (const [label, o] of cases) {
+    const { track } = run(o, 420);
+    const at = (frac) => track[Math.min(track.length - 1, Math.floor(track.length * frac))];
+    const seg = (f0, f1) => {
+      const [t0, x0] = at(f0), [t1, x1] = at(f1);
+      return (x1 - x0) / (t1 - t0);
+    };
+    const c1 = seg(0.15, 0.30), c2 = seg(0.45, 0.62), c3 = seg(0.82, 0.98);
+    const last = track[track.length - 1];
+    out.push({ label, c1, c2, c3, x: last[1], aBehind: last[2] });
+    console.log(`  ${label}  ${f(c1, 4).padStart(7)}  ${f(c2, 4).padStart(7)}  ${f(c3, 4).padStart(7)}   ` +
+      `${f(last[1], 1).padStart(8)}      ${f(last[2], 2)}`);
+  }
+  console.log('');
+  const noGate = out[0], gated = out[1], clamped = out[2], noRho = out[3];
+
+  // The claim that survives, and it is not the one this section was written to
+  // check. See the note below.
+  ok(gated.c3 < noGate.c3 * 0.8, 'the gate slows the front substantially',
+    `${f(gated.c3, 3)} vs ${f(noGate.c3, 3)} cells/tu`);
+  ok(gated.x < noGate.x * 0.8, 'and it gets measurably less far in the same time',
+    `${f(gated.x, 1)} vs ${f(noGate.x, 1)} cells`);
+  ok(noRho.c3 > noGate.c3 * 0.9, 'the gate alone does nothing — it is the agent\'s OWN auxin that shuts it',
+    `dRho = 0 gives ${f(noRho.c3, 3)} vs ungated ${f(noGate.c3, 3)}`);
+  ok(clamped.aBehind < gated.aBehind * 0.6, 'the host clamp holds auxin down behind the front',
+    `${f(clamped.aBehind, 2)} vs ${f(gated.aBehind, 2)}`);
+  // and the falsification, asserted so it cannot quietly stop being true
+  ok(gated.c3 > gated.c1, 'the gated front does NOT decelerate — it settles to a slower constant speed',
+    `${f(gated.c1, 3)} -> ${f(gated.c2, 3)} -> ${f(gated.c3, 3)} cells/tu`);
+
+  console.log('\n  ⚠ THIS SECTION WAS WRITTEN TO CHECK A PREDICTION THAT IS WRONG, and the');
+  console.log('  prediction was the research brief\'s own [OURS] construction — flagged in');
+  console.log('  that document as untested, which is exactly what the flags are for.');
+  console.log('');
+  console.log('  It said the front would DECELERATE, "in exactly the tissue it has already');
+  console.log('  deformed", making the lesion self-limiting with an emergent boundary. It');
+  console.log('  does not. The speed RISES toward an asymptote and then holds. The reason');
+  console.log('  is that the medium is homogeneous and every coupling here is local, so the');
+  console.log('  system admits a travelling wave, and a travelling wave has ONE speed. The');
+  console.log('  early window is slow only because it is the transient at the inoculation');
+  console.log('  site, where auxin has had longest to accumulate.');
+  console.log('');
+  console.log('  What IS true is worth having: the gate cuts the front speed by ~35% and');
+  console.log('  the auxin doing the cutting is the agent\'s own. But bounding a lesion');
+  console.log('  needs something that breaks translation invariance — a finite organ, an');
+  console.log('  accumulating host response, or clearance that rises with damage. A blade');
+  console.log('  IS finite, which is why test/infected.mjs can still get a bounded lesion');
+  console.log('  out of this; it is geometry doing it, not the gate.');
+}
+
 console.log('');
 if (failures) { console.log(`${failures} FAILURE(S)\n`); process.exit(1); }
 console.log('all pathogen pre-flight checks passed\n');

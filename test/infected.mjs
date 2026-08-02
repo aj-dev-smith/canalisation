@@ -190,9 +190,12 @@ console.log('\n=== 3. DRAWN, because four numbers agreeing is not evidence of sh
 // that file, four numeric sections and a closed form all agreed with each other
 // while the specimen was the wrong shape AND upside down.
 //   '#' heavy strand   '+' medium   '.' minor   '~' agent above titre 0.35
+//
+// `lesion` is the one to look at: it stops, and where it stops is set by how far
+// a slow front gets before the blade finishes developing. Nothing bounds it.
 console.log('  CONTROL\n');
 console.log(draw(ctrl.L, null));
-for (const name of ['gall', 'blind', 'invert']) {
+for (const name of ['lesion', 'gall', 'invert']) {
   console.log(`\n  ${name.toUpperCase()}  (${JSON.stringify(AGENTS[name])})\n`);
   console.log(draw(grown[name].L, grown[name].inf));
 }

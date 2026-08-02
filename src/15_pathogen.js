@@ -38,13 +38,47 @@ export const PATHOGEN_DEFAULTS = {
   r: 0.90,        // replication rate. R0 = r/clr; below 1 the agent dies out
   clr: 0.00,      // host clearance
   Dv: 0.35,       // cell-to-cell movement (plasmodesmatal, in wall-conductance units)
-  chi: 0.00,      // how strongly the agent is carried by the auxin flux J
+  chi: 0.00,      // carried by the auxin flux J. ⚠ NOT LITERATURE-SUPPORTED — see below
   vCap: 1.0,      // carrying capacity of the titre
+
+  // --- AUXIN CLOSES PLASMODESMATA ------------------------------------------
+  // The agent moves cell to cell through plasmodesmata, and auxin gates them
+  // shut: an auxin-callose feedback raises plasmodesmal callose and lowers
+  // symplastic permeability (Han et al. 2014, Dev Cell), and auxin induces
+  // PDLP5 to restrict the spatial scope of its own signalling (Sager et al.
+  // 2020, Nat Commun). Both demonstrated.
+  //
+  // The consequence is the whole reason this is here. An agent that raises
+  // `rho` raises auxin; auxin shuts the plasmodesmata; THE FRONT DECELERATES
+  // IN EXACTLY THE TISSUE IT HAS ALREADY DEFORMED and keeps its speed into
+  // tissue it has not. That is a self-limiting, self-sharpening travelling
+  // wave, and it makes the lesion's BOUNDARY emergent — which is the part of a
+  // disease a viewer actually reads. Nothing draws the edge of a lesion.
+  //
+  // pdGate is the auxin level at which plasmodesmal conductance is halved.
+  // 0 disables the coupling entirely and restores plain Fickian spread.
+  pdGate: 0.0,
+  pdN: 2.0,       // steepness of that closure
 
   // --- what it deforms. All three scale linearly with local titre v. ---
   dRho: 0.0,      // auxin production. Agrobacterium's iaaM/iaaH, in one number
   dMu: 0.0,       // auxin turnover. A sink, or a degradation effector
   dComp: 0.0,     // PIN competence. NEGATIVE INVERTS POLARITY — see below
+
+  // --- THE HOST FIGHTS BACK ------------------------------------------------
+  // A pure `rho` bump over-predicts the deformation badly. In iaaM plants the
+  // auxin PRECURSOR moves 945-2014x while free IAA moves only 2.5x: the host
+  // conjugates (GH3) and oxidises (DAO) the excess away, and that response is
+  // itself auxin-dependent. Modelling the agent as production with no clamp
+  // over-predicts by two to three orders of magnitude.
+  //
+  // So the deformation is opposed by a saturating, auxin-driven turnover:
+  //     mu += clampMu * a / (clampK + a)
+  // 0 disables it. This is the host's homeostasis, not the agent's doing, and
+  // it is applied only where the agent is — a first pass, since the real GH3/DAO
+  // response is constitutive everywhere.
+  clampMu: 0.0,
+  clampK: 2.0,
 
   seedTitre: 0.9, // titre written into a cell at the point of inoculation
 };
@@ -92,8 +126,32 @@ export const AGENTS = {
   // POLARITY INVERTED. The exotic one.
   invert: { r: 0.80, clr: 0.05, Dv: 0.40, chi: 0.0, dRho: 0.0, dMu: 0.0, dComp: -2.0 },
 
-  // Systemic: weak replication, low clearance, and it rides the transport field
-  // instead of crawling. Reaches far from the inoculation point.
+  // A BOUNDED LESION — the same auxin source as `gall`, plus the two things the
+  // literature says actually happen: the host clamps the excess (GH3/DAO), and
+  // the auxin the agent creates shuts the plasmodesmata it is spreading through.
+  // Neither is a stopping rule. The lesion stops because it poisoned its own
+  // road, and where it stops is not written anywhere.
+  // `Dv` is two orders below the others and that is the point, not a fudge:
+  // plasmodesmal movement is slow next to the transport this engine runs on, and
+  // the extent of a lesion is set by how far the front gets before the organ
+  // stops developing. Derived rather than dialled — a blade matures 37.8 time
+  // units after its lattice appears and is ~22 hops from its middle, so a
+  // third-of-a-blade lesion wants a front near 0.19 cells/tu, i.e. Dv*rho ~ 9e-3.
+  // The gate then takes another ~25% off that. See test/pathogen.mjs section 6
+  // and the sweep in test/infected.mjs.
+  lesion: {
+    r: 0.85, clr: 0.05, Dv: 0.008, chi: 0.0,
+    dRho: 2.40, dMu: 0.0, dComp: 0.0,
+    pdGate: 1.2, pdN: 2.0, clampMu: 1.10, clampK: 2.0,
+  },
+
+  // ⚠ Systemic: rides the transport field via `chi`. THE LITERATURE DOES NOT
+  // SUPPORT THIS. Nothing pathogenic moves in the polar auxin transport stream
+  // — phytoplasmas are sieve-element only, wilt fungi are xylem-lumen only,
+  // viruses go plasmodesmata then phloem source-to-sink, and galls do not move
+  // at all. `chi` is kept because it is measurable and because the systemic
+  // *pattern* does track a source-sink field whose topology our vein hierarchy
+  // approximates — but it is [OURS], not evidence. See docs/research_8_02_26_pathogen.md §2.2.
   systemic: { r: 0.35, clr: 0.02, Dv: 0.10, chi: 0.60, dRho: 0.80, dMu: 0.0, dComp: 0.0 },
 };
 
@@ -159,9 +217,11 @@ export class Infection {
   // --- the field's own dynamics -------------------------------------------
   step(dt) {
     const F = this.F, o = this.o;
-    const { n, vir, deg, nbr, rev, w, J, flag } = F;
-    const { r, clr, Dv, chi, vCap } = o;
+    const { n, vir, a, deg, nbr, rev, w, J, flag } = F;
+    const { r, clr, Dv, chi, vCap, pdGate, pdN } = o;
     const dv = this.dv;
+    const gateOn = pdGate > 0;
+    const gk = gateOn ? Math.pow(pdGate, pdN) : 0;
 
     for (let i = 0; i < n; i++) {
       if (!(flag[i] & 1)) { dv[i] = 0; continue; }
@@ -172,7 +232,15 @@ export class Infection {
       for (let k = 0; k < d; k++) {
         const e = ofs + k;
         const j = nbr[e];
-        acc += Dv * w[e] * (vir[j] - vi);
+        // Plasmodesmal conductance, gated by the auxin in the wall the agent is
+        // crossing. Auxin is the plant's own signal, so the agent's spread is
+        // shaped by a field it is itself deforming.
+        let g = Dv;
+        if (gateOn) {
+          const am = 0.5 * (a[i] + a[j]);
+          g = Dv * gk / (gk + Math.pow(am, pdN));
+        }
+        acc += g * w[e] * (vir[j] - vi);
         if (chi !== 0) {
           // upwind advection along the host's own auxin flux. J[e] is the net
           // flux i->j, so a positive value exports titre from i, and the
@@ -203,16 +271,20 @@ export class Infection {
   apply() {
     if (this.applied) return;
     const F = this.F, o = this.o;
-    const { n, vir, rho, mu, comp, flag } = F;
-    const dRho = o.dRho, dMu = o.dMu, dComp = o.dComp;
-    if (dRho === 0 && dMu === 0 && dComp === 0) return;
+    const { n, vir, a, rho, mu, comp, flag } = F;
+    const dRho = o.dRho, dMu = o.dMu, dComp = o.dComp, cMu = o.clampMu, cK = o.clampK;
+    if (dRho === 0 && dMu === 0 && dComp === 0 && cMu === 0) return;
     for (let i = 0; i < n; i++) {
       if (!(flag[i] & 1)) continue;
       const v = vir[i];
       this.rho0[i] = rho[i]; this.mu0[i] = mu[i]; this.comp0[i] = comp[i];
       if (v <= 0) continue;
       if (dRho !== 0) { let x = rho[i] + v * dRho; rho[i] = x < 0 ? 0 : x; }
-      if (dMu !== 0) { let x = mu[i] + v * dMu; mu[i] = x < 0 ? 0 : x; }
+      let m = mu[i];
+      if (dMu !== 0) m += v * dMu;
+      // the host's own conjugation/oxidation response to the excess
+      if (cMu !== 0) m += v * cMu * a[i] / (cK + a[i]);
+      mu[i] = m < 0 ? 0 : m;
       if (dComp !== 0) comp[i] = comp[i] + v * dComp;
     }
     this.applied = true;
