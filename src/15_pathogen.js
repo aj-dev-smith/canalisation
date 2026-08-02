@@ -224,6 +224,46 @@ export class Infection {
     return i;
   }
 
+  // ---------------------------------------------------------------------------
+  // Choose the site by DEVELOPMENTAL STATE rather than by coordinate.
+  //
+  // Every infection structure in this literature initiates in provascular,
+  // undifferentiated tissue, and the criterion is a state and not a position:
+  // cyst syncytia in procambium or pericycle, where "undifferentiated xylem
+  // precursor cells were always incorporated into the syncytium, but not the
+  // fully differentiated xylem cells" (Liu & Mitchum 2024); root-knot giant
+  // cells from the xylem-pole pericycle, with XPP-defective lines significantly
+  // less infected (Cabrera 2014); clubroot galls as amplification of existing
+  // cambial activity, where disrupting that activity shrinks the gall
+  // (Malinowski 2012). **The parasite does not choose a coordinate. It chooses
+  // a state, and the host's existing geometry does the rest.**
+  //
+  // `comp` IS our tissue-identity variable — "competent, not yet committed" is
+  // what it means — so sampling by it is that criterion, and the arrival
+  // COORDINATE stops being a stated number. The arrival *event* is still
+  // stated, and still environmental; see SCIENCE.md.
+  //
+  // Squared, so the choice is decisive rather than a faint preference.
+  inoculateByState(rand = Math.random) {
+    const F = this.F;
+    let tot = 0;
+    for (let i = 0; i < F.n; i++) {
+      if (!(F.flag[i] & 1)) continue;
+      const c = F.comp[i];
+      if (c > 0) tot += c * c;
+    }
+    if (tot <= 0) return -1;
+    let r = rand() * tot;
+    for (let i = 0; i < F.n; i++) {
+      if (!(F.flag[i] & 1)) continue;
+      const c = F.comp[i];
+      if (c <= 0) continue;
+      r -= c * c;
+      if (r <= 0) { F.vir[i] = this.o.seedTitre; return i; }
+    }
+    return -1;
+  }
+
   // total titre, and how much of the tissue is above a threshold
   burden(thresh = 0.5) {
     const F = this.F;

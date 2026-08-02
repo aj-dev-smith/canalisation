@@ -1194,7 +1194,14 @@ export class Plant {
     const a = this.axes[opts.axis || 0];
     if (!a || !a.meristem) return null;
     a.infection = new Infection(a.meristem.F, o);
-    a.infection.inoculate(opts.x || 0, opts.y || 0);
+    // Default: let the agent pick provascular, still-competent tissue rather
+    // than a coordinate, which is what every system in the literature actually
+    // does — see Infection.inoculateByState. Pass {x, y} to place it by hand.
+    if (opts.x !== undefined || opts.y !== undefined) {
+      a.infection.inoculate(opts.x || 0, opts.y || 0);
+    } else {
+      a.infection.inoculateByState(a.rnd || this.rnd);
+    }
     return a.infection;
   }
 

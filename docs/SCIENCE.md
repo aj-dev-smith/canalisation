@@ -167,11 +167,24 @@ hypothesis** rather than settled ground (Ravichandran & Scarpella 2020; Bennett
 
 **What IS stated, and these are real debts even though they are not shape:**
 
-- **Where the agent arrives, and when.** One position and one time per infection.
-  Irreducible: it is an event in the environment, not a property of the plant —
-  *Agrobacterium* needs a wound, the leafhopper chooses a leaf. Same defence as
-  the wind, and it costs nothing against the one rule. Removing it needs a model
-  of vector behaviour, which is a different project.
+- **That an agent arrives at all, and when.** One event and one time per
+  infection. Irreducible: it is an event in the environment, not a property of
+  the plant — *Agrobacterium* needs a wound, the leafhopper chooses a leaf. Same
+  defence as the wind, and it costs nothing against the one rule. Removing it
+  needs a model of vector behaviour, which is a different project.
+
+  **The arrival COORDINATE was on this list and is not any more.** The second
+  research pass found that every infection structure in that literature
+  initiates in provascular, undifferentiated tissue, and that the criterion is a
+  *developmental state* rather than a position: cyst syncytia take
+  undifferentiated xylem precursors and never the differentiated cells
+  (Liu & Mitchum 2024), root-knot giant cells come from the xylem-pole pericycle
+  and XPP-defective lines are significantly less infected (Cabrera 2014), and a
+  clubroot gall is amplification of existing cambial activity, so disrupting
+  that activity shrinks it (Malinowski 2012). *The parasite does not choose a
+  coordinate. It chooses a state, and the host's own geometry does the rest.*
+  `comp` **is** our tissue-identity variable, so `Infection.inoculateByState`
+  samples by it and the coordinate stops being stated. It is the default.
 - **Which variable the agent touches, and its sign.** One enum per agent. This is
   the agent's *genome* and it is not derivable from transport: `iaaM` is a `rho`
   gene, `iaaL` is a `mu` gene, *Agrobacterium* `6b` is a conductance gene, the

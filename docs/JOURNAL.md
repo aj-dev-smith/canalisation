@@ -3476,10 +3476,19 @@ On a whole specimen (Abyssal Frond, seed 21, 2600 steps, inoculated at 300):
 | lesion | 6 | 115 | −1.7% |
 
 **The `rho` half works and the `comp` half does not.** A pure auxin source really
-does give slightly more organ founding; raising competence gives *fewer*, which is
-the wrong sign. Sweeping it does not rescue it — it is non-monotonic and
+does give slightly more organ founding; raising competence does not, which is the
+wrong answer. Sweeping it does not rescue it — it is non-monotonic and
 seed-fragile (+10.3% at `dComp 0.40 / Dv 0.012`, 0.0% at `0.85/0.004`, −15.4% at
 `0.85/0.05`), which is the signature of noise rather than a mechanism.
+
+⚠ **Be precise about the size of this one, because the siting rule moves it.**
+The table above inoculates the centre of the apex. Under the state-based siting
+that later became the default (`inoculateByState`, below) the same run gives
+`gall` **+7.7%**, `leafygall` **−0.9%**, `invert` **−87.2%**. So `leafygall` is
+*null* rather than clearly negative under the shipped rule. **The falsification
+is that it does not produce the predicted increase**, which holds under both
+rules; "−8.5%" on its own is a centre-inoculated number and should not be quoted
+as the effect size.
 
 **Why, and this is the useful part.** `comp` gates how sharply a cell may
 polarise — it is not a statement about whether a region *is* an organ-founding
@@ -3502,3 +3511,42 @@ not — it is six *different mechanisms*, one seed, one species. The only claims
 that were predicted in advance and survived are the two structural ones: that
 `comp` agents act on meristems and not on blades, and that inverting polarity
 stops organ founding because founding an organ *is* the operation `comp` gates.
+
+
+### And a parameter came OFF the list (2026-08-02)
+
+A second research pass on clubroot and nematode feeding sites — appended to
+`research_8_02_26_pathogen.md` — retracted one thing and paid for another.
+
+**The retraction: clubroot is not an auxin disease** and Part 0's row for it
+should not be built. The free-IAA measurements disagree with each other across
+four studies in the same genus, and the 2025 review's own words are "fluctuating
+IAA levels rather than consistently higher levels". Both de novo synthesis routes
+are dispensable — `cyp79b2 cyp79b3` doubles make no detectable IAOx and show **no
+difference in susceptibility**, and `PbGH3` overexpression changes neither hormone
+levels nor susceptibility. What survives is **cytokinin**, which we do not have.
+
+**The payment: the arrival COORDINATE is no longer a stated number.** Every
+structure in that literature initiates in provascular, undifferentiated tissue,
+and the selection rule is a *developmental state* rather than a position — cyst
+syncytia take undifferentiated xylem precursors and never differentiated ones,
+root-knot giant cells come from the xylem-pole pericycle, a clubroot gall is
+amplification of pre-existing cambial activity. **The parasite does not choose a
+coordinate; it chooses a state, and the host's own geometry does the rest.**
+
+`comp` *is* our tissue-identity variable, so `Infection.inoculateByState` samples
+by it and SCIENCE.md's entry shrinks from "a position and a time" to "a time".
+That is the second time this project has found a stated constant was derivable
+once somebody read the literature properly — the first was the gravitropic set
+point on 2026-07-30.
+
+**One more constraint from the same pass, worth honouring before extending this.**
+The sharpest causal result in it is that NPA does *not* abolish a nematode feeding
+site — it removes "radial expansion of the syncytium initial toward the vascular
+bundle", and the same inhibitor moves clubroot gall *position*. **Direction, not
+existence, is what auxin transport supplies.** So a transport perturbation here
+should change what a structure looks like and where it reaches, and should not be
+expected to decide whether one forms at all. Note also that the auxin maximum at a
+real feeding site is **transient and then moves outward** (peak inside the initial
+cells at 18 hpi, gone from them by 7-21 dpi and sitting in surrounding parenchyma
+where it precedes phloem differentiation), which our static `dRho` does not do.

@@ -1189,3 +1189,106 @@ species definition of the disease.
 **What we should NOT build**: gall surface morphology (needs ethylene), the rooty/shooty phase
 diagram (needs cytokinin), the SAP05 phase effect (needs an age pathway), or anything that claims
 the infection front rides the polar auxin transport stream (not supported by any paper we found).
+
+---
+
+# Appendix — clubroot and nematode feeding sites (deep pass, 2026-08-02)
+
+A second sweep on the two systems Part 1 covered thinnest. **Three of its results
+change how the model should work; one retracts a claim in Part 0.**
+
+## The retraction: clubroot is not an auxin disease
+
+Part 0's clubroot row should not be built. The free-IAA measurements **do not
+agree with each other** — no change then a *reduction* (Devos 2005), reduced (Wei
+2021), *increased* (Xu 2016), reduced (Jayasinghege 2023), all in *Brassica*; the
+2025 review's own words are "**fluctuating IAA levels rather than consistently
+higher levels**" **[C]**. And both de novo synthesis routes are dispensable:
+`cyp79b2 cyp79b3` doubles make no detectable IAOx and show **no difference in
+clubroot susceptibility** (Siemens 2008) **[D, negative]**, while `PbGH3`
+overexpression "neither significantly affected hormone levels nor altered
+clubroot susceptibility" (Smolko 2024) **[D, negative]**.
+
+The mechanism that survives is **cytokinin** — CKX1/CKX3 overexpression is
+disease-*resistant* (Siemens 2006) **[D]**, and the pathogen carries its own IPTs
+(Schwelm 2015). We have one hormone. **Do not model clubroot.**
+
+## THE ONE THAT CHANGES THE ARCHITECTURE: a parasite chooses a developmental state, not a coordinate
+
+Every structure in this literature initiates in **provascular, undifferentiated
+tissue**, and the selection rule is a developmental-state criterion rather than a
+position:
+
+- cyst syncytia in **procambium or pericycle**, and "BCN appeared to **always
+  select cells next to the xylem**"; "**undifferentiated xylem precursor cells
+  were always incorporated into the syncytium, but not the fully differentiated
+  xylem cells**" (Sobczak 1997; Liu & Mitchum 2024) **[C]**
+- root-knot giant cells from the **xylem-pole pericycle**; LBD16 knockouts and an
+  XPP-defective line show significantly reduced infection (Cabrera 2014) **[D]**
+- clubroot galls are **amplification of pre-existing meristematic activity** in
+  the vascular cambium, and disrupting cambial activity significantly decreases
+  gall size (Malinowski 2012) **[D]**
+
+> **[OURS] What this licenses, and it pays down a booked debt.** SCIENCE.md books
+> "where the agent arrives" as a stated position. It does not have to be a
+> coordinate. `comp` — PIN competence — **is** our tissue-identity variable, and
+> "undifferentiated, competent, not yet committed" is exactly what it means. An
+> agent that selects its site by sampling `comp` is choosing a developmental
+> state, which is what the literature says actually happens, and the coordinate
+> stops being stated. The *event* — that an infection happens at all, and when —
+> is still environmental and still stated.
+
+## Direction, not existence, is what auxin transport supplies
+
+The sharpest causal result in the sweep, and it constrains what a transport
+perturbation may claim. NPA does **not** abolish a feeding site — it deranges it,
+and specifically removes "**absence of radial expansion of the syncytium initial
+toward the vascular bundle**" (Goverse 2000) **[D]**; blocking lateral auxin
+transport chemically or genetically inhibits radial expansion and gives "small
+malformed cysts" (Grunewald 2009) **[D]**. The same inhibitor moves clubroot gall
+*position* (Xu 2016) **[D]**.
+
+**Shape is downstream of the transport field; identity is not.** An agent that
+perturbs transport should change what a structure looks like and where it
+extends, and should NOT be expected to decide whether one forms.
+
+## The auxin maximum is transient, and then it MOVES
+
+DR5 is "specific and strong … **inside the initial feeding cells at 18 h post
+inoculation**", held to 3-5 dpi, then reduced — the same for cyst and root-knot
+(Karczmarek 2004). By 7-21 dpi there is **no auxin response in the giant cells
+themselves** but a net-like response in surrounding parenchyma that **precedes**
+sieve-element differentiation (Absmanner 2013). And the preprocambial marker
+*ATHB8* propagates outward with it: elevated in early syncytial cells, then "**at
+the periphery of the syncytium, rather than in the syncytium itself**" (Liu &
+Mitchum 2024) **[C]**.
+
+That outward-propagating ATHB8/DR5 front is the closest thing in this literature
+to canalisation at an infection site — but **nobody has measured a flux**, and
+every "auxin accumulation" claim in these fields rests on a transcriptional output
+reporter, which Karczmarek 2004 states explicitly. There is **no DII-VENUS or R2D2
+study of any nematode feeding site or clubroot gall.**
+
+⚠ **A 2026 live-imaging paper complicates the auxin-first story**: cytokinin
+signalling "increases rapidly, **precedes auxin signalling**", while auxin "starts
+after a lag phase, and is induced **after the first contours of the syncytial area
+have become visible**" (Oosterbeek 2026) **[C]**. Read against the older
+fixed-timepoint GUS work rather than instead of it.
+
+## Corrections to things that circulate
+
+- **16D10 is not an auxin effector.** Its targets are two SCARECROW-like GRAS
+  transcription factors, and the RNAi resistance result carries **no auxin
+  measurement**. Drop it from any auxin list.
+- **There is no "Mi-IAA-like effector".** No such thing in the indexed literature.
+  The two effectors binding auxin-signalling proteins are both cyst — 10A07/IAA16
+  and 19C07/LAX3. **No nematode effector has been shown to bind TIR1/AFB.**
+- **The chorismate-mutase case is auxin *depletion*, not accumulation**, and it is
+  *Meloidogyne*; the *H. schachtii* homologue makes no auxin claim at all. It sits
+  in unresolved tension with everything else in this section.
+- **A gall is not a lateral root.** Galls still form in `arf7/arf19`, `slr` and
+  `alf4` (Olmo 2017) **[D]**, and the auxin response *elements* differ between
+  galls and syncytia rather than just the magnitude (Abril-Urias 2023).
+- ⚠ **New 2026:** *Globodera pallida* **synthesises and releases IAA itself** [D
+  for production] — but the candidate genes are widespread across non-parasitic
+  nematodes, so the authors caution against a parasitism-specific reading [C].
