@@ -3452,3 +3452,53 @@ model for `invert` than the reflection currently implemented. And **HopM1
 destroys AtMIN7, which is required for polar PIN localisation** — two demonstrated
 results with nobody having looked at PIN in HopM1-infected tissue, which the brief
 calls the most interesting untried experiment in the sweep.
+
+### Falsified the same day: the literature's level-vs-placement A/B does not reproduce (2026-08-02)
+
+The brief's finding 4 was one of its most attractive: *Agrobacterium* installs a
+local auxin **source** and changes transport not at all, and produces an
+undifferentiated blob; *Rhodococcus fascians* changes **where auxin maxima form**,
+repeatedly, and produces organised iterated shoots — a leafy gall. Same disease
+category, opposite morphology, and the difference is exactly a `rho`-versus-`comp`
+axis, which is an axis this engine has. `fas` acts by creating new competent
+domains, so the prediction was `dComp > 0` and **more** organs.
+
+On a whole specimen (Abyssal Frond, seed 21, 2600 steps, inoculated at 300):
+
+| agent | axes | organs | Δ organs |
+|---|---|---|---|
+| (control) | 6 | 117 | — |
+| gall (`dRho +2.4`) | 6 | 125 | **+6.8%** |
+| leafygall (`dComp +0.85`) | 6 | 107 | **−8.5%** |
+| chlorosis (`dMu +1.6`) | 6 | 63 | −46.2% |
+| blind (`dComp −1`) | 3 | 22 | −81.2% |
+| invert (`dComp −2`) | 3 | 10 | −91.5% |
+| lesion | 6 | 115 | −1.7% |
+
+**The `rho` half works and the `comp` half does not.** A pure auxin source really
+does give slightly more organ founding; raising competence gives *fewer*, which is
+the wrong sign. Sweeping it does not rescue it — it is non-monotonic and
+seed-fragile (+10.3% at `dComp 0.40 / Dv 0.012`, 0.0% at `0.85/0.004`, −15.4% at
+`0.85/0.05`), which is the signature of noise rather than a mechanism.
+
+**Why, and this is the useful part.** `comp` gates how sharply a cell may
+polarise — it is not a statement about whether a region *is* an organ-founding
+domain. Raising it uniformly over-sharpens the maxima that already exist, which
+makes them stronger sinks, which suppresses their neighbours harder. It sharpens
+domains; it does not create them. *Rhodococcus* creates them.
+
+So `comp` is the wrong variable, and the exercise named the right one: whatever
+sets *where* a competent region is, which in this model is **`rCZ`** — the
+central-zone radius, and the one spatial prior SCIENCE.md books. An agent that
+shrinks the incompetent centre would add founding sites rather than sharpening
+existing ones. Untried, and it is the obvious next experiment.
+
+Kept in the `AGENTS` table labelled falsified, on the `rhoI: 0` / `fluxPartition`
+principle: a negative result you cannot re-measure is just a story.
+
+**One caution about that table for anyone reading it later.** The severity column
+spans +6.8% to −91.5% and it is tempting to read it as a calibrated dial. It is
+not — it is six *different mechanisms*, one seed, one species. The only claims
+that were predicted in advance and survived are the two structural ones: that
+`comp` agents act on meristems and not on blades, and that inverting polarity
+stops organ founding because founding an organ *is* the operation `comp` gates.

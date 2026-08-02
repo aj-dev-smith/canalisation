@@ -297,3 +297,75 @@ console.log('\n=== 5. A MERISTEM UNDER THE AGENT — does patterning change? ===
 console.log('');
 if (failures) { console.log(`${failures} FAILURE(S)\n`); process.exit(1); }
 console.log('all infected-tissue checks passed\n');
+
+// =========================================================================
+console.log('\n=== 6. A WHOLE SPECIMEN, AND THE GRADIENT NOBODY WROTE ===\n');
+// =========================================================================
+// `Plant.inoculate()` puts the agent in ONE growing point. It reaches others
+// only because a bud is made of its parent's tissue and starts with whatever
+// that tissue was carrying — NOT because anything transports it. There is no
+// whole-plant auxin stream in the running piece.
+//
+// The prediction, written before running it: axes founded EARLY should start
+// lightly infected and axes founded LATE should start heavily infected, because
+// the parent's titre rises in between. That is a severity gradient down the
+// specimen out of a rule that says nothing about severity or position.
+{
+  const { SPECIES } = await import('../src/70_app.js');
+  const { MERISTEM_DEFAULTS } = await import('../src/20_meristem.js');
+  const { LEAF_DEFAULTS } = await import('../src/30_leaf.js');
+  const { Plant, SPECIES_DEFAULTS } = await import('../src/40_plant.js');
+
+  const build = (name, seed) => {
+    const S = SPECIES[name];
+    const prm = { ...DEFAULT_PRM, ...S.prm };
+    const mo = { ...MERISTEM_DEFAULTS, ...S.mo };
+    const sp = { ...SPECIES_DEFAULTS, ...S.sp };
+    sp.leafOpts = { ...LEAF_DEFAULTS, ...(S.sp.leafOpts || {}) };
+    return new Plant(prm, mo, sp, seed);
+  };
+
+  const NAME = 'Abyssal Frond', SEED = 21, STEPS = 2600;
+  const organs = (P) => P.axes.reduce((a, x) => a + x.organs.length, 0);
+  const grow = (agent) => {
+    const P = build(NAME, SEED);
+    for (let s = 0; s < STEPS; s++) {
+      P.step(1);
+      if (agent && s === 300) P.inoculate(agent);
+    }
+    return P;
+  };
+
+  console.log(`  ${NAME}, seed ${SEED}, ${STEPS} steps, inoculated at step 300\n`);
+  console.log('  agent        axes   organs    d organs   live infections');
+  const runs = {};
+  let ctlOrg = 0;
+  for (const agent of [null, 'gall', 'leafygall', 'chlorosis', 'blind', 'invert', 'lesion']) {
+    const P = grow(agent);
+    runs[agent || 'control'] = P;
+    const org = organs(P);
+    if (!agent) ctlOrg = org;
+    const liveInf = P.axes.filter(a => a.infection && a.meristem).length;
+    const d = ctlOrg ? ((org - ctlOrg) / ctlOrg * 100) : 0;
+    console.log(`  ${(agent || '(control)').padEnd(12)} ${String(P.axes.length).padStart(4)}   ` +
+      `${String(org).padStart(6)}    ${agent ? ((d >= 0 ? '+' : '') + d.toFixed(1) + '%').padStart(7) : '     --'}      ${liveInf}`);
+  }
+  ok(runs['control'].axes.length > 0, 'an inoculated specimen still runs', '');
+
+  // the gradient: titre in each growing point that still has one
+  for (const name of ['gall', 'lesion', 'chlorosis']) {
+    const live = runs[name].axes.filter(a => a.infection && a.meristem);
+    if (!live.length) continue;
+    console.log(`\n  '${name}' — titre per growing point, in birth order:`);
+    console.log('  axis  gen   above 0.35   peak');
+    for (const a of live) {
+      const b = a.infection.burden(0.35);
+      console.log(`  ${String(runs[name].axes.indexOf(a)).padStart(4)}  ${String(a.gen).padStart(3)}   ` +
+        `${f(b.frac, 3).padStart(9)}   ${f(b.peak, 3)}`);
+    }
+    break;
+  }
+  console.log('\n  Read the organ counts, not the axis counts. Nothing here schedules a');
+  console.log('  symptom; an inoculated specimen founds fewer organs because founding an');
+  console.log('  organ IS sharpening an auxin maximum, and that is what the agent broke.');
+}

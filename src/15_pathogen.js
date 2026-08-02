@@ -126,6 +126,31 @@ export const AGENTS = {
   // POLARITY INVERTED. The exotic one.
   invert: { r: 0.80, clr: 0.05, Dv: 0.40, chi: 0.0, dRho: 0.0, dMu: 0.0, dComp: -2.0 },
 
+  // ⚠ FALSIFIED IN THIS FORM, KEPT SO IT STAYS RE-MEASURABLE — the same status
+  // as `rhoI: 0` in 10_auxin.js and `fluxPartition` in 40_plant.js.
+  //
+  // The literature runs a clean A/B here: *Agrobacterium* installs a local auxin
+  // SOURCE and changes transport not at all, and gets an undifferentiated blob;
+  // *Rhodococcus fascians* changes WHERE auxin maxima form, repeatedly, and gets
+  // organised iterated shoots — a leafy gall. Same category, opposite
+  // morphology, and the difference looked exactly like our `rho`-versus-`comp`
+  // axis. `fas` works by creating new competent domains, so: dComp > 0, and the
+  // prediction was MORE organs.
+  //
+  // It does not happen. dComp +0.85 gives -8.5% organs, and sweeping it is
+  // non-monotonic and seed-fragile (+10.3% at dComp 0.40 / Dv 0.012, 0.0% at
+  // 0.85/0.004, -15.4% at 0.85/0.05). The reason is that `comp` here gates how
+  // sharply a cell may polarise, NOT whether a region is an organ-founding
+  // domain. Raising it uniformly over-sharpens the maxima that already exist,
+  // which makes them stronger sinks, which suppresses their neighbours harder.
+  // It sharpens domains; it does not create them.
+  //
+  // So `comp` is the wrong variable for a leafy gall. The right one is whatever
+  // sets where a competent region IS — `rCZ`, the central-zone radius, which is
+  // the model's one spatial prior. An agent that shrinks the incompetent centre
+  // would add founding sites rather than sharpening existing ones. Untried.
+  leafygall: { r: 0.75, clr: 0.05, Dv: 0.25, chi: 0.0, dRho: 0.0, dMu: 0.0, dComp: 0.85 },
+
   // A BOUNDED LESION — the same auxin source as `gall`, plus the two things the
   // literature says actually happen: the host clamps the excess (GH3/DAO), and
   // the auxin the agent creates shuts the plasmodesmata it is spreading through.

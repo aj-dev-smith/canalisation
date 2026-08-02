@@ -490,6 +490,15 @@ plant looks like. Four things to know before touching it:
   (37.8 time units, ~22 hops from the middle) rather than by eye gives burden 0.36 and a
   visible edge. Do not describe the boundary as emergent from the gate — it is not.
 
+`app.plant.inoculate('lesion')` from the console infects the hero's leader, and
+`app.plant.agentBurden()` reports what it has reached. **It has not been watched in a real
+browser yet** — every number above is headless, and this project's own record is that three
+of its worst modelling errors were caught by a person looking rather than by a harness. On a
+whole specimen the agents span **+6.8% organs (`gall`) to −91.5% (`invert`)**, so there is
+plenty to see; whether any of it *reads* as disease rather than as a broken renderer is
+exactly the open question. Cross-axis spread is **inheritance at bud formation**, not
+transport — a bud is made of its parent's tissue — because `38_shoot.js` ships disabled.
+
 **THERE IS A TREE. `Ashfall Spire` is the ninth species and it is a different body plan
 — a straight leader, two dozen plagiotropic laterals that get longer toward the ground,
 needles, and no reproduction at all.** ROADMAP 13, landed 2026-07-30. Three things about

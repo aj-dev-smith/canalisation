@@ -6,6 +6,7 @@
 // them off the simulation and builds a body around them.
 // ---------------------------------------------------------------------------
 
+import { Infection, AGENTS, PATHOGEN_DEFAULTS } from './15_pathogen.js';
 import { Meristem } from './20_meristem.js';
 import { Leaf } from './30_leaf.js';
 import { Fruit } from './35_fruit.js';
@@ -266,6 +267,7 @@ class Axis {
     this.gsa = 0;
     this.iaa = 0;
     this.attachOrgan = null;   // the organ in whose axil this shoot arose
+    this.infection = null;     // an agent resident in this growing point, if any
     const P = plant.prm, M = { ...plant.mo };
     // a lateral shoot has a smaller growing point than the leader, which is
     // both true of real plants and considerably cheaper
@@ -564,6 +566,8 @@ class Axis {
       this.plant._lastPl = m.plastochron;
     }
     this.meristem = null;
+    // the agent lived in that cell field; it goes with it
+    this.infection = null;
   }
 
   // The apex has spent itself. What is left becomes an ovary.
@@ -1137,6 +1141,7 @@ export class Plant {
     // metres apart are genuinely in different air, and Taylor advection means a
     // gust crosses the stand rather than arriving everywhere at once.
     this.origin = (this.sp.origin || [0, 0, 0]).slice();
+    this.agent = null;   // set by inoculate(); see 15_pathogen.js
     this.addAxis(v3(this.origin[0], this.origin[1], this.origin[2]), v3(0, 1, 0), 0);
   }
   // `parentNode` is the stem node of the organ this shoot came out of, so a
@@ -1149,8 +1154,61 @@ export class Plant {
     // free of the stem it is attached to — which at ten degrees of sway is very
     // visible indeed.
     if (parentAxis) { a.parent = parentAxis; parentAxis.kids.push(a); }
+    // A BUD IS MADE OF ITS PARENT'S TISSUE, so it carries whatever that tissue
+    // was carrying. This is the only route an agent has between axes, and it is
+    // deliberately NOT transport: there is no whole-plant auxin stream in the
+    // running piece (`38_shoot.js` ships disabled), so nothing here claims an
+    // agent travels up a stem. What it claims is that a shoot founded out of
+    // infected tissue starts infected, which is both true and free.
+    //
+    // The consequence is a severity gradient down the specimen that nobody
+    // wrote: axes founded early from a lightly infected apex start light, and
+    // ones founded later start heavy, because the parent's titre has risen in
+    // between.
+    if (this.agent && parentAxis && parentAxis.infection && a.meristem) {
+      const src = parentAxis.infection.burden(0).total / Math.max(1, parentAxis.meristem.F.n);
+      if (src > 1e-4) {
+        a.infection = new Infection(a.meristem.F, this.agent.o);
+        for (let i = 0; i < a.meristem.F.n; i++) a.meristem.F.vir[i] = src * this.agent.transmit;
+      }
+    }
     this.axes.push(a);
     return a;
+  }
+
+  // ---------------------------------------------------------------------------
+  // INOCULATE THIS SPECIMEN.
+  //
+  //   plant.inoculate('lesion')          the leader's growing point
+  //   plant.inoculate('invert', {axis: 3})
+  //
+  // Where the agent arrives is a STATED position and time — an event in the
+  // environment rather than a property of the plant, the same category as the
+  // wind, and SCIENCE.md books it as such. Everything after it is emergent.
+  // ---------------------------------------------------------------------------
+  inoculate(name, opts = {}) {
+    const spec = (typeof name === 'string') ? AGENTS[name] : name;
+    if (!spec) return null;
+    const o = { ...PATHOGEN_DEFAULTS, ...spec, ...opts };
+    this.agent = { name: (typeof name === 'string') ? name : 'custom', o, transmit: opts.transmit ?? 0.8 };
+    const a = this.axes[opts.axis || 0];
+    if (!a || !a.meristem) return null;
+    a.infection = new Infection(a.meristem.F, o);
+    a.infection.inoculate(opts.x || 0, opts.y || 0);
+    return a.infection;
+  }
+
+  // total agent burden across every growing point that has one
+  agentBurden() {
+    if (!this.agent) return null;
+    let total = 0, axes = 0, peak = 0;
+    for (const a of this.axes) {
+      if (!a.infection || !a.meristem) continue;
+      const b = a.infection.burden(0.35);
+      total += b.total; axes++;
+      if (b.peak > peak) peak = b.peak;
+    }
+    return { agent: this.agent.name, total, axes, peak };
   }
   get main() { return this.axes[0]; }
   organCount() { let n = 0; for (const a of this.axes) n += a.organs.length; return n; }
