@@ -22,6 +22,12 @@ window.__VIEWS = VIEWS;
 // and a tool that has to rebuild the bundle between candidates cannot do that.
 // `newSpecimen` reads this table, so a tool can patch a preset and regrow.
 window.__SPECIES = SPECIES;
+// The agent table (15_pathogen.js), so `plant.inoculate()` is discoverable from
+// the console rather than requiring you to read the source for the names. An
+// agent is the one thing in the piece with no UI at all — it is an event in the
+// environment, so nothing on the page implies one, and without this a person
+// looking at an infected plant has no way to find out what to type.
+window.__AGENTS = AGENTS;
 
 // --- the specimen label ----------------------------------------------------
 let lastHud = 0;
