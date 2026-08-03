@@ -3604,3 +3604,64 @@ be made fine in headless.** The app takes up to 12 simulation steps per frame an
 software rendering makes frames long, so a specimen crosses fruiting, ripe and
 senescing inside one 200ms poll whatever `speedMul` says. Stop at `flowering` and
 accept the overshoot.
+
+### A window of susceptibility, and nothing schedules it (2026-08-03)
+
+Building the UI control turned up the most interesting property the agent has,
+and it was invisible from every headless harness because they all inoculate at
+one fixed step.
+
+**Whether an inoculation takes depends on when you do it.** `invert` on Abyssal
+Frond, eight seeds each, against the same eight specimens grown untouched:
+
+| inoculate at step | took | washed out | organs (median) | healthy |
+|---|---|---|---|---|
+| 200 | **8/8** | 0/8 | 16 | 105 |
+| 400 | 7/8 | 1/8 | 20 | 105 |
+| 600 | 4/8 | 4/8 | 75 | 105 |
+| 800 | 1/8 | 7/8 | 105 | 105 |
+| 1000 | **0/8** | 8/8 | 105 | 105 |
+
+Past about step 800 the specimen finishes with **exactly the organ count it would
+have had untouched**. Not "nearly" — the agent leaves no trace at all.
+
+**Why, and it is not a bug.** A meristem is growing, advecting tissue: every cell
+it makes starts clean, and cells are continually pushed off the rim. Early on the
+agent can take the whole field before dilution wins. Later the plant simply
+outruns it, and the leader converts to a flower before a titre can build — which
+takes the growing point, and the infection, with it. Two independent clocks, and
+the disease only exists where they overlap.
+
+Nothing in `15_pathogen.js` knows about plant age. The window is the interaction
+of an invasion threshold with a tissue turnover rate, and it is the same
+*category* of result as `Plant.spent()`: a condition with nothing scheduling it.
+
+**This cost an hour of chasing a phantom first.** The browser was reporting the
+agent dying out — burden 0, organs 132, identical to healthy — while every
+headless run showed it establishing to burden 626. That reads exactly like a
+browser-only wiring bug, which is the class of failure CLAUDE.md says only a
+browser can find, so it got taken seriously. It was neither: the browser click
+had simply landed late in the window, and the plant's step count at the moment of
+clicking varies with real-time frame pacing. **A run-to-run difference is not a
+platform difference.** Sampling the same quantity finely, rather than once at the
+end, showed it establishing normally.
+
+Also confirmed on the way, since the UI card depends on it: `agentBurden()`
+agrees with a raw scan of `F.vir` to every printed digit.
+
+**What the UI does about it.** `inject` warns when the specimen is past ~700
+steps, because the honest thing is to say the inoculation will probably wash out
+rather than let it look broken. `fresh + inject` grows a new specimen to the
+middle of its window and injects there, which is the reliable demonstration.
+
+⚠ **Two capture notes for anyone writing a tool here.** Screenshots taken while
+the app is running at speed came back with a *white page* — not a black canvas,
+white, with the body background gone too, which no WebGL failure can cause. It
+does not reproduce under controlled test: with the sheet open or closed,
+`getComputedStyle(document.body).backgroundColor` reads `rgb(3,7,10)` and the
+canvas patch is equally bright either way, and `tools/infect_shot.mjs` renders
+correctly on the same build. Unexplained, bounded, and the working tools all
+freeze (`speedMul = 0`) before the shutter. And stage polling cannot be made fine
+in headless at all — the app takes up to 12 simulation steps per frame and
+software rendering makes frames long, so a specimen crosses fruiting, ripe and
+senescing inside one 200ms poll whatever `speedMul` says. Stop at `flowering`.

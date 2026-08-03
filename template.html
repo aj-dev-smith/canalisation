@@ -102,6 +102,15 @@
   input[type=range]::-moz-range-track{height:2px;background:rgba(255,255,255,.16)}
   input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--accent);border:none}
   #actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;align-items:center}
+  /* the agent picker reads as ONE control with its button, because choosing an
+     agent and not injecting it does nothing at all */
+  .inject{display:flex;align-items:center;gap:0;flex:0 0 auto}
+  .inject select{font:inherit;font-size:11px;padding:5px 8px;cursor:pointer;
+    color:var(--dim);background:rgba(3,7,10,.5);border:1px solid var(--line);
+    border-right:0;border-radius:999px 0 0 999px;outline:none;transition:.15s}
+  .inject select:hover{color:var(--ink)}
+  .inject #infectBtn{border-radius:0}
+  .inject #infectNewBtn{border-radius:0 999px 999px 0;border-left:0}
   #stats{font-size:10.5px;color:var(--dim);margin-left:auto;font-variant-numeric:tabular-nums}
   #stats b{color:var(--ink)}
   .btn.urge{border-color:rgba(111,240,220,.6);background:rgba(111,240,220,.16)}
@@ -209,6 +218,11 @@
     <tr><td>seeds</td><td class="v" id="cSeeds">—</td></tr>
     <tr><td>flowered after</td><td class="v" id="cFlowered">—</td></tr>
     <tr><td>divergence</td><td class="v em" id="cDiv">—</td></tr>
+    <!-- Only present once something has been injected. An agent is an event in
+         the environment, so a healthy plant should say nothing about one — the
+         row appearing IS the notification. -->
+    <tr id="cAgentRow" style="display:none"><td>agent</td><td class="v" id="cAgent">—</td></tr>
+    <tr id="cBurdenRow" style="display:none"><td>burden</td><td class="v em" id="cBurden">—</td></tr>
   </table>
 </div>
 
@@ -236,6 +250,11 @@
   <div id="actions">
     <button class="btn" id="regrowBtn">regrow with these</button>
     <button class="btn" id="pruneBtn">cut the apex</button>
+    <!-- INJECT SOMETHING. Sits beside "cut the apex" because it is the same
+         kind of control: a one-shot perturbation of a standing plant, not a
+         parameter. Both want the sheet closed again immediately afterwards,
+         which is why neither is in the bar. -->
+    <span class="inject"><select id="agentSel" title="which agent"></select><button class="btn" id="infectBtn" title="inject into this specimen as it stands">inject</button><button class="btn" id="infectNewBtn" title="a new specimen, grown to the middle of its susceptible window, then injected">fresh + inject</button></span>
     <button class="btn" id="cineBtn">cinema</button>
     <span id="stats"><span>fps <b id="fps">60</b></span><span id="sat"></span></span>
   </div>
