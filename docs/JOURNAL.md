@@ -3550,3 +3550,57 @@ expected to decide whether one forms at all. Note also that the auxin maximum at
 real feeding site is **transient and then moves outward** (peak inside the initial
 cells at 18 hpi, gone from them by 7-21 dpi and sitting in surrounding parenchyma
 where it precedes phloem differentiation), which our static `dRho` does not do.
+
+### Looked at it, and the agent is invisible (2026-08-02)
+
+`tools/infect_shot.mjs` exists now, and the answer to "does an infected plant look
+infected" is **no — it looks stunted.** That is a real result and it was not
+available from any harness in the repo.
+
+| agent | leaves | stage | divergence | reads as |
+|---|---|---|---|---|
+| (control) | 35 | flowering | 111° ±57 | a healthy plant |
+| lesion | 36 | flowering | 66° ±90 | **a healthy plant** |
+| chlorosis | 26 | flowering | 86° ±94 | a thinner, sparser plant |
+| invert | 5 | leafing | 40° ±82 | a bare whip with basal leaves |
+
+`invert` is unmistakable and genuinely striking — a long naked stem carrying five
+leaves at its foot, arrested before it ever flowers. But it reads as *a plant that
+failed*, not as *a plant with a disease*. And `lesion` — the agent built
+specifically to be a bounded, visible lesion, which `test/infected.mjs` measures at
+burden 0.36 with a drawn edge in ASCII — is **indistinguishable from the control**
+at the specimen framing.
+
+**The cause is not the mechanism, it is that nothing draws it.** `F.vir` is a
+per-cell scalar that the renderer never reads. The only channels an agent can
+currently reach a viewer through are organ count, organ placement and axis
+length — all of which say "less vigorous" and none of which say "infected". A
+lesion whose titre sits at 0.94 on a third of a blade is drawn in exactly the
+colour of healthy tissue.
+
+So this lands squarely on the argument ROADMAP 0z was built on: **a
+computed-but-undrawn channel is a view waiting to happen.** `VIEWS` in `70_app.js`
+is a table, `drawSpecimen` already colours stems through a per-station callback,
+and titre is one more weight. That is the next thing to build, and until it exists
+every number in `test/infected.mjs` is describing something a viewer cannot see.
+
+**Three mistakes the capture tool made first, all of them already written down in
+this repo, all caught by its own assertions:**
+
+- It photographed a plant that was already **senescing**, three times, and would
+  have supported conclusions about foliage drawn from a dying specimen. Exactly
+  `tools/tree_shot.mjs`'s first run, which photographed a dead tree.
+- It framed each variant on **its own** bounds, so the camera flew in on the sick
+  plant and photographed it at a different scale — which makes "91% fewer organs"
+  read as "about the same". `tree_shot.mjs` documents this as a way to buy a false
+  theory; the fix is to pin every shot to the control's distance.
+- It called `inoculate()` after the leader had already converted to a flower, so
+  the agent landed **nowhere**, four times, and reported four identical plants
+  without complaint. `Plant.inoculate` now falls back to any axis that still has a
+  growing point and returns null when none does.
+
+And one thing worth knowing about capture in general here: **stage polling cannot
+be made fine in headless.** The app takes up to 12 simulation steps per frame and
+software rendering makes frames long, so a specimen crosses fruiting, ripe and
+senescing inside one 200ms poll whatever `speedMul` says. Stop at `flowering` and
+accept the overshoot.

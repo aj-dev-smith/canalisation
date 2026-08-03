@@ -6014,7 +6014,19 @@ class Plant {
     if (!spec) return null;
     const o = { ...PATHOGEN_DEFAULTS, ...spec, ...opts };
     this.agent = { name: (typeof name === 'string') ? name : 'custom', o, transmit: opts.transmit ?? 0.8 };
-    const a = this.axes[opts.axis || 0];
+    // An agent needs living tissue to arrive in. Axis 0 is the obvious target
+    // and is usually right, but on a herb the leader converts to a flower early
+    // and its growing point is GONE — `setFruit` nulls the meristem — so asking
+    // for axis 0 late in the life cycle silently infects nothing. Fall back to
+    // any axis that still has a growing point.
+    //
+    // This is not the agent being clever about where to go; it is the fact that
+    // there is nothing to infect in dead tissue. `inoculate` returns null when
+    // the whole specimen has arrested, and callers should check it — the first
+    // browser capture written against this API infected nothing four times and
+    // reported four identical plants.
+    let a = this.axes[opts.axis || 0];
+    if (!a || !a.meristem) a = this.axes.find(x => x.meristem && x.alive) || null;
     if (!a || !a.meristem) return null;
     a.infection = new Infection(a.meristem.F, o);
     // Default: let the agent pick provascular, still-competent tissue rather
