@@ -6,14 +6,27 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
-0z0. **WATCH THE INFECTED PLANT, THEN TRY `rCZ` — the agent is built and has never
-   been looked at.** `src/15_pathogen.js` landed 2026-08-02 and every number about it
-   is headless. On a whole specimen the agents span **+6.8% organs (`gall`) to −91.5%
-   (`invert`)**, so there is certainly something to see; whether any of it reads as
-   *disease* rather than as a broken renderer is the question no harness here can
-   answer, and this project has been wrong about exactly that three times.
-   `app.plant.inoculate('lesion')` from the console. **Do this before building
-   anything else on it.**
+0z0. ~~**WATCH THE INFECTED PLANT**~~ — **DONE 2026-08-03, and the verdict is "not
+   seeing much here."** `src/15_pathogen.js` works: derived, measured against closed
+   forms, drawn in ASCII, wired to a UI, and spanning +6.8% organs (`gall`) to −91.5%
+   (`invert`) on a whole specimen. Watched in a real browser, it reads as **stunting,
+   not disease**, and `lesion` — the agent built specifically to be a visible bounded
+   lesion — is indistinguishable from a healthy plant. **Do not reopen this expecting
+   a quick visual win.**
+
+   **The diagnosis is not the mechanism. `F.vir` is a per-cell scalar the renderer
+   never reads.** The only channels an agent can reach a viewer through today are organ
+   count, placement and axis length, all of which say "less vigorous". So the one thing
+   worth doing before anything else here is **a fifth `VIEWS` entry, or a titre term in
+   the palette** — this is exactly 0z's argument (a computed-but-undrawn channel is a
+   view waiting to happen), and until it exists every number in `test/infected.mjs`
+   describes something nobody can see.
+
+   Two things that came out of it and are worth keeping regardless: a **window of
+   susceptibility** nobody scheduled (8/8 takes at step 200, 0/8 at 1000, because a
+   meristem makes clean cells faster than a late agent can take them), and the fact
+   that a **run-to-run difference is not a platform difference** — an hour went into
+   chasing a browser-vs-headless "bug" that was a late click.
 
    Then the one experiment the falsification named. `dComp > 0` was supposed to give
    *Rhodococcus*'s leafy gall — organised iterated shoots — and gives −8.5% organs

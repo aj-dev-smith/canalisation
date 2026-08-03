@@ -490,14 +490,35 @@ plant looks like. Four things to know before touching it:
   (37.8 time units, ~22 hops from the middle) rather than by eye gives burden 0.36 and a
   visible edge. Do not describe the boundary as emergent from the gate — it is not.
 
-`app.plant.inoculate('lesion')` from the console infects the hero's leader, and
-`app.plant.agentBurden()` reports what it has reached. **It has not been watched in a real
-browser yet** — every number above is headless, and this project's own record is that three
-of its worst modelling errors were caught by a person looking rather than by a harness. On a
-whole specimen the agents span **+6.8% organs (`gall`) to −91.5% (`invert`)**, so there is
-plenty to see; whether any of it *reads* as disease rather than as a broken renderer is
-exactly the open question. Cross-axis spread is **inheritance at bud formation**, not
-transport — a bud is made of its parent's tissue — because `38_shoot.js` ships disabled.
+**IT HAS NOW BEEN WATCHED, AND THE VERDICT IS THAT THERE IS NOT MUCH TO SEE. That is
+the honest headline for this whole feature, and it should not be softened.** The
+mechanism is correct, derived, measured against closed forms and documented; on a
+whole specimen the agents span **+6.8% organs (`gall`) to −91.5% (`invert`)**. And a
+person watching it in a real browser said "not seeing much here", which is the fourth
+time the eye has been the deciding instrument on this project and the only verdict that
+counts. **Do not reopen this expecting a quick visual win.**
+
+The diagnosis is specific and it is not the mechanism: **`F.vir` is a per-cell scalar
+the renderer never reads.** The only channels an agent can currently reach a viewer
+through are organ count, organ placement and axis length — all of which say "less
+vigorous" and none of which say "infected". `lesion`, built specifically to be a bounded
+visible lesion and measured at burden 0.36 with a drawn edge in ASCII, is
+indistinguishable from a healthy plant on screen. So the thing that would make this
+worth returning to is **drawing the titre** (ROADMAP 0z's argument: a
+computed-but-undrawn channel is a view waiting to happen), not more mechanism.
+
+There is a UI: the **controls** sheet carries an agent picker with `inject` and
+`fresh + inject`, and the specimen card grows `agent` and `burden` rows once something
+has been injected. `app.plant.inoculate('lesion')` and `app.plant.agentBurden()` do the
+same from the console, and `window.__AGENTS` lists the names.
+
+**`burden` reading `cleared` is usually not a bug — it is the window of susceptibility.**
+Whether an inoculation takes depends on *when*: 8/8 at step 200, 4/8 at 600, **0/8 at
+1000**, after which the specimen finishes with exactly the organ count it would have had
+untouched. A meristem is advecting tissue and every cell it makes starts clean, so late
+on the plant simply outruns the agent. Nothing in `15_pathogen.js` knows about plant age.
+Cross-axis spread is **inheritance at bud formation**, not transport — a bud is made of
+its parent's tissue — because `38_shoot.js` ships disabled.
 
 **THERE IS A TREE. `Ashfall Spire` is the ninth species and it is a different body plan
 — a straight leader, two dozen plagiotropic laterals that get longer toward the ground,
