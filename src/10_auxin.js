@@ -80,6 +80,7 @@ export class CellField {
     this.comp = new Float32Array(cap);   // PIN competence (0..1) — tissue identity
     this.organ = new Int32Array(cap);    // id of the organ this cell was recruited to
     this.inh = new Float32Array(cap);    // second, slower signal made by organs
+    this.vir = new Float32Array(cap);    // agent titre — see 15_pathogen.js. 0 everywhere unless inoculated
     this.nextId = 1;
     this.aux0 = new Float32Array(cap);   // scratch
     this.aux1 = new Float32Array(cap);   // scratch
@@ -101,7 +102,7 @@ export class CellField {
     this.p[i] = 1; this.rho[i] = 0; this.mu[i] = 0;
     this.flag[i] = 1; this.age[i] = 0; this.deg[i] = 0;
     this.id[i] = this.nextId++; this.sz[i] = 1; this.comp[i] = 1; this.organ[i] = 0;
-    this.inh[i] = 0;
+    this.inh[i] = 0; this.vir[i] = 0;
     const o = i * MAXNB;
     for (let k = 0; k < MAXNB; k++) { this.pi[o + k] = 0.05; this.P[o + k] = 0; this.J[o + k] = 0; }
     return i;
@@ -117,7 +118,7 @@ export class CellField {
       this.flag[i] = this.flag[last]; this.age[i] = this.age[last];
       this.id[i] = this.id[last]; this.sz[i] = this.sz[last];
       this.comp[i] = this.comp[last]; this.organ[i] = this.organ[last];
-      this.inh[i] = this.inh[last];
+      this.inh[i] = this.inh[last]; this.vir[i] = this.vir[last];
     }
   }
 
@@ -181,7 +182,31 @@ export function stepAuxin(F, prm, mode = 'auto') {
     const pi_ = p[i];
     const uni = 1 / d;
     const cmp = comp[i];
-    for (let k = 0; k < d; k++) {
+    if (cmp < 0) {
+      // INVERTED POLARITY. Only 15_pathogen.js can get a cell here. For comp in
+      // [0,1] the blend below is a convex combination of two non-negative
+      // numbers and cannot go negative, so this branch is unreachable for every
+      // shipped species and the clamp is provably a no-op for them —
+      // test/pathogen.mjs asserts exactly that, cell for cell.
+      //
+      // Below zero the expression stops being a blend toward uniform and
+      // becomes a reflection through it: PIN goes to the wall the gradient rule
+      // would have avoided. A carrier density still cannot be negative, so the
+      // weights are clamped and renormalised, and the cell allocates its own
+      // PIN and no more.
+      let sgn = 0;
+      for (let k = 0; k < d; k++) {
+        let g = uni + (q[o + k] / sg - uni) * cmp;
+        if (g < 0) g = 0;
+        q[o + k] = g; sgn += g;
+      }
+      const inv = sgn > 1e-9 ? 1 / sgn : 0;
+      for (let k = 0; k < d; k++) {
+        const g = inv ? q[o + k] * inv : uni;
+        const c = (pi[o + k] + piFloor) / sc;
+        P[o + k] = pi_ * ((1 - s) * g + s * c);
+      }
+    } else for (let k = 0; k < d; k++) {
       // competence gates gradient *sensing* only. Canalisation is a different
       // feedback — a cell that is carrying a real flux can polarise to it
       // whatever its identity, which is why veins can cross tissue that would

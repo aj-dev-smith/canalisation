@@ -22,6 +22,12 @@ window.__VIEWS = VIEWS;
 // and a tool that has to rebuild the bundle between candidates cannot do that.
 // `newSpecimen` reads this table, so a tool can patch a preset and regrow.
 window.__SPECIES = SPECIES;
+// The agent table (15_pathogen.js), so `plant.inoculate()` is discoverable from
+// the console rather than requiring you to read the source for the names. An
+// agent is the one thing in the piece with no UI at all — it is an event in the
+// environment, so nothing on the page implies one, and without this a person
+// looking at an infected plant has no way to find out what to type.
+window.__AGENTS = AGENTS;
 
 // --- the specimen label ----------------------------------------------------
 let lastHud = 0;
@@ -38,6 +44,20 @@ function hud(now) {
   $('cFlowered').textContent = c.floweredAt ? c.floweredAt + ' leaves' : '—';
   $('cDiv').textContent = c.divergence
     ? c.divergence.toFixed(0) + '° ±' + c.divergenceSd.toFixed(0) : '—';
+  // The agent rows appear only once something has been injected — a healthy
+  // plant should say nothing about a disease it does not have, so the row
+  // showing up IS the notification. `burden` is what tells you it actually took:
+  // inoculate() can succeed and the agent still fail to establish, because
+  // invasion has a real threshold at R0 = r/clr and nothing schedules it.
+  const ag = app.plant.agentBurden && app.plant.agentBurden();
+  $('cAgentRow').style.display = ag ? '' : 'none';
+  $('cBurdenRow').style.display = ag ? '' : 'none';
+  if (ag) {
+    $('cAgent').textContent = ag.agent;
+    $('cBurden').textContent = ag.axes
+      ? ag.axes + (ag.axes === 1 ? ' apex' : ' apices') + ' · peak ' + ag.peak.toFixed(2)
+      : 'cleared';
+  }
   const st = c.stage;
   for (const el of document.querySelectorAll('#stage span'))
     el.classList.toggle('on', el.dataset.s === st);
@@ -233,6 +253,66 @@ $('pruneBtn').onclick = () => {
   if (app.plant.prune()) {
     showTip('Apex removed. The auxin that was suppressing the buds below it is gone, so one of them will take over.');
   }
+};
+
+// --- inject something ------------------------------------------------------
+// The one control here that perturbs the plant's CHEMISTRY mid-life rather than
+// its parameters. Deliberately does NOT move the camera: an agent's effect is
+// whole-plant and slow, so yanking to the apex the way the chemistry sliders do
+// would frame out the thing you just caused. Same reasoning as WHOLE_PLANT above.
+const AGENT_TIP = {
+  gall: 'Auxin production, raised wherever the agent has reached — the direct analogue of the genes Agrobacterium injects. Watch the LEAF, not the shoot: the blade keeps canalising, but with every cell a source there is no gradient left to build a hierarchy out of, so traffic spreads over a hundred strands instead of ten.',
+  lesion: 'The same auxin source, but slow, and with the two things the literature says really happen: the host conjugates away the excess, and the auxin closes the plasmodesmata the agent is spreading through. It stops. Where it stops is not written down anywhere — it is where a slow front got to before the blade finished developing.',
+  chlorosis: 'A sink rather than a source: the agent degrades auxin where it sits. The specimen thins out and founds fewer organs, because there is less signal to sharpen into a maximum.',
+  blind: 'Polarisation competence knocked out. The tissue still carries auxin perfectly well — it just cannot sharpen it into a peak any more, and founding a leaf IS sharpening a peak. Expect the growing point to keep going and stop producing.',
+  invert: 'Polarity REVERSED. Below zero the competence term stops pulling a cell toward uniform and reflects it through: PIN goes to the wall the gradient rule would have avoided. The most drastic thing here — expect a bare whip with its leaves at the foot, arrested before it ever flowers.',
+  leafygall: 'FALSIFIED, and kept so it stays re-measurable. It was meant to reproduce Rhodococcus — new competent domains, so more organs and iterated shoots. It does not: competence sharpens the maxima that exist rather than creating new ones. Expect roughly nothing, and that is the result.',
+  systemic: 'Rides the auxin transport field instead of crawling. ⚠ No evidence supports this — nothing pathogenic actually moves in the polar transport stream — so it is kept as our own construction and labelled, not as physics.',
+};
+const agentSel = $('agentSel');
+for (const name of Object.keys(AGENTS)) {
+  const o = document.createElement('option');
+  o.value = name; o.textContent = name;
+  agentSel.appendChild(o);
+}
+agentSel.value = 'invert';   // the one whose effect is unmistakable
+// THERE IS A WINDOW OF SUSCEPTIBILITY, AND NOTHING SCHEDULES IT. Measured over
+// eight seeds, an `invert` inoculation takes 8/8 at 200 steps, 7/8 at 400, 4/8
+// at 600, 1/8 at 800 and 0/8 at 1000 — after which the specimen finishes with
+// exactly the organ count it would have had untouched. A meristem is growing,
+// advecting tissue: every cell it makes starts clean, so late on the plant
+// simply outruns the agent, and the leader converts to a flower before a titre
+// can build. That is a real property and not a failure, but it makes for a
+// miserable demo, so the button says which side of the window you are on.
+const SUSCEPTIBLE_UNTIL = 700;
+function infect(name) {
+  const inf = app.plant.inoculate(name);
+  if (!inf) {
+    // A herb's leader converts to a flower early and `setFruit` takes its
+    // growing point with it, leaving nothing living to inject into. Say so
+    // rather than appearing to work — the first browser capture written against
+    // this API infected nothing four times in silence.
+    showTip('Nothing to inject into — every growing point on this specimen has already converted or arrested. An agent needs living meristem. Use "fresh + inject" instead.');
+    return false;
+  }
+  const late = app.age > SUSCEPTIBLE_UNTIL;
+  showTip((AGENT_TIP[name] || ('Injected ' + name + '.')) + (late
+    ? '  ⚠ This specimen is past its window — an inoculation this late usually washes out, and the burden row will fall back to "cleared". That is real, not a bug: a meristem makes clean cells faster than the agent can take them. Use "fresh + inject" to see the effect.'
+    : '  Watch the burden row on the card — if it climbs, it took.'));
+  return true;
+}
+$('infectBtn').onclick = () => infect(agentSel.value);
+// The reliable demo path: a new specimen, run forward to the middle of its
+// susceptible window, and injected there. Stepping synchronously is fine — this
+// is a few hundred steps on a seedling, not a grown plant.
+$('infectNewBtn').onclick = () => {
+  app.newSpecimen(app.speciesName);
+  app.giveBack();
+  for (let i = 0; i < 260; i++) app.plant.step(1);
+  app.age = 260;
+  syncSliders();
+  $('regrowBtn').classList.remove('urge');
+  infect(agentSel.value);
 };
 // The close-up is a tour of two places, not one: the tip, where needles
 // converge and that convergence IS a leaf, and the blade, where the same

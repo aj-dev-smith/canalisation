@@ -6,6 +6,50 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
+0z0. ~~**WATCH THE INFECTED PLANT**~~ — **DONE 2026-08-03, and the verdict is "not
+   seeing much here."** `src/15_pathogen.js` works: derived, measured against closed
+   forms, drawn in ASCII, wired to a UI, and spanning +6.8% organs (`gall`) to −91.5%
+   (`invert`) on a whole specimen. Watched in a real browser, it reads as **stunting,
+   not disease**, and `lesion` — the agent built specifically to be a visible bounded
+   lesion — is indistinguishable from a healthy plant. **Do not reopen this expecting
+   a quick visual win.**
+
+   **The diagnosis is not the mechanism. `F.vir` is a per-cell scalar the renderer
+   never reads.** The only channels an agent can reach a viewer through today are organ
+   count, placement and axis length, all of which say "less vigorous". So the one thing
+   worth doing before anything else here is **a fifth `VIEWS` entry, or a titre term in
+   the palette** — this is exactly 0z's argument (a computed-but-undrawn channel is a
+   view waiting to happen), and until it exists every number in `test/infected.mjs`
+   describes something nobody can see.
+
+   Two things that came out of it and are worth keeping regardless: a **window of
+   susceptibility** nobody scheduled (8/8 takes at step 200, 0/8 at 1000, because a
+   meristem makes clean cells faster than a late agent can take them), and the fact
+   that a **run-to-run difference is not a platform difference** — an hour went into
+   chasing a browser-vs-headless "bug" that was a late click.
+
+   Then the one experiment the falsification named. `dComp > 0` was supposed to give
+   *Rhodococcus*'s leafy gall — organised iterated shoots — and gives −8.5% organs
+   instead, because `comp` gates how sharply a cell polarises and **not whether a
+   region is an organ-founding domain**. It sharpens domains; it does not create them.
+   The variable that decides *where* a competent region is, is **`rCZ`**, the
+   central-zone radius — SCIENCE.md's one spatial prior. An agent that shrinks the
+   incompetent centre would add founding sites rather than over-sharpening existing
+   ones. Untried, cheap, and it is the difference between a sick plant and a
+   differently-built one.
+
+   Two more from the literature sweep, both better-evidenced than what ships:
+   **cyst nematodes relocate PIN3 basal→lateral** (Grunewald 2009), the one documented
+   pathogen-driven PIN *repolarisation* and a stronger model for `invert` than the
+   reflection currently implemented; and **HopM1 destroys AtMIN7, which is required
+   for polar PIN localisation** — two demonstrated results with nobody having looked
+   at PIN in HopM1-infected tissue, which the brief calls the most interesting untried
+   experiment in the sweep.
+
+   ⚠ **Do not route phyllody through this.** SAP54/phyllogen degrades ABCE-class
+   MADS-box proteins via RAD23; auxin is not measured or implicated in any of the four
+   primary papers. Phyllody belongs on `q`.
+
 0. ~~**[#13 item 0, the needle](#13-a-conifer--built-and-on-screen-2026-07-30)**~~ —
    **DISSOLVED 2026-07-31, not done.** It was built, measured, rendered at both
    framings, and then deliberately not shipped. `marginBias.ay` 0.008 puts the aspect

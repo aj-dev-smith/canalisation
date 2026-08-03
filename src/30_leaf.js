@@ -211,7 +211,10 @@ export class Leaf {
     this.scale = Math.min(1, this.scale + o.grow * dt);
     // the blade keeps recruiting sources while it is still expanding
     if (this.age % o.srcEvery < dt && this.sources.length < o.maxSources) this.addSource();
+    const inf = this.F.inf;
+    if (inf) inf.apply();
     for (let s = 0; s < this.prm.substeps; s++) stepAuxin(this.F, this.prm, 'flux');
+    if (inf) { inf.revert(); inf.step(this.prm.dt * this.prm.substeps); }
     if (this.age > o.matureAt) this.bake();
   }
 

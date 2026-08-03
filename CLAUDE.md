@@ -21,6 +21,7 @@ Adding to it is a real cost and should be argued for, not slipped in.
 | [docs/PITFALLS.md](docs/PITFALLS.md) | Bugs that cost hours. Several will bite you again if you do not know them |
 | [docs/JOURNAL.md](docs/JOURNAL.md) | Negative results, design forks and why they went the way they did |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is unfinished, ranked, with my recommendation |
+| [docs/research_8_02_26_pathogen.md](docs/research_8_02_26_pathogen.md) | **Literature sweep on auxin-manipulating pathogens.** Same `[D]`/`[I]`/`[OURS]`/`⚠` flags as the sweep below. Read before touching `15_pathogen.js`. It corrected the design in three places — advection along `J` has **no** evidence under it, a pure `rho` bump over-predicts by 2-3 orders because the host clamps it, and phyllody is **not** auxin — and one of its own `[OURS]` claims was then falsified by `test/pathogen.mjs` section 6 |
 | [docs/research_7_30_26.md](docs/research_7_30_26.md) | **Literature sweep on branch vigour and branch angle.** Answers, with citations, what sets a lateral's growth rate and its angle. Read before touching branching, `updateRadii`, or anything gravitropic — it corrects two of our own results and names one live bug |
 
 `research_7_30_26.md` is a different kind of document from the rest: it is **outside
@@ -75,6 +76,8 @@ node test/plagio.mjs                               # ROADMAP 13 pre-flight: can 
 node test/taper.mjs                                # ROADMAP 14: what sizes a stem, swept and drawn (~3min)
 node test/tree.mjs                                 # ROADMAP 13: the crown — set point, taper, and an ASCII conifer (~4min)
 node test/crown.mjs '{"maxGen":2}'                 # HOW MUCH OF ANYTHING IS THERE — crown fill, at five rasters (~40s)
+node test/pathogen.mjs                             # AN AGENT IN THE TISSUE: invasion front against a closed form
+node test/infected.mjs                             # that agent on real tissue, measured and DRAWN
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -113,13 +116,31 @@ when a stand that heavy could not exist. Read its **median and p99** instead (21
 raise its threshold to make it pass** — that deletes the only signal anyone has about
 the thing 10b exists to fix.
 
-**Ten of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+**Twelve of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
 `petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`, `plagio.mjs`, `taper.mjs`,
-`tree.mjs`.** Only
-**two of the ten are wired into CI** and therefore gate a merge — `smoke.mjs` and
-`views.mjs`. The other eight assert locally and *nothing runs them for you*, which is worth
+`tree.mjs`, `pathogen.mjs`, `infected.mjs`.** Only
+**two of the twelve are wired into CI** and therefore gate a merge — `smoke.mjs` and
+`views.mjs`. The other ten assert locally and *nothing runs them for you*, which is worth
 knowing before treating a green PR as evidence about the stem or the air. The rest print
 and never fail.
+
+`test/pathogen.mjs` is the pre-flight for `15_pathogen.js` and it is derivation-first: an
+invasion front has a closed-form speed, so the file works the number out and then asks the
+solver for it. **It caught three errors in the derivation and none in the code**, which is
+the entire argument for that ordering — `sqrt(2)` scaling is the *continuum* limit and a
+lattice front does not obey it; upwind advection enters the dispersion relation as
+`adv*(e^L - 1)` and not `adv*L`; and tissue behind a front settles at the *endemic* titre
+`1 - clr/r` rather than at carrying capacity, so an agent that had invaded perfectly well
+read as a failure to establish. Its **section 6 is a falsification switched on
+deliberately**, in the same category as `tree.mjs`'s `fluxPartition`: the literature
+brief's own `[OURS]` claim that an auxin-gated front self-limits, built, measured, and
+wrong — a travelling wave on a homogeneous medium has one speed and cannot decelerate.
+
+`test/infected.mjs` is the measurement and the drawing, and it is where **three separate
+instruments read "no effect" and all three were lying**. `veinMax` is a cap, so a flat
+vein count is arithmetic; `sum(P)/p` is one step stale, so a conservation check on a grown
+field measures two simulations drifting apart; and `comp` is multiplied by zero in flux
+mode, so a leaf cannot test a competence agent at all. All three are in PITFALLS.
 
 `test/tree.mjs` is where ROADMAP 13 landed, and it is the check on both pre-flights
 above being answered. Its first two sections are the derivation — the statocyte wall sum
@@ -369,6 +390,10 @@ arriving from GitHub, and it leads with the one rule above.
 ```
 src/00_math.js      vec3/mat4, seeded PRNG (mulberry32), smoothstep
 src/10_auxin.js     THE ENGINE. CellField + stepAuxin(). Everything else is geometry
+src/15_pathogen.js  AN AGENT IN THE TISSUE. Something that arrives after the plant
+                    has started, spreads through it, and deforms the auxin machinery
+                    it finds. Same category as the wind: a thing the plant is SUBJECT
+                    TO. Nothing in it says what an infected plant looks like
 src/20_meristem.js  growing tip: dividing cell sheet, organ initiation, divergence measurement
 src/25_margin.js    leaf outline grown from margin convergence points
 src/30_leaf.js      blade: interior lattice, vein canalisation, bake
@@ -436,6 +461,64 @@ of its bugs were found, and none would have been visible on screen.
 - **Never fake it to make it look better.** The piece's entire claim is that nothing is drawn. A single hardcoded curve would make the whole thing a lie.
 
 ## The honest state of it
+
+**THERE IS AN AGENT NOW, AND IT IS A CATEGORY THE ENGINE DID NOT HAVE.** Every knob in
+this project was global to a specimen and constant for that specimen's life. A species
+preset is fixed at germination; `src/15_pathogen.js` is *local*, arrives *mid-life*, and
+*spreads*. It adds nothing to SCIENCE.md's numbered list, for the same reason `39_fall.js`
+does not — it is a thing the plant is subject to, and nothing in it says what an infected
+plant looks like. Four things to know before touching it:
+
+- **`comp < 0` is the perturbation worth caring about.** Competence gates how far a cell's
+  PIN may depart from uniform; below zero the blend stops being a pull toward uniform and
+  becomes a *reflection through it*, so PIN goes to the wall the gradient rule would have
+  avoided. Inverted polarity, not a sicker plant — the only knob here that reaches a body
+  plan the parameter space does not otherwise contain. Inoculating a meristem takes organ
+  count **167 → 56 with no live primordia left**. It costs one clamp in `stepAuxin`,
+  provably a no-op for `comp` in [0,1], and smoke's 73 checks are unchanged.
+- **A competence agent is a MERISTEM agent and cannot touch a blade.** Flux mode pins
+  `s = 1` and multiplies the gradient weight by zero. Byte-identical leaf results are the
+  correct answer, and `test/infected.mjs` asserts it so nobody debugs the wiring.
+- **The literature killed the design decision I liked most.** Advecting the infection along
+  `J` — "it goes where the plant's own polarity sends it" — has **no evidence under it**;
+  nothing pathogenic moves in the polar auxin transport stream. `chi` ships, labelled
+  `[OURS]`. What *is* demonstrated is that auxin closes plasmodesmata, so the agent gates
+  its own road — worth ~23% off the front speed, and **not** the self-limiting boundary the
+  brief predicted. See the falsification in `test/pathogen.mjs` section 6.
+- **A lesion is bounded by GEOMETRY, not by the mechanism.** An organ is finite; the front
+  stops where it has got to when the blade stops developing. Sizing `Dv` from the blade
+  (37.8 time units, ~22 hops from the middle) rather than by eye gives burden 0.36 and a
+  visible edge. Do not describe the boundary as emergent from the gate — it is not.
+
+**IT HAS NOW BEEN WATCHED, AND THE VERDICT IS THAT THERE IS NOT MUCH TO SEE. That is
+the honest headline for this whole feature, and it should not be softened.** The
+mechanism is correct, derived, measured against closed forms and documented; on a
+whole specimen the agents span **+6.8% organs (`gall`) to −91.5% (`invert`)**. And a
+person watching it in a real browser said "not seeing much here", which is the fourth
+time the eye has been the deciding instrument on this project and the only verdict that
+counts. **Do not reopen this expecting a quick visual win.**
+
+The diagnosis is specific and it is not the mechanism: **`F.vir` is a per-cell scalar
+the renderer never reads.** The only channels an agent can currently reach a viewer
+through are organ count, organ placement and axis length — all of which say "less
+vigorous" and none of which say "infected". `lesion`, built specifically to be a bounded
+visible lesion and measured at burden 0.36 with a drawn edge in ASCII, is
+indistinguishable from a healthy plant on screen. So the thing that would make this
+worth returning to is **drawing the titre** (ROADMAP 0z's argument: a
+computed-but-undrawn channel is a view waiting to happen), not more mechanism.
+
+There is a UI: the **controls** sheet carries an agent picker with `inject` and
+`fresh + inject`, and the specimen card grows `agent` and `burden` rows once something
+has been injected. `app.plant.inoculate('lesion')` and `app.plant.agentBurden()` do the
+same from the console, and `window.__AGENTS` lists the names.
+
+**`burden` reading `cleared` is usually not a bug — it is the window of susceptibility.**
+Whether an inoculation takes depends on *when*: 8/8 at step 200, 4/8 at 600, **0/8 at
+1000**, after which the specimen finishes with exactly the organ count it would have had
+untouched. A meristem is advecting tissue and every cell it makes starts clean, so late
+on the plant simply outruns the agent. Nothing in `15_pathogen.js` knows about plant age.
+Cross-axis spread is **inheritance at bud formation**, not transport — a bud is made of
+its parent's tissue — because `38_shoot.js` ships disabled.
 
 **THERE IS A TREE. `Ashfall Spire` is the ninth species and it is a different body plan
 — a straight leader, two dozen plagiotropic laterals that get longer toward the ground,
