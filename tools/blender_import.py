@@ -262,10 +262,16 @@ def _surfaces(name, buf, sec, scale, mat):
 
     # THE SIMULATION'S NORMALS, NOT A RECOMPUTED ONES. See the note at the top.
     me.shade_smooth()
-    try:
-        me.normals_split_custom_set_from_vertices(nrm.tolist())
-    except Exception as exc:  # noqa: BLE001
-        print(f"  custom normals refused ({exc}); Blender's own will be used")
+    # The numpy array first: a conifer at solver resolution is 4.3 M vertices and
+    # `tolist()` on that is millions of Python tuples and several gigabytes.
+    for cand in (nrm, nrm.tolist()):
+        try:
+            me.normals_split_custom_set_from_vertices(cand)
+            break
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+    else:
+        print(f"  custom normals refused ({last}); Blender's own will be used")
     return _link(name, me)
 
 
@@ -385,7 +391,7 @@ def build(path, clear=True, emis_mul=1.5, vein_emis_mul=1.0, solid_veins=False):
 # tracer instead of screenshotting the browser.
 def setup_scene(H=None, res=(1440, 1800), samples=128, lens=85.0, fstop=2.8,
                 azimuth=35.0, elevation=0.18, fill=1.35, bg=None,
-                key=220.0, exposure=0.0):
+                key=220.0, exposure=0.0, margin=1.25):
     sc = bpy.context.scene
     sc.render.engine = "CYCLES"
     sc.cycles.samples = samples
@@ -444,10 +450,17 @@ def setup_scene(H=None, res=(1440, 1800), samples=128, lens=85.0, fstop=2.8,
     cam.data.dof.aperture_fstop = fstop
     sc.camera = cam
 
-    # far enough back that the taller of the two extents fits the frame
+    # Far enough back that the taller of the two extents fits the frame. The
+    # sensor fit is PINNED HORIZONTAL because the arithmetic below assumes it:
+    # on AUTO, Blender maps the sensor to whichever image axis is longer, so a
+    # portrait resolution silently flips the field of view and the distance
+    # comes out short. The tree was framed at 1200x1800 and lost its bottom
+    # metre — which looks like the plant being too big rather than like a
+    # camera bug, and `tree_shot.mjs` is portrait for a reason.
+    cam.data.sensor_fit = "HORIZONTAL"
     sensor = cam.data.sensor_width
-    fit_v = height / (sc.render.resolution_y / sc.render.resolution_x)
-    dist = max(fit_v, width) * 0.5 * (lens / sensor) * 2.0 * 1.25
+    fit_v = height * sc.render.resolution_x / sc.render.resolution_y
+    dist = max(fit_v, width) * (lens / sensor) * margin
     ang = np.radians(azimuth)
     eye = Vector((ctr.x + dist * np.sin(ang),
                   ctr.y - dist * np.cos(ang),
