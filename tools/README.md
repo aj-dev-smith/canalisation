@@ -350,3 +350,66 @@ Five things in here that are not preferences, and one Blender trap:
   "Result", separated only by identifier (`A_Float`, `A_Color`, …).
   `node.inputs["A"]` silently returns the float one, so a colour graph written by
   name links, renders, and is wrong. `_sock()` exists for this.
+
+### ⚠ IT LOOKS CONSIDERABLY WORSE THAN THE BROWSER, AND HERE IS WHY
+
+AJ's verdict on the first path-traced hero, 2026-08-03, and it should not be
+softened: **considerably worse than the custom WebGL renderer.** That is the
+fourth time the eye has been the deciding instrument on this project and the
+only verdict that counts. The bridge is faithful about *geometry* and threw away
+the *look*, in three specific, measurable ways.
+
+**1. The vein width floor is not a rasteriser artefact. It is what makes the
+network visible.** `50_geom.js:591` draws every vein at
+`max(wFloor, base * (0.25 + s.w * 1.35))`, and `wFloor` is `MINW` — about
+`0.004` world units at the camera's framing distance. `blender_export.mjs` sets
+`MINW = 1e-4`, deliberately, reasoning that "a floor measured in pixels has no
+meaning in a path tracer". That reasoning is correct about physics and wrong
+about the picture. Measured on Cathedral Fern seed 21: the *median* vein radius
+is 0.004 world units — exactly the floor — and the thinnest are 0.00032, **12x
+below it**. So the browser lifts more than half the network up to a common
+width, and the export draws it at its true, invisible size. That is why the
+Ember Creeper's leaves render as flat red discs.
+
+**This is the ROADMAP 13 needle lesson restated, and I walked straight into it.**
+There, a botanically correct needle canalising one strand was rejected because
+the reticulate network is the only channel through which this engine is visible.
+Here, physically correct sub-pixel veins are the same mistake wearing a
+different hat: **correctness and legibility of the mechanism point in opposite
+directions, and this project's whole claim is the second one.**
+
+**2. The lamina's shading model is a designed three-term look, and the palette
+carries its parameters.** `60_render.js:100-105`:
+
+```glsl
+vec3 c = vC * (amb + uKeyCol*d*0.9) + vC*uKeyCol*back*0.55 + rim*uAmbTop*0.7;
+c += vC * vE * 3.0;
+```
+
+`amb` is a gradient between `ambBot` and `ambTop` by world normal; `back` is a
+squared wrap term; `rim` is a cubed Fresnel. Every one of `key`, `keyCol`,
+`ambTop`, `ambTop` is a **species palette entry** — a tuned look that ships with
+the plant. `blender_hero.py` invents its own lighting and uses none of them.
+Note also the **`* 3.0` on emission**, which the export does not apply.
+
+**3. The grade is not a garnish.** `BASE_PAL` carries `bloom: 0.38`,
+`bloomThresh: 1.15`, `exposure: 1.04`, `grain: 0.024`, `vignette: 0.60`,
+`dof: 0.80`, plus per-species `fog`/`fogD`. The bridge deliberately imports none
+of it on the argument that a rasteriser's bloom substitutes for light transport.
+True, and beside the point: with the vein network drawn 12x too thin and no
+emission multiplier, there is nothing left for a physically-correct glare to
+catch.
+
+**The route out, in order:**
+
+1. `WFLOOR=` on the exporter, defaulting to the shipped `MINW` in world units,
+   so the network keeps the width the piece draws it at. This is one line and it
+   is probably most of the gap.
+2. A `--look shipped` mode in the hero rig that lights from `key`/`keyCol`/
+   `ambTop`/`ambBot` and applies the `* 3.0`, so Cycles reproduces the thing
+   that already works before anything new is invented on top of it.
+3. Only then art-direct beyond it. **Match the reference before improving on it**
+   — the same discipline as deriving a number before asserting it.
+
+Do not read the existing `hero()` defaults as tuned. They were reached by
+looking at renders that were missing most of their vein network.
