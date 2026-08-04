@@ -3,3 +3,5 @@ shots/
 .claude/
 *.log
 .DS_Store
+export/
+tools/__pycache__/

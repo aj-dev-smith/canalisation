@@ -200,3 +200,74 @@ inside **single** quotes, so it never interpolated.
   grows a different plant and the species numbers move by more than any change
   you are trying to measure — the first two baseline runs of this tool disagreed
   about which species was worst, because they were not looking at the same plants.
+
+---
+
+## The Blender bridge — not Playwright, not a capture tool
+
+Everything above drives the browser and screenshots it. These two do not open a
+browser at all: they grow a specimen in Node, hand its geometry to Blender, and
+let Cycles light it.
+
+```bash
+node tools/blender_export.mjs                                   # Cathedral Fern, seed 21
+STAGE=peak node tools/blender_export.mjs 'Ashfall Spire' 3 14000
+VIEW=flux MESH=auto node tools/blender_export.mjs 'Sun Coral' 5
+```
+
+- `blender_export.mjs [species] [seed] [maxSteps]` — writes `export/<name>.json`
+  and `.bin`. `VIEW=` is any of the four render views; `STAGE=` stops at a stage
+  instead of a step count, and `STAGE=peak` is the last step before senescence
+  begins — the fullest the plant ever is, which has no name in `Plant.stage()`
+  and costs a second growth to find, because a plant cannot be rewound.
+- `blender_import.py` — run inside Blender (or over the MCP bridge). `build(path)`
+  makes three datablocks, `setup_scene(H)` frames and lights them, `render(out)`
+  writes a PNG.
+
+**It adds no geometry code.** It grows with the shipped `makeSpecimen`, draws
+with the shipped `drawSpecimen`, and supplies only a `Buffers` subclass that
+keeps a second copy of what passes through. A bridge that re-implemented the draw
+would drift from the renderer inside a week — the same argument that has
+`test/views.mjs` driving the real `drawSpecimen` through a stand-in App. Its
+stand-in App is copied from that file **on purpose**: the list is every property
+`drawSpecimen` reads off `this`, and two copies break loudly where one would
+quietly draw a different program.
+
+Four things it does differently from the browser, all of them deliberate:
+
+- **Veins cross as CURVES, not as the triangles the browser draws.** A vein on
+  screen is a camera-facing ribbon — a billboard baked at one eye position — so
+  exported as triangles every vein in the plant would turn edge-on and vanish on
+  the first frame of a turntable. The exporter drops the ribbon's `side` vector
+  and keeps the segment and its two widths; Cycles renders a strand with a
+  radius, correctly, from anywhere. The view-dependence was never in the vein, it
+  was in the rasteriser.
+- **The vein LOD is off and `MINW` is not a pixel.** The cull exists so a
+  real-time frame can drop veins that land under a pixel; a path tracer has no
+  frame budget. About ninety percent of a hero's veins are sub-pixel in the
+  browser and drawn at one uniform width — here the hierarchy the canalisation
+  grew is visible as thickness for the first time.
+- **`MESH=full` is the default and it is the real prize.** `bladeMesh` scales the
+  lamina grid down to hold quads-per-drawn-area constant, and is clamped by the
+  leaf's own lattice — so asking for more is not a request for invented detail,
+  it is a request to stop throwing solved tissue away. Cathedral Fern seed 21:
+  20,154 triangles at the browser's LOD, **274,568** at the solver's. `MESH=auto`
+  keeps the browser's numbers, for an A/B against a screenshot.
+- **Two-sided leaves are `60_render.js` line 99, not a style choice.** That line
+  is `if (dot(N,V) < 0.0) N = -N;` — a lamina is a one-sided sheet standing in
+  for a two-sided organ. Cycles flips shading normals off the GEOMETRIC normal,
+  and these are custom normals off the parametric surface the blade grew, which
+  can disagree by more than a right angle. Without the flip node in the material
+  every blade turned away from the key renders **solid black**, which it did, and
+  which reads as a material bug rather than as a missing line from the shader
+  this is supposed to be reproducing.
+
+The ruler is real: `WORLD.unitM` was fixed months ago by the wind field and the
+falling blade, so everything is scaled into metres on the way in and a Cathedral
+Fern is 2.36 m. That is what makes a physical camera mean anything — 85 mm at
+f/2.8 gives the depth of field a 2.4 m plant would actually have. **Do not scale
+the plant up to fill the frame; move the camera.**
+
+No part of the real-time grade — bloom, exposure, vignette — comes across, and
+none should. Those are a rasteriser's substitutes for light transport. Vertex
+colours are the palette's own linear values, and Cycles does its own tone map.
