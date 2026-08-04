@@ -56,6 +56,9 @@ def main(argv):
                     help="deprecated alias for --look neutral")
     ap.add_argument("--blend", default="",
                     help="also save the assembled scene to this .blend")
+    ap.add_argument("--also", action="append", default=[],
+                    help="extra .json/.bin pairs to build into the same scene; "
+                         "repeatable. For a film's static set — see --also below")
     a = ap.parse_args(argv)
 
     here = os.path.dirname(os.path.abspath(__file__))
@@ -72,6 +75,25 @@ def main(argv):
 
     t0 = time.perf_counter()
     H = ci.build(a.export, **json.loads(a.build))
+
+    # `--also` BUILDS A SECOND EXPORT INTO THE SAME SCENE, and it exists for one
+    # job: a film's static set. A growing hero is a new specimen every frame
+    # (485 of them, 6.3 GB), while the stand behind it never has to change —
+    # measured, at 15 m a background plant's whole per-frame sway is 1.16 px
+    # against 5.4 px of its own defocus blur, so a set exported ONCE is
+    # indistinguishable from a live one and costs 128 MB instead of 62 GB.
+    #
+    # The extra objects are appended to `_objects` rather than kept separate,
+    # deliberately: everything downstream of framing — `floor_radii`, the leaf
+    # and vein materials, `prep` — walks that list, and a set that skipped them
+    # would be the same plants wearing different tissue. What must NOT come from
+    # here is the framing, and it cannot: `film()` takes `span`/`pivot` from the
+    # caller, and `blender_clip.mjs` computes them off the hero sequence's own
+    # union bbox. `build` already namespaces objects by file stem, so nothing
+    # collides.
+    for extra in a.also:
+        H2 = ci.build(extra, **json.loads(a.build))
+        H["_objects"] = H.get("_objects", []) + H2.get("_objects", [])
     print(f"  imported in {time.perf_counter() - t0:.1f}s")
 
     mode = "neutral" if a.neutral else a.look

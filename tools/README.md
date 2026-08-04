@@ -708,3 +708,118 @@ distribution — at this framing it is setting *every* vein's width, so the
 hierarchy that canalisation grew is entirely flattened and what you are looking
 at is the network's *topology*, not its traffic. That is the honest reading of
 these frames, and it is what `vein_scale` and a close-up framing exist to undo.
+
+---
+
+## A life is twenty seconds, so there is no timelapse
+
+```bash
+node tools/blender_seq.mjs 'Ember Creeper' 7 2527        # 485 frames -> export/…_seq/
+node tools/blender_clip.mjs export/ember_life shots/clip # one Blender per frame
+ffmpeg -framerate 24 -pattern_type glob -i 'shots/clip/f*.png' \
+  -c:v libx264 -crf 16 -pix_fmt yuv420p clip.mp4
+```
+
+**The number that made this easy was one nobody had computed.** The simulation
+runs at 125 steps a second — `WORLD.ptPerSec`, and `App.step()` matches it
+exactly (`_acc += speedMul * dtms / 8`, six steps capped per frame). An Ember
+Creeper reaches peak at step 2527. That is **20.2 seconds of real time for an
+entire life**, so the whole arc at 24 fps is 485 frames at a stride of 5.21
+steps, played at natural speed.
+
+This is not a naming quibble. The plan going in was "a growth timelapse *or* a
+wind clip", and a timelapse has to pick a stride — which is a sampling rate. The
+stem's own bending mode is 0.56-0.64 Hz and the fastest gust in the shipped
+field is 1.78 Hz, so anything under ~3.6 Hz aliases the wind into a judder that
+looks like a bug in the solver. **At 24 fps nothing in the clip aliases, and the
+growth and the wind are the same footage.** The dichotomy was false.
+
+**A frame is a whole specimen, not a deformation.** Organs appear, axes branch,
+new strands canalise — the topology changes every frame, so there is no
+shape-key or mesh-cache route to a growing plant. Measured on the shipped hero:
+13.2 MB mean, 25.2 MB at peak (211k triangles, 21k strands), **6.3 GB for 485
+frames, exported in 14 seconds**. A *stand* is 128 MB a frame, which is why the
+film is one specimen and a sky rather than one specimen and a clearing — see
+below for the way round that.
+
+### ⚠ The rig is composed once, from the clip and not from a frame
+
+`film()` places every lamp at a multiple of `r` and powers it at `r*r`, where
+`r` is the subject's own extent. That was fixed last session so a garden's
+*clearing* could not light the hero; **a growing plant walks into the same trap
+from the other side.** Rebuild the rig per frame and a seedling gets a
+seedling's key while the grown plant gets a grown plant's — the exposure crawls
+for twenty seconds and all four lamps slide outward as the plant rises.
+
+So `blender_clip.mjs` computes `span` and `pivot` **once**, off `seq.json`'s
+union bbox over every frame, and passes them to all 485 renders identically.
+`film()` overrides `ctr`, `height`, `width` *and* `r` from them, which makes the
+camera, the four lamps, the sky and the width floor all invariant to what the
+plant is doing. That invariance is the only reason this is a film rather than a
+slideshow of separately-lit stills — and it was free, because the fix for the
+garden was the fix for this.
+
+Confirmation that the automatic framing is sane: it derives `span 3.611 m,
+pivot [0.297, -0.034, 1.388]` against last session's hand-dialled hero values of
+`span 3.6, pivot [0.31, -0.04, 1.46]`.
+
+**The width floor comes out temporally stable for free**, and it is worth
+checking rather than assuming: `floor_radii` is driven by `focus`, `lens` and
+`res`, all of which are now fixed, so every frame reports **2.43 mm** — the same
+physical width as the 4K still, because `px_ref` is doing its job.
+
+### The plant is a speck for the first two seconds, and that is the trade
+
+Measured on the shipped hero, against a frame composed for the final size:
+
+| reaches | at frame | of 485 | at |
+|---|---|---|---|
+| 10% of final height | 60 | | 2.5 s |
+| 25% | 115 | | 4.8 s |
+| 50% | 190 | | 7.9 s |
+| 75% | 349 | | 14.6 s |
+| 90% | 399 | | 16.6 s |
+
+Growth is near-linear, not sigmoid. A fixed frame therefore holds a speck at the
+bottom for ~2.5 s and something under a quarter height for ~5 s. **That is the
+right trade and it is deliberate** — a subject the camera keeps at constant size
+does not read as growing, it reads as a zoom — but it is a composition choice,
+and `SPAN`, `PIVOT` and `PIVOT_F` are there to overrule it. `PIVOT_F` defaults
+to 0.46 rather than 0.5 because the plant grows *up out of its base*, so aiming
+at the true centre of the final specimen puts the first third of the film below
+the frame's midline.
+
+### A frozen background is invisible, and here is the arithmetic
+
+The empty frame wants a stand behind it, and the objection is that a stand
+exported once cannot sway while the hero does. Measured rather than argued —
+per-frame sway from `motion.mjs` (5.2 mm median at the busiest station) against
+the defocus circle at f/2.8 focused at 9 m, both in pixels of a 1200-wide frame:
+
+| distance | sway | defocus |
+|---|---|---|
+| 9 m (the hero) | 1.93 px/frame | 0.0 px |
+| 15 m | 1.16 px/frame | **5.4 px** |
+| 25 m | 0.69 px/frame | **8.6 px** |
+| 40 m | 0.43 px/frame | **10.4 px** |
+
+**At 15 m a background plant's whole per-frame travel is a fifth of its own blur
+circle**, so a static stand at that distance or further is indistinguishable
+from a live one. The stand costs 128 MB *once* rather than 62 GB, and the
+constraint it buys is a floor on how near the nearest background plant may
+stand — `GARDEN_NEAR` in world units, and `WORLD.unitM` is 0.0625, so 15 m is
+240 units and not 15.
+
+### One Blender process per frame
+
+The argument is already at the top of `blender_shot.py`: an interactive Blender
+accumulates state and rendering can *just stop* — `bpy.ops.render.render()`
+returning `{'FINISHED'}` in 0.07 s with an empty result, in a fresh scene,
+unrecoverable from script. Over 485 frames that is not a risk worth carrying to
+save ~3 s of startup each.
+
+It also buys two things for free. **The job resumes exactly where it died**,
+because a frame with a PNG is a frame that is done (`FORCE=1` overrides), and it
+parallelises with `JOBS=`. `FROM`/`TO` slice by frame index — the plant is still
+stepped from zero either way, because growth is a state and not a function of
+the frame index, and a plant cannot be rewound.

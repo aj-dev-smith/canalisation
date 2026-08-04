@@ -211,8 +211,14 @@ if (mesh === 'full') { app.bladeMU = 1e9; app.bladeMV = 1e9; app.bladeRef = 1e-9
 // is there to sweep it, not to be left off.
 setView(v3(0, 4, 15), wFloor, 0);
 
+// `GARDEN_ONLY=1` exports the STAND WITHOUT ITS HERO, which is what a film
+// needs: `blender_seq.mjs` supplies a hero per frame at the origin, and a
+// second one baked into the set would stand inside it. The specimen is still
+// grown — it seeds the garden's PRNG and, more importantly, it owns the wind
+// that the whole clearing has to be standing in.
 const B = new Capture();
-App.prototype.drawSpecimen.call(app, B, S, null);
+const heroOnly = process.env.GARDEN_ONLY !== '1';
+if (heroOnly) App.prototype.drawSpecimen.call(app, B, S, null);
 
 // THE HERO'S OWN EXTENT, MEASURED BEFORE ANYTHING ELSE IS PLANTED. A garden's
 // bbox is the whole clearing, and a camera framed on that frames a wide shot of
@@ -378,8 +384,13 @@ const header = {
     laminaMul: S.pal.laminaMul,
   },
   bbox: { min: bb.slice(0, 3), max: bb.slice(3) },
-  // the SUBJECT's extent, which is not the SET's once a garden is planted
-  heroBbox: { min: heroBB.slice(0, 3), max: heroBB.slice(3) },
+  // the SUBJECT's extent, which is not the SET's once a garden is planted —
+  // and null when `GARDEN_ONLY` means there is no subject in this file at all.
+  // An absent hero must be an explicit null rather than six Infinities, which
+  // is what the unwritten bbox holds and what `JSON.stringify` would quietly
+  // serialise as null anyway. Same bug as the missing `bg` key: a consumer
+  // cannot tell "no such thing" from "nobody asked".
+  heroBbox: heroOnly ? { min: heroBB.slice(0, 3), max: heroBB.slice(3) } : null,
   garden: gardenPlan.map(p => ({ name: p.name, seed: p.seed, origin: p.origin,
     warm: p.warm, stage: p.stage, organs: p.organs })),
   organs: S.plant.axes.reduce((n, a) => n + a.organs.length, 0),
