@@ -232,10 +232,26 @@ const header = {
   // exposure, vignette) is NOT applied here and should not be. A path tracer
   // does its own tone mapping, and baking a real-time grade into vertex colours
   // would be grading twice.
+  // WRITE THE KEYS THE PALETTE ACTUALLY HAS. This said `bg: S.pal.bg` for a
+  // while and there is no `bg` — a species carries `bgTop`, `bgBot` and
+  // `bgGlow`, so `JSON.stringify` dropped the key entirely and every consumer
+  // silently fell back to its own default. That put an Ember Creeper, whose own
+  // background is 0.030/0.010/0.010 of warm near-black, in a blue-grey room.
+  // An undefined that survives serialisation as an ABSENT KEY is the quiet
+  // version of this bug: `pal.get('bg', default)` cannot tell "no such colour"
+  // from "nobody asked".
   palette: {
-    glow: S.pal.glow, bg: S.pal.bg,
+    glow: S.pal.glow,
+    bgTop: S.pal.bgTop, bgBot: S.pal.bgBot, bgGlow: S.pal.bgGlow,
+    fog: S.pal.fog, fogD: S.pal.fogD,
     stem0: S.pal.stem0, stem1: S.pal.stem1,
-    blade0: S.pal.blade0, blade1: S.pal.blade1, vein: S.pal.vein,
+    blade0: S.pal.blade0, blade1: S.pal.blade1,
+    vein: S.pal.vein, veinTint: S.pal.veinTint,
+    fruit0: S.pal.fruit0, fruit1: S.pal.fruit1,
+    petal0: S.pal.petal0, petal1: S.pal.petal1,
+    key: S.pal.key, keyCol: S.pal.keyCol,
+    ambTop: S.pal.ambTop, ambBot: S.pal.ambBot,
+    laminaMul: S.pal.laminaMul,
   },
   bbox: { min: bb.slice(0, 3), max: bb.slice(3) },
   organs: S.plant.axes.reduce((n, a) => n + a.organs.length, 0),

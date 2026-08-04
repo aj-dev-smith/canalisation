@@ -66,6 +66,20 @@ def _to_blender(p, scale):
     return out * scale
 
 
+# The species' own background, which is the right colour for a room to be when
+# the point of the picture is what the plant emitted. There is no single `bg`
+# key — a palette carries `bgTop` and `bgBot` and the shipped renderer runs a
+# gradient between them — so this takes the darker end, which is what the plant
+# is actually seen against. Falls back only if the header predates the fix.
+def bg_colour(H, default=(0.02, 0.03, 0.05)):
+    pal = (H or {}).get("palette") or {}
+    for k in ("bgBot", "bgTop", "bg"):
+        c = pal.get(k)
+        if c:
+            return list(c)
+    return list(default)
+
+
 def _aim(ob, eye, target):
     ob.location = eye
     look = Vector(target) - Vector(eye)
@@ -422,7 +436,7 @@ def setup_scene(H=None, res=(1440, 1800), samples=128, lens=85.0, fstop=2.8,
     world.use_nodes = True
     bgn = world.node_tree.nodes.get("Background")
     if bgn:
-        c = bg or (H or {}).get("palette", {}).get("bg", [0.02, 0.03, 0.05])
+        c = bg or bg_colour(H)
         bgn.inputs[0].default_value = (c[0], c[1], c[2], 1.0)
         bgn.inputs[1].default_value = 1.0
 
