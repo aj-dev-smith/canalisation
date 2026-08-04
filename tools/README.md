@@ -413,3 +413,61 @@ catch.
 
 Do not read the existing `hero()` defaults as tuned. They were reached by
 looking at renders that were missing most of their vein network.
+
+---
+
+## `--look shipped` — the reference match, and what building it corrected
+
+Steps 1 and 2 above are built (`blender_look.py`, `--look shipped`). Three
+things the diagnosis above got wrong or missed, all found by **going and looking
+at a browser capture of the same specimen** rather than reading `src/` harder.
+That capture is `node tools/views_shot.mjs OUT "Ember Creeper" 7 60000` and it
+should have been the first thing done, not the fifth.
+
+- **`MINW`'s module default of 0.004 is not the number the piece runs at.**
+  `70_app.js` calls `setView(cam.eye, cam.dist * px * 1.5, px)`, so the shipped
+  floor is **one and a half pixels of half-width**, recomputed every frame from
+  the camera — about 0.077 sim units at hero framing, nineteen times the module
+  default. That is why "ninety percent of the hero's veins are already sub-pixel
+  and already clamped up to the floor" is true and not self-contradictory: they
+  are sub-pixel by chemistry and pixel-sized by the time they are drawn. A pixel
+  floor cannot be baked into a view-independent export, so `blender_look` applies
+  it after framing, where the browser applies it too. `WFLOOR` still ships at
+  `MINW` because flooring twice is harmless when the second floor is larger.
+- **`bgGlow` was missing entirely, and it is most of the frame.** `BG_FS` adds
+  `uGlow * exp(-d*2.1)` — a warm halo behind the specimen, in *screen* space.
+  A world shader cannot express it, so the plant renders on alpha and the
+  background is composited under it, which is the browser's own draw order. This
+  is the single largest visual difference between the first `shipped` render and
+  the browser, and no amount of reading `MESH_FS` would have found it.
+- **The grade is reproducible almost exactly, and the compositor has the pieces.**
+  `CompositorNodeImageCoordinates`'s `Normalized` output *is* `uv`, so the ACES
+  fit, `1 - vig*dot(d,d)*1.6`, and `hash(uv*vec2(1024,768))` grain are the real
+  expressions rather than approximations. The first draft reached for a blurred
+  ellipse mask and wrote a comment excusing it; the node that made the excuse
+  unnecessary was in the same listing that explained why `CompositorNodeTexture`
+  had stopped existing. **Ask the API what it has before deciding what it lacks.**
+
+Three traps in that file, all of which render without erroring:
+
+- **`CompositorNodeImageCoordinates` needs its `Image` input linked.** Unlinked,
+  every output is zero: flat background, no halo, and a vignette that is a
+  constant. Nothing warns.
+- **`CompositorNodeAlphaOver` is `(Background, Foreground, Factor)` in 5.x** and
+  was `(Factor, Image, Image)` before. Wiring by index put the render on the
+  Factor socket and left Background at its default 0.8 grey, which reads as a
+  blown-out frame rather than as a mis-wire. Same family as the four-sockets-
+  called-`A` trap — **link by name.**
+- **The view transform must be `Standard`.** The ACES fit is rebuilt in the
+  compositor, so AgX on top of it is grading twice.
+
+It is also **fast**: no lights, no BSDF, nothing bounces, so 32 spp is plenty and
+a 1600x2000 frame is about 7 s against nine minutes for the hero rig. Sampling is
+doing anti-aliasing and nothing else.
+
+What is honestly not matched, and is documented at the top of `blender_look.py`:
+depth of field (a screen-space blend, not an aperture), and **occlusion** — the
+browser's line pass writes no depth, so veins add light through the tissue in
+front of them, whereas here the lamina is opaque emission. That one is left alone
+deliberately: it is the only place the path tracer is both more correct and
+darker, and it should be seen rather than papered over.

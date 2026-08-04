@@ -47,15 +47,21 @@ def main(argv):
                     help="JSON kwargs forwarded to blender_import.build()")
     ap.add_argument("--turntable", type=int, default=0,
                     help="render N frames of an orbit into --out as a directory")
+    ap.add_argument("--look", default="hero", choices=("hero", "shipped", "neutral"),
+                    help="hero = art direction; shipped = reproduce 60_render.js; "
+                         "neutral = the import's own check rig")
     ap.add_argument("--neutral", action="store_true",
-                    help="use blender_import.setup_scene instead of the hero rig")
+                    help="deprecated alias for --look neutral")
     ap.add_argument("--blend", default="",
                     help="also save the assembled scene to this .blend")
     a = ap.parse_args(argv)
 
     here = os.path.dirname(os.path.abspath(__file__))
+    # Load order matters: each module picks the earlier ones up out of
+    # `sys.modules` at import time, so `look` must come after `hero`.
     ci = _load("ci", os.path.join(here, "blender_import.py"))
     hero = _load("hero", os.path.join(here, "blender_hero.py"))
+    look = _load("look", os.path.join(here, "blender_look.py"))
 
     import bpy
     for ob in list(bpy.data.objects):
@@ -65,10 +71,14 @@ def main(argv):
     H = ci.build(a.export, **json.loads(a.build))
     print(f"  imported in {time.perf_counter() - t0:.1f}s")
 
-    if a.neutral:
-        ci.setup_scene(H, **json.loads(a.hero))
+    mode = "neutral" if a.neutral else a.look
+    kw = json.loads(a.hero)
+    if mode == "neutral":
+        ci.setup_scene(H, **kw)
+    elif mode == "shipped":
+        look.shipped(H, **kw)
     else:
-        hero.hero(H, **json.loads(a.hero))
+        hero.hero(H, **kw)
 
     if a.blend:
         os.makedirs(os.path.dirname(os.path.abspath(a.blend)), exist_ok=True)

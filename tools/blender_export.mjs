@@ -35,7 +35,7 @@ import { App, SPECIES } from '../src/70_app.js';
 import { Buffers, setView } from '../src/50_geom.js';
 import { WORLD } from '../src/37_wind.js';
 import { v3 } from '../src/00_math.js';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 // --- a stand-in App --------------------------------------------------------
@@ -115,6 +115,22 @@ const until = process.env.STAGE || '';
 const mesh = process.env.MESH || 'full';
 const out = process.env.OUT || `export/${name.toLowerCase().replace(/\W+/g, '_')}_${seed}_${viewName}`;
 
+// THE SHIPPED WIDTH FLOOR, READ OFF THE SHIPPED FILE. `MINW`'s default is not
+// exported — and a harness that keeps its own copy of a shipped constant will
+// eventually draw a different program than the one you are running, which is
+// the lesson `test/stem.mjs` learned by hardcoding a wind speed. So this greps
+// it and dies if the shape ever changes, rather than quietly reverting to a
+// number somebody typed. `PXR` is angular, so in the browser the floor varies
+// with distance and `MINW` is its value AT THE FRAMING DISTANCE — which is the
+// right constant for a hero render of a framed subject.
+const src = readFileSync(new URL('../src/50_geom.js', import.meta.url), 'utf8');
+const m = src.match(/\bMINW\s*=\s*([0-9.eE+-]+)/);
+if (!m) {
+  console.error(`could not read MINW's default out of src/50_geom.js — has it been renamed?`);
+  process.exit(1);
+}
+const wFloor = process.env.WFLOOR !== undefined ? +process.env.WFLOOR : +m[1];
+
 if (!SPECIES[name]) {
   console.error(`no such species: ${name}\n  ${Object.keys(SPECIES).join('\n  ')}`);
   process.exit(1);
@@ -180,11 +196,20 @@ if (mesh === 'full') { app.bladeMU = 1e9; app.bladeMV = 1e9; app.bladeRef = 1e-9
 // so a real-time frame can drop veins that land under a pixel at the camera's
 // framing distance; a path tracer has no framing distance and no frame budget,
 // and this is the one export where every vein the chemistry grew should come
-// across. `minWorld` is small for the same reason — `MINW` is a *pixel* floor
-// on ribbon width, and a floor measured in pixels has no meaning here. Setting
-// it to a real vein's own scale is what keeps the hierarchy legible as
-// thickness instead of flattening the thin ones onto one width.
-setView(v3(0, 4, 15), 1e-4, 0);
+// across.
+//
+// ⚠ THE WIDTH FLOOR IS NOT PART OF THAT, AND ASSUMING IT WAS COST A DAY. This
+// line used to pass `1e-4` with a paragraph arguing that `MINW` is a *pixel*
+// floor and a pixel floor has no meaning in a path tracer. The physics is right
+// and the picture is wrong: measured on a Cathedral Fern, the MEDIAN vein sits
+// exactly at the shipped floor and the thinnest are 12x under it, so `MINW` is
+// what lifts more than half the network to a visible common width. Drawing the
+// hierarchy at its true scale draws most of it at no scale at all, and a leaf
+// comes out a flat disc. It is the ROADMAP 13 needle result again — botanical
+// correctness and legibility of the mechanism point opposite ways here, and the
+// project's claim is the second one. Default is the shipped `MINW`; `WFLOOR=`
+// is there to sweep it, not to be left off.
+setView(v3(0, 4, 15), wFloor, 0);
 
 const B = new Capture();
 App.prototype.drawSpecimen.call(app, B, S, null);
@@ -228,6 +253,9 @@ const header = {
   // what makes a physical camera in Blender mean anything: a 2.88 m sapling has
   // to be 2.88 m if depth of field is going to behave like a lens.
   unitM: WORLD.unitM,
+  // What the ribbon widths in `seg` were floored at, so a consumer can tell a
+  // swept export from a shipped-look one without guessing from the numbers.
+  wFloor,
   // A vein's colour is already the palette's; the renderer's grade (bloom,
   // exposure, vignette) is NOT applied here and should not be. A path tracer
   // does its own tone mapping, and baking a real-time grade into vertex colours
@@ -272,8 +300,20 @@ mkdirSync(dirname(out), { recursive: true });
 writeFileSync(`${out}.json`, JSON.stringify(header, null, 2));
 writeFileSync(`${out}.bin`, bin);
 
+// WHAT THE FLOOR DID, PRINTED. The whole reason this export looked wrong for a
+// day was a width distribution nobody was looking at, so it is in the summary
+// now: if `at floor` is a large fraction, that is not a defect — it IS the
+// mechanism by which the network stays visible.
+const ws = [];
+for (let i = 6; i < seg.length; i += 12) { ws.push(seg[i], seg[i + 1]); }
+ws.sort((a, b) => a - b);
+const q = (f) => ws.length ? ws[Math.min(ws.length - 1, Math.floor(f * ws.length))] : 0;
+const atFloor = ws.filter(w => w <= wFloor * 1.0001).length / (ws.length || 1);
+
 const mb = (n) => (n / 1048576).toFixed(1);
 console.log(`
+  vein width  floor ${wFloor}  p10 ${q(0.1).toFixed(5)}  median ${q(0.5).toFixed(5)}  p90 ${q(0.9).toFixed(5)}  max ${(ws[ws.length - 1] || 0).toFixed(5)}
+              ${(atFloor * 100).toFixed(1)}% of ribbon ends sit AT the floor
   ${name}  seed ${seed}  view ${viewName}  stage ${stage}
   ${header.axes} axes, ${header.organs} organs
   ${(tri.length / 30).toLocaleString()} triangles
