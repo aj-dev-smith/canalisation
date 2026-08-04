@@ -471,3 +471,90 @@ browser's line pass writes no depth, so veins add light through the tissue in
 front of them, whereas here the lamina is opaque emission. That one is left alone
 deliberately: it is the only place the path tracer is both more correct and
 darker, and it should be seen rather than papered over.
+
+---
+
+## `--look film` — the production rig, and four bugs that all looked like taste
+
+`blender_film.py` is the fourth layer: **fidelity** (`blender_import`), **reference**
+(`blender_look`), **taste** (`blender_hero`), **production** (this). It is the only
+one allowed to add detail, so it is the one that has to justify every addition
+against the project's single rule.
+
+**Nothing here invents a silhouette, a count, an angle or a curve.** Every piece
+of added detail is either a physical constant that was already in the codebase or
+a field the plant's own chemistry canalised:
+
+| Added | Where it comes from |
+|---|---|
+| Lamina thickness, 0.4 mm | `FALL_DEFAULTS.thickM` in `39_fall.js` — measured, months old, needed by the falling-blade model |
+| Areole doming, and the shading field under it | Geometry Proximity against the canalised vein curves — the same `nearVein()` field `50_geom.js` already uses for `veinTint` and for a dying blade's drain order |
+| Vein calibre variation | the `radius` attribute, which is traffic |
+
+The lamina thickness is worth dwelling on: a blade in the browser is a
+*zero-thickness sheet*, so giving it its real thickness **removes** an
+approximation rather than adding a shape. It is also what produces the bright
+margin on a backlit leaf, which is the single most recognisable thing a leaf does
+and something a plane cannot do at all.
+
+### The four bugs, because every one presented as a look problem
+
+1. **`blender_import` builds an unwelded triangle soup.** `vertices.add(n)` with
+   one vertex per *corner*, so no triangle shares a vertex with its neighbour.
+   Harmless while the mesh is only ever shaded — custom split normals make it look
+   like a smooth surface and every render before this one did. The moment
+   Solidify treats it as a solid, every triangle becomes its own closed slab and a
+   leaf renders as ~2,350 separate tiles, reading as fish scales or quilted fabric.
+   **A `WELD` modifier at 1 micron fixes it** (the duplicates are bit-identical
+   positions, so nothing else merges).
+
+   **It cost four renders, and the reason is the lesson.** The artefact looked
+   exactly like a material or displacement problem, so it was chased through vein
+   widths (20x), subsurface radius (4x), coat roughness, and the doming amplitude
+   down to zero — four large independent changes, four byte-similar images.
+   **Four changes that all do nothing is not a look problem; it means the thing
+   you are adjusting is not the thing you are seeing.** The decisive test was
+   cheap and should have been first: set the leaf material to near-black and see
+   whether the pattern survives. It did.
+
+2. **Proximity in `POINTS` mode against 2-point strands measures distance to
+   isolated dots**, not to veins, and produces a lump per dot — a leaf quilted in
+   a regular diamond grid. `Curve To Mesh` (no profile) then `EDGES` mode is a
+   true distance-to-line field, which is what `nearVein()` computes and what an
+   areole actually is.
+
+3. **The air was a box, and a box has edges.** The first film render had a hard
+   dark band ruled straight across the middle of the frame: the top face of the
+   haze cube, seen from inside. Scaling it up only moves the seam. A **world
+   volume** has no boundary to find and costs the same.
+
+4. **The ground blew out to white at an albedo of 0.005**, which diffuse
+   reflection cannot do at any light level — the arithmetic says so, and checking
+   the arithmetic is what turned the search around after two wrong guesses (the
+   bounce light, then the material not being applied; the material *was* applied,
+   verified by saving the .blend and reading it back). It is grazing **specular**
+   off a low backlight, where Fresnel goes to 1 no matter how dark the surface is.
+   **A dark floor is not a dim floor** — roughness and a low specular level are
+   what make it dim.
+
+### Two honest limitations, documented rather than papered over
+
+- **Veins are drawn on one face.** In the browser they are camera-facing
+  billboards blended additively, so they read from both sides of a lamina; here
+  they are real tubes on the surface the emitter put them on, so **a leaf turned
+  away from camera is a smooth sheet.** Frame for it. Fixing it by mirroring the
+  curves onto the back face would be inventing venation that the chemistry did
+  not grow.
+- **The width floor and the close-up pull in opposite directions.** At whole-plant
+  framing the floor is what makes the network visible at all; at a single-leaf
+  framing the same 1.5-pixel floor makes a median vein 0.46 mm on a 130 mm leaf,
+  and 235 of those cover the blade. `vein_scale` and `px_floor` are the two knobs,
+  and `scale_radii` leaves every *ratio* — the hierarchy, which is the actual
+  canalisation result — untouched.
+
+### Cost
+
+No lights and no BSDF in `--look shipped` means 32 spp is plenty there. `film` is
+the opposite: real subsurface through a 0.4 mm sheet, a world volume and physical
+DOF. Budget ~35 s for an 880x1100 preview at 96 spp and tens of minutes for a 4K
+frame at 1024 spp with adaptive sampling at 0.004.
