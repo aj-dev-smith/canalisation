@@ -61,17 +61,42 @@ function standIn(over) {
 }
 
 // --- the capturing buffer --------------------------------------------------
+//
+// THE BUFFERS GROW HERE, AND THEY MUST. `Buffers` is sized for a clearing at 60
+// fps and drops geometry when it fills — deliberately, and it says so, which is
+// how this was caught. But a frame budget is the wrong constraint for a file:
+// an Ashfall Spire at the solver's own lamina resolution wanted 1.44 M triangles
+// and the shipped triangle buffer holds 279,620, so the first conifer export
+// went out with 80% of the tree missing and a saturation warning that only
+// exists because that pitfall had already cost two sessions.
+//
+// Overriding the emitters rather than just allocating something enormous, so
+// that "big enough" is not a number anybody has to be right about.
+function grown(a) {
+  const b = new Float32Array(a.length * 2);
+  b.set(a);
+  return b;
+}
+
 class Capture extends Buffers {
   constructor() {
     super();
     // a, b, w0, w1, rgb, emis = 12 floats per segment
-    this.seg = new Float32Array(1 << 22);
+    this.seg = new Float32Array(1 << 20);
     this.segN = 0;
     this.dropped.seg = 0;
   }
+  vert(p, n, c, e) {
+    if (this.triN + 10 > this.tri.length) this.tri = grown(this.tri);
+    super.vert(p, n, c, e);
+  }
+  point(p, c, s) {
+    if (this.ptN + 7 > this.pt.length) this.pt = grown(this.pt);
+    super.point(p, c, s);
+  }
   ribbon(a, b, side, w0, w1, c, e) {
+    if (this.segN + 12 > this.seg.length) this.seg = grown(this.seg);
     const s = this.seg; let i = this.segN;
-    if (i + 12 > s.length) { this.dropped.seg++; return; }
     s[i] = a[0]; s[i + 1] = a[1]; s[i + 2] = a[2];
     s[i + 3] = b[0]; s[i + 4] = b[1]; s[i + 5] = b[2];
     s[i + 6] = w0;  s[i + 7] = w1;
@@ -164,8 +189,15 @@ setView(v3(0, 4, 15), 1e-4, 0);
 const B = new Capture();
 App.prototype.drawSpecimen.call(app, B, S, null);
 
+// A TRUNCATED FILE IS WORSE THAN NO FILE, because the picture it makes is
+// merely missing things and looks like a plant. The buffers grow, so this
+// should now be unreachable — it is here because it was NOT unreachable before
+// they did, and the first conifer export shipped 80% short with only a warning.
 const sat = B.saturated();
-if (sat) console.error(`  !! BUFFER SATURATED — geometry was dropped: ${JSON.stringify(sat)}`);
+if (sat) {
+  console.error(`  !! BUFFER SATURATED — geometry was dropped: ${JSON.stringify(sat)}`);
+  process.exit(1);
+}
 
 // --- bounds ----------------------------------------------------------------
 const bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
