@@ -283,3 +283,70 @@ the plant up to fill the frame; move the camera.**
 No part of the real-time grade — bloom, exposure, vignette — comes across, and
 none should. Those are a rasteriser's substitutes for light transport. Vertex
 colours are the palette's own linear values, and Cycles does its own tone map.
+
+### The hero rig — `blender_hero.py` and `blender_shot.py`
+
+`blender_import.setup_scene` is a NEUTRAL framing: three area lights, a flat
+background, no point of view. That is right for checking an import and wrong for
+a picture. `blender_hero.py` is the point of view, and it is a separate file so a
+look-dev decision can never be mistaken for a fidelity one.
+
+```bash
+B=/Applications/Blender.app/Contents/MacOS/Blender
+$B -b -P tools/blender_shot.py -- \
+  --export export/ember_creeper_7_natural --out shots/hero.png \
+  --build '{"vein_emis_mul": 14.0}' \
+  --hero  '{"samples": 640, "res": [2000, 2500], "azimuth": 285, "air": 0.030}'
+```
+
+**Render from the CLI, not over MCP.** The bridge is the right tool for LOOKING
+at a scene and a bad one for rendering it. Mid-session, `bpy.ops.render.render()`
+in the interactive Blender started returning `{'FINISHED'}` in 0.07 s with an
+empty result — in a brand new scene containing one sphere, so it was the session
+and not the file — and nothing recovered it from a script. A fresh process per
+render cannot get into that state, and a movie-grade frame is minutes, which has
+no business blocking the app you are watching the scene in. `--blend` saves the
+assembled scene if you want to open it and push it by hand.
+
+**The idea is that the plant is the light source.** The veins already *are*
+emission (`vec3 c = vC * vE`) and `makeSpecimen` pulls the lamina down by
+`laminaMul` so they win. A rasteriser can only add that light to the pixels a
+vein covers; a path tracer lets it leave the plant. So the rig is a dark room
+with a plant that glows, plus the minimum needed to read a silhouette.
+
+Five things in here that are not preferences, and one Blender trap:
+
+- **Backlight leads, and it is switched out of the volume.** A lamina is a
+  translucent sheet; front-lit these are red flakes, back-lit the light comes
+  through the tissue and the vein network shows *inside* it. But a backlight
+  strong enough to do that also fills the volume, and the first version traded
+  every bit of the darkness the picture depends on for it. `visible_volume_scatter
+  = False` on the practicals separates them: they shape tissue, and the only
+  thing in the air is light the plant emitted.
+- **The rig is camera-relative.** It was world-space first, which is fine at one
+  azimuth and wrong the moment the camera orbits — at 285° the "rim" had swung to
+  the front and become a second key. Four stills at four azimuths did not show
+  this, because each is a plausible design on its own. **A turntable would have.**
+- **`geo_bounds` frames the geometry, not the bounding box.** A creeper's extremes
+  are three outlying leaves on long petioles, so the box centre lands in empty air
+  beside the plant and the camera points at nothing. Percentiles of the drawn
+  points, 2% trimmed off each end.
+- **The world runs the species' own `bgTop`→`bgBot` gradient.** An Ember Creeper's
+  are 0.030 and 0.006 of warm near-black — a factor of five, which is the entire
+  tonal range the picture has to work in.
+- **The grade is rebuilt from the render, not imported.** The piece has bloom, a
+  vignette, grain and chromatic aberration of its own, and `blender_import`
+  deliberately brings none of it across; a rasteriser's bloom is a substitute for
+  light transport and doing both is grading twice. The glare here is a convolution
+  of light that was actually emitted and actually travelled.
+- ⚠ **In Blender 5.x the compositor is a node group, and its group INPUT is not
+  the render.** You need a `Render Layers` node *inside* the group. Measured on a
+  200 px sphere: no compositor and an RLayers graph write byte-identical
+  31,426-byte files; a group-input-to-group-output passthrough writes 9,354 bytes
+  of blank. **It costs no render time**, which is the trap — wall clock fell from
+  4.6 s to 0.2 s, which reads like the render being skipped rather than like the
+  picture being thrown away at the last step.
+- ⚠ **`ShaderNodeMix` has four inputs called "A"** and three outputs called
+  "Result", separated only by identifier (`A_Float`, `A_Color`, …).
+  `node.inputs["A"]` silently returns the float one, so a colour graph written by
+  name links, renders, and is wrong. `_sock()` exists for this.
