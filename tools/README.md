@@ -669,3 +669,42 @@ Geometry is not the constraint here; it never was.
   is the one thing the stand still visibly wants, and it needs a *finite* volume
   whose far wall is behind everything the camera can see — at which point the
   wall itself becomes the thing to go looking for in the frame. Unbuilt.
+
+### ⚠ THE WIDTH FLOOR IS A PIXEL FLOOR, SO A PREVIEW IS A DIFFERENT PLANT
+
+The single most expensive thing to not know in this file, and it was found by
+looking at a 4K frame after a whole ladder of previews had settled the look.
+
+`70_app.js` floors a vein at 1.5 px **of the canvas it is drawing into**, and
+that canvas is around a thousand pixels tall. Carried across as a literal 1.5 px
+of the *render*, the same vein on the same stand comes out:
+
+| framing | vein floor | strand ends at floor |
+|---|---|---|
+| 720x900 preview | **6.73 mm** | 100% |
+| 3200x4000 final | **1.51 mm** | 100% |
+
+**4.5x, in the direction nobody checks.** Every look decision in the ladder was
+taken on veins four and a half times fatter than the deliverable, and the first
+4K frame came back papery with the tracery faint — which reads as a sampling
+problem or a material problem and is neither.
+
+`px_ref` scales the floor to a reference canvas instead of to this frame, so a
+preview and a final are the same plant. `px_ref=0` opts out and gives literal
+render pixels back, which is right for judging the true *hierarchy* and wrong
+for judging the *look*.
+
+**And the bracket is the point, because the preview could not have found it.**
+At 4K: 1.51 mm is papery, **6.05 mm merges the marginal veins into a crust along
+every leaf edge**, 2.42 mm reads as tissue. At 720x900 the 6 mm version looked
+*right* — because a whole leaf is 90 pixels there and the sampler was doing the
+blending the veins are supposed to do. `px_ref=2500` is set by eye and is the
+only number in this rig that could not have been computed first; it is the same
+category as the wind's `uRef`.
+
+Note also that **100% of strand ends sit at the floor at whole-plant framing, at
+every resolution tried.** The floor is not lifting the thin tail of a
+distribution — at this framing it is setting *every* vein's width, so the
+hierarchy that canalisation grew is entirely flattened and what you are looking
+at is the network's *topology*, not its traffic. That is the honest reading of
+these frames, and it is what `vein_scale` and a close-up framing exist to undo.

@@ -780,7 +780,8 @@ def film(H, res=(3200, 4000), samples=1024, adaptive=0.004, lens=100.0,
          ground_rough=0.86, ground_spec=0.08, dome_mul=1.0,
          sky=12.0, sky_glow=1.0, glow_tight=2.4, backdrop=1.0, sky_bg=True,
          sss=0.62, sss_mm=1.4, coat=0.32, tint=1.35, emis_mul=3.0,
-         vein_mul=1.0, vein_scale=1.0, px_floor=1.5, do_grade=True, exposure=0.0,
+         vein_mul=1.0, vein_scale=1.0, px_floor=1.5, px_ref=2500.0,
+         do_grade=True, exposure=0.0,
          span=None, pivot=None,
          look_transform="AgX", contrast="AgX - Medium High Contrast"):
     """Everything. Returns the camera."""
@@ -870,7 +871,33 @@ def film(H, res=(3200, 4000), samples=1024, adaptive=0.004, lens=100.0,
     focus = ci._aim(cam, eye, ctr)
     cam["pivot"] = list(ctr); cam["dist"] = dist; cam["elev"] = elevation
 
-    look.floor_radii(obs, focus, lens, cam.data.sensor_width, res[0], px_floor)
+    # ⚠ THE WIDTH FLOOR IS A PIXEL FLOOR, SO A PREVIEW IS A DIFFERENT PLANT.
+    #
+    # `70_app.js` floors a vein at 1.5 px of the CANVAS it is drawing into, and
+    # that canvas is about a thousand pixels tall. Carried across as a literal
+    # 1.5 px of the RENDER, a 4000-pixel frame floors the same vein four times
+    # thinner: measured on this stand, 6.73 mm at 720x900 against 1.51 mm at
+    # 3200x4000, with 100% of strand ends sitting at the floor in BOTH. Every
+    # look decision in a ladder of previews was therefore taken on veins 4.5x
+    # fatter than the deliverable, and the 4K frame came back papery with the
+    # tracery gone faint — which reads as a sampling or a material problem and
+    # is neither.
+    #
+    # So the floor is scaled to the shipped canvas rather than to this frame:
+    # a hero render is a photograph of what the browser shows, and the browser
+    # shows 1.5 px of ~1000. `px_ref=0` opts out and gives literal render
+    # pixels back, which is the right thing for judging the true hierarchy and
+    # the wrong thing for judging the look.
+    #
+    # 2500 IS SET BY EYE AND IS THE ONLY NUMBER HERE THAT COULD NOT BE COMPUTED,
+    # the same category as the wind's `uRef`. Bracketed at 4K on this stand:
+    # 1.51 mm is papery and the tracery vanishes, 6.05 mm merges the marginal
+    # veins into a crust along every leaf edge, 2.42 mm reads as tissue. And the
+    # bracket is why a preview cannot settle it — at 720x900 the 6 mm version
+    # looked RIGHT, because a whole leaf is 90 pixels there and the sampler was
+    # doing the blending that the veins are supposed to do.
+    eff = px_floor * (res[1] / px_ref if px_ref else 1.0)
+    look.floor_radii(obs, focus, lens, cam.data.sensor_width, res[0], eff)
     scale_radii(obs, vein_scale)
     prep(H, dome_mul=dome_mul)
     leaf_material(H, sss=sss, sss_mm=sss_mm, coat=coat, tint=tint,
