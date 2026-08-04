@@ -323,8 +323,15 @@ def setup_scene(H=None, res=(1440, 1800), samples=128, lens=85.0, fstop=2.8,
     sc.render.film_transparent = False
     sc.view_settings.view_transform = "AgX"
     sc.view_settings.exposure = exposure
+    # THICK, NOT RIBBONS, AND THIS IS THE WHOLE REASON THE VEINS COME ACROSS AS
+    # CURVES. Cycles' RIBBONS mode renders a strand as a flat camera-facing
+    # sheet, which is precisely the billboard the exporter went to the trouble of
+    # throwing away — set it and the import faithfully reproduces the artefact it
+    # was built to remove. It was set to RIBBONS here for three renders before a
+    # picture showed a stem as a flat band, which is the tell — the numbers were
+    # right and the geometry was right and only looking at it caught this.
     if hasattr(sc, "cycles_curves"):
-        sc.cycles_curves.shape = "RIBBONS"
+        sc.cycles_curves.shape = "THICK"
 
     for junk in ("Cube",):
         ob = bpy.data.objects.get(junk)
