@@ -141,6 +141,22 @@ function launch() {
   p.stdout.on('data', d => { tail = (tail + d).slice(-4000); });
   p.stderr.on('data', d => { tail = (tail + d).slice(-4000); });
   p.on('close', code => {
+    // ⚠ RETIRE THIS PROCESS FIRST, AND THE REASON IS THE EXIT CODE.
+    //
+    // This used to be a second `close` handler registered after this one, and
+    // node runs handlers in registration order — so the completion test below
+    // still counted the process it was reporting on, `running()` was never
+    // false, and `done()` never fired.
+    //
+    // The symptom is NOT a hang, which is what it was first written up as and
+    // what it looks like it should be. Node drains its event loop and exits
+    // normally, so a 485-frame run ends **silently, with status 0**, having
+    // printed no summary. That is the dangerous version: `done()` is the only
+    // thing that calls `process.exit(fail ? 1 : 0)`, so a run in which frames
+    // FAILED also exited 0 and reported success to anything watching. Caught by
+    // running the real 485-frame job, which came back green with its last five
+    // lines being ordinary per-frame progress and no total.
+    live.delete(p);
     const dt = (Date.now() - started) / 1000;
     if (code === 0 && existsSync(`${outDir}/f${tag}.png`)) {
       ok++; times.push(dt);
@@ -156,7 +172,6 @@ function launch() {
     if (!nxt && !running()) done();
   });
   live.add(p);
-  p.on('close', () => live.delete(p));
   return p;
 }
 const live = new Set();

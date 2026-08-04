@@ -823,3 +823,32 @@ because a frame with a PNG is a frame that is done (`FORCE=1` overrides), and it
 parallelises with `JOBS=`. `FROM`/`TO` slice by frame index — the plant is still
 stepped from zero either way, because growth is a state and not a function of
 the frame index, and a plant cannot be rewound.
+
+### The whole life is 71 seconds, and 71% of it is dying
+
+Stage transitions for the shipped hero (Ember Creeper seed 7), in steps, in
+seconds, and in 24 fps frames:
+
+| step | | stage | frame |
+|---|---|---|---|
+| 1 | 0.0 s | seedling | 0 |
+| 160 | 1.3 s | leafing | 31 |
+| 789 | 6.3 s | flowering | 151 |
+| 1358 | 10.9 s | fruiting | 261 |
+| 1858 | 14.9 s | flowering | 357 |
+| 1925 | 15.4 s | ripe | 370 |
+| 2528 | 20.2 s | **senescing** | 485 |
+| 8908 | 71.3 s | **dead** | 1710 |
+
+**The shipped clip stops at frame 485**, the last frame before senescence — the
+fullest the specimen ever is, which is what `STAGE=peak` finds for a still. A
+seed-to-death film is 1710 frames and 71 seconds, three and a half times the
+render, and it would spend 51 of those 71 seconds on the leaf drop. That is a
+composition decision and not a technical one, so it is written down here rather
+than taken: nothing stops `blender_seq.mjs 'Ember Creeper' 7 8908` from
+producing it.
+
+⚠ If anyone does, note that raising the stride to compress the senescence is the
+one edit this rig forbids on measured grounds — see the aliasing note above.
+Under ~3.6 Hz of sampling the wind judders, and it judders *hardest* on the tall
+grown specimen that senescence happens to.
