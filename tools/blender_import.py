@@ -161,6 +161,58 @@ def _material(name, emis_mul=1.0, roughness=0.55, subsurface=0.0, ior=1.4,
     return mat
 
 
+# THE VEINS AND THE POINTS ARE LIGHT, NOT SURFACES, and this is not an
+# interpretation — it is what the renderer does. `60_render.js` draws the line
+# and point passes with `blendFuncSeparate(SRC_ALPHA, ONE)` and `depthMask(false)`,
+# and their fragment shader is one line: `vec3 c = vC * vE;`. No lighting term,
+# no occlusion, straight addition into the frame. A vein is emitted light with a
+# colour and a strength, and nothing else.
+#
+# Rendering it as a lit Principled tube — which is what this did first — gets two
+# things wrong at once. It adds a diffuse response the piece does not have, and
+# it OCCLUDES: the `flux` view's ghost stem, weighted 0.14 precisely so you can
+# see the tissue through it, came out as a solid white pillar down the middle of
+# the plant. The weight is a brightness, and a brightness only reads as
+# transparency if the thing is additive.
+#
+# `Add Shader(Emission, Transparent BSDF)` is the exact analogue: the transparent
+# branch passes the ray through unchanged, the emission adds on top. Shadow
+# casting goes off on the objects, because a light does not cast one.
+def _additive(name, mul=1.0):
+    mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    out.location = (600, 0)
+    add = nt.nodes.new("ShaderNodeAddShader")
+    add.location = (400, 0)
+    emit = nt.nodes.new("ShaderNodeEmission")
+    emit.location = (200, 100)
+    clear = nt.nodes.new("ShaderNodeBsdfTransparent")
+    clear.location = (200, -120)
+
+    col = nt.nodes.new("ShaderNodeAttribute")
+    col.attribute_name = "Col"
+    col.location = (-260, 140)
+    em = nt.nodes.new("ShaderNodeAttribute")
+    em.attribute_name = "emis"
+    em.location = (-260, -80)
+    m = nt.nodes.new("ShaderNodeMath")
+    m.operation = "MULTIPLY"
+    m.inputs[1].default_value = mul
+    m.location = (-60, -80)
+
+    nt.links.new(col.outputs["Color"], emit.inputs["Color"])
+    nt.links.new(em.outputs["Fac"], m.inputs[0])
+    nt.links.new(m.outputs["Value"], emit.inputs["Strength"])
+    nt.links.new(emit.outputs["Emission"], add.inputs[0])
+    nt.links.new(clear.outputs["BSDF"], add.inputs[1])
+    nt.links.new(add.outputs["Shader"], out.inputs["Surface"])
+    return mat
+
+
 def _attrs(data, col, emis, domain="POINT"):
     """Write the two channels every datablock here carries."""
     n = len(col)
@@ -269,7 +321,7 @@ def _points(name, buf, sec, scale, mat, size_mul=0.5):
 
 
 # ---------------------------------------------------------------------------
-def build(path, clear=True, emis_mul=1.5, vein_emis_mul=7.0):
+def build(path, clear=True, emis_mul=1.5, vein_emis_mul=1.0, solid_veins=False):
     """Import the `<path>.json` + `<path>.bin` pair. Returns the header dict."""
     path = os.path.splitext(path)[0]
     with open(path + ".json") as fh:
@@ -286,18 +338,28 @@ def build(path, clear=True, emis_mul=1.5, vein_emis_mul=7.0):
     scale = H["unitM"]
     S = H["sections"]
 
-    # A leaf scatters; a vein is the thing you are meant to see through it.
+    # A leaf is tissue and scatters; a vein is light. `solid_veins` gives them
+    # back a lit surface, which is wrong about the piece but is what you want if
+    # you are using an export as a model rather than as a picture of the piece.
     m_surf = _material("canalisation.surface", emis_mul=emis_mul,
                        roughness=0.42, subsurface=0.35, two_sided=True)
-    m_vein = _material("canalisation.vein", emis_mul=vein_emis_mul, roughness=0.30)
-    m_pt = _material("canalisation.point", emis_mul=vein_emis_mul, roughness=0.5)
+    if solid_veins:
+        m_vein = _material("canalisation.vein", emis_mul=vein_emis_mul,
+                           roughness=0.30)
+        m_pt = _material("canalisation.point", emis_mul=vein_emis_mul,
+                         roughness=0.5)
+    else:
+        m_vein = _additive("canalisation.vein", vein_emis_mul)
+        m_pt = _additive("canalisation.point", vein_emis_mul)
 
-    objs = [
-        _surfaces(f"{stem}.surfaces", buf, S["tri"], scale, m_surf),
-        _veins(f"{stem}.veins", buf, S["seg"], scale, m_vein),
-        _points(f"{stem}.points", buf, S["pt"], scale, m_pt),
-    ]
-    objs = [o for o in objs if o]
+    surf = _surfaces(f"{stem}.surfaces", buf, S["tri"], scale, m_surf)
+    lit = [_veins(f"{stem}.veins", buf, S["seg"], scale, m_vein),
+           _points(f"{stem}.points", buf, S["pt"], scale, m_pt)]
+    lit = [o for o in lit if o]
+    if not solid_veins:
+        for o in lit:          # light does not cast a shadow
+            o.visible_shadow = False
+    objs = ([surf] if surf else []) + lit
 
     H["_objects"] = [o.name for o in objs]
     H["_scale"] = scale

@@ -253,6 +253,18 @@ Four things it does differently from the browser, all of them deliberate:
   it is a request to stop throwing solved tissue away. Cathedral Fern seed 21:
   20,154 triangles at the browser's LOD, **274,568** at the solver's. `MESH=auto`
   keeps the browser's numbers, for an A/B against a screenshot.
+- **The veins are LIGHT, not surfaces, and that is measured off the shader.**
+  `60_render.js` draws the line and point passes with
+  `blendFuncSeparate(SRC_ALPHA, ONE)` and `depthMask(false)`, and their whole
+  fragment shader is `vec3 c = vC * vE;` — no lighting term, no occlusion. So
+  the vein and point materials are `Add Shader(Emission, Transparent BSDF)` with
+  shadow casting off, which is the exact analogue. Rendering them as lit
+  Principled tubes — which this did first — turned the `flux` view's ghost stem,
+  weighted `0.14` precisely so you can see tissue through it, into a solid white
+  pillar down the middle of the plant. A weight is a brightness, and a
+  brightness only reads as transparency if the thing is additive. `solid_veins=True`
+  puts the lit surface back, for using an export as a model rather than as a
+  picture of the piece.
 - **Two-sided leaves are `60_render.js` line 99, not a style choice.** That line
   is `if (dot(N,V) < 0.0) N = -N;` — a lamina is a one-sided sheet standing in
   for a two-sided organ. Cycles flips shading normals off the GEOMETRIC normal,
