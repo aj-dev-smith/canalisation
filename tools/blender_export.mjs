@@ -258,9 +258,34 @@ if (gardenN > 0) {
   const names = Object.keys(SPECIES);
   const rnd = mulberry32(gseed);
   const TAU = Math.PI * 2;
+  // AN ARC INSTEAD OF A RING, BECAUSE A RING IS NOT A BACKGROUND. `plantGarden`
+  // spreads a stand evenly around the hero, which is right for a scene you can
+  // orbit and wrong for a photograph: a hero framed at 3.2 m through a 100 mm
+  // lens sees a cone about 11 degrees wide, so a full ring puts one plant in
+  // ten anywhere near it and the rest off the sides — measured, and the first
+  // deep stand rendered as a specimen alone on an empty field.
+  //
+  // ⚠ THIS IS STAGING AND IT IS THE FIRST THING HERE THAT IS. Where a plant
+  // stands is not a simulation result and never was — `plantGarden` picks it
+  // with a PRNG too. Nothing about any PLANT is chosen: the arc moves where the
+  // camera is pointed, not what grows. Keep it that way.
+  //
+  //   GARDEN_AZ      degrees, GL frame, the direction the arc is centred on.
+  //                  For a render at `azimuth` A, the camera sits at GL angle
+  //                  `-(A - 90)`, so BEHIND the subject is `270 - A`: at the
+  //                  shipped A=105 that is 165. Unset = the even ring.
+  //   GARDEN_SPREAD  degrees, half-width of the arc. Default 180 (a ring).
+  //   GARDEN_NEAR/FAR  world units, overriding the 0.55..1.30 x radius band.
+  const azEnv = process.env.GARDEN_AZ;
+  const az0 = azEnv === undefined ? null : +azEnv * Math.PI / 180;
+  const spread = +(process.env.GARDEN_SPREAD || 180) * Math.PI / 180;
+  const dNear = +(process.env.GARDEN_NEAR || rad * 0.55);
+  const dFar = +(process.env.GARDEN_FAR || rad * 1.30);
   for (let i = 0; i < gardenN; i++) {
-    const ang = (i + 0.5) / gardenN * TAU + (rnd() - 0.5) * 0.9;
-    const d = rad * (0.55 + 0.75 * rnd());
+    const ang = az0 === null
+      ? (i + 0.5) / gardenN * TAU + (rnd() - 0.5) * 0.9
+      : az0 + ((i + 0.5) / gardenN * 2 - 1) * spread + (rnd() - 0.5) * spread * 0.5;
+    const d = dNear + (dFar - dNear) * rnd();
     gardenPlan.push({
       name: pick === '*' ? names[(rnd() * names.length) | 0] : pick,
       seed: (gseed + i * 7919) >>> 0,
