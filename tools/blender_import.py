@@ -66,6 +66,15 @@ def _to_blender(p, scale):
     return out * scale
 
 
+def _aim(ob, eye, target):
+    ob.location = eye
+    look = Vector(target) - Vector(eye)
+    ob.rotation_euler = look.to_track_quat("-Z", "Y").to_euler()
+    if ob.type == "CAMERA":
+        ob.data.dof.focus_distance = look.length
+    return look.length
+
+
 def _link(name, data):
     ob = bpy.data.objects.new(name, data)
     bpy.context.scene.collection.objects.link(ob)
@@ -381,10 +390,11 @@ def setup_scene(H=None, res=(1440, 1800), samples=128, lens=85.0, fstop=2.8,
     eye = Vector((ctr.x + dist * np.sin(ang),
                   ctr.y - dist * np.cos(ang),
                   ctr.z + dist * elevation))
-    cam.location = eye
-    look = ctr - eye
-    cam.rotation_euler = look.to_track_quat("-Z", "Y").to_euler()
-    cam.data.dof.focus_distance = look.length
+    focus = _aim(cam, eye, ctr)
+    # kept so `turntable` can orbit the same framing rather than re-deriving it
+    cam["pivot"] = list(ctr)
+    cam["dist"] = dist
+    cam["elev"] = elevation
 
     # A key and a fill, both large and soft, because everything here is thin and
     # translucent — a small hard source makes a leaf read as plastic.
@@ -411,7 +421,7 @@ def setup_scene(H=None, res=(1440, 1800), samples=128, lens=85.0, fstop=2.8,
     area("canalisation.rim", (ctr.x + r * 0.4, ctr.y + r * 2.2, ctr.z + r * 1.6),
          e * 0.45, r * 1.2, ctr)
 
-    print(f"  framed {height:.2f} m tall at {look.length:.2f} m, "
+    print(f"  framed {height:.2f} m tall at {focus:.2f} m, "
           f"{lens:.0f} mm f/{fstop}")
     return cam
 
@@ -424,3 +434,29 @@ def render(out_path, samples=None):
     sc.render.image_settings.file_format = "PNG"
     bpy.ops.render.render(write_still=True)
     print(f"  wrote {out_path}")
+
+
+# A TURNTABLE IS THE PROOF, not just an asset. The one substantive claim this
+# bridge makes about the geometry is that a vein stops being a camera-facing
+# ribbon and becomes a tube — and an orbit is the only thing that can tell those
+# apart. A billboard plant thins and flickers as the camera comes round; this
+# should not. Render one before believing the import, and again after touching
+# anything in the material or `cycles_curves`.
+#
+# The lights do NOT orbit with the camera, deliberately: a rig that follows the
+# lens gives every frame the same shading and hides exactly the wrongness this
+# is for.
+def turntable(out_dir, frames=48, samples=48, start=0.0, sweep=360.0):
+    sc = bpy.context.scene
+    cam = sc.camera
+    if cam is None or "pivot" not in cam:
+        raise RuntimeError("call setup_scene() first — the orbit reuses its framing")
+    ctr = Vector(cam["pivot"])
+    dist, elev = cam["dist"], cam["elev"]
+    os.makedirs(out_dir, exist_ok=True)
+    for i in range(frames):
+        a = np.radians(start + sweep * i / frames)
+        _aim(cam, Vector((ctr.x + dist * np.sin(a),
+                          ctr.y - dist * np.cos(a),
+                          ctr.z + dist * elev)), ctr)
+        render(os.path.join(out_dir, f"{i:03d}.png"), samples=samples)
