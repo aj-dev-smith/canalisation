@@ -558,3 +558,114 @@ No lights and no BSDF in `--look shipped` means 32 spp is plenty there. `film` i
 the opposite: real subsurface through a 0.4 mm sheet, a world volume and physical
 DOF. Budget ~35 s for an 880x1100 preview at 96 spp and tens of minutes for a 4K
 frame at 1024 spp with adaptive sampling at 0.004.
+
+## The sky is a light, and a stand is the environment
+
+AJ, looking at the film rig: *"the dark stem on a black background just makes
+everything look, well, kind of bad."* Two complaints in one sentence, and they
+turned out to be **one bug plus one missing thing.**
+
+### In the browser the background is a backdrop. In a path tracer it is a light.
+
+`blender_film.py` shipped with `ambient=0.012` on a world colour of `bgTop * 3`
+(~0.09 for an Ember Creeper), so the environment contributed about **0.001**.
+There was no sky. Every photon in the frame came from four lamps, three of them
+behind the subject, and a stem whose albedo is `[0.16, 0.06, 0.05]` with nothing
+on its camera-facing side renders exactly what it should: a flat black worm.
+
+The controlled comparison is what made it obvious — the **same specimen** under
+`--look shipped` has a lit, rounded, warm stem, because `MESH_FS` carries
+
+```glsl
+vec3 amb = mix(uAmbBot, uAmbTop, N.y * 0.5 + 0.5);
+```
+
+an ambient term **by normal** that guarantees nothing in the browser is ever
+unlit. It is an unlit cheat and it is doing a real job.
+
+`_sky()` keeps the shipped shader's split exactly, using `Is Camera Ray`: camera
+rays get the `BG_FS` backdrop, every other ray gets the `MESH_FS` ambient. Both
+in the palette's own numbers, both already in the export header. That is not an
+invention — it is a term the engine already has, done physically.
+
+### Three things the ladder caught that reasoning had not
+
+- **Two gradients, not one.** `BG_FS` gradients on **screen height**
+  (`pow(uv.y, 0.75)`); `MESH_FS` gradients on the **surface normal**
+  (`N.y*0.5+0.5`). Those are different functions of different things and they
+  only look alike written down. Collapsed onto one mapping with a photographic
+  horizon at `-0.30`, a vertical stem — whose normals are **horizontal** —
+  samples `t = 0.25`, near `ambBot`, where the browser gives it the exact
+  midpoint. **Four values of `sky` produced one picture.** Raising it to an
+  absurd 40 is what proved the link live and the mapping wrong. That is the
+  fish-scale lesson for the second time in this file: **when a knob does
+  nothing, stop tuning it and go and find what you are not moving.**
+- **`r` has to follow the subject, not the set.** Every lamp is placed at a
+  multiple of `r` and powered at `r*r`, so `r` means "how big is the thing being
+  lit". Left at the whole scene's extent it becomes the size of the **clearing**
+  the moment a garden exists, and the hero gets the same flat wash as the
+  background. `span`/`pivot` say what the subject is; this is the half of that
+  statement the lights needed.
+- **An unbounded volume behaves nothing like atmosphere, in both directions.**
+  See below — this one took two wrong explanations before the right one.
+
+### `GARDEN=` — the answer to a black background is more plants
+
+Not an imported HDRI and not a scanned rock. **The palette *is* this piece's
+look** (that is what the "considerably worse" verdict taught us), and set
+dressing nobody grew would be the first thing in the project the simulation did
+not make. So `blender_export.mjs` grows a stand into one export:
+
+```bash
+GARDEN=14 GARDEN_AZ=165 GARDEN_SPREAD=20 GARDEN_NEAR=150 GARDEN_FAR=950 \
+  GARDEN_MIN=500 GARDEN_MAX=2600 STAGE=peak OUT=export/ember_deep \
+  node tools/blender_export.mjs 'Ember Creeper' 7 4000
+```
+
+This is `plantGarden`'s jittered ring **reimplemented rather than called**, for
+one reason: that function pays its head start off in slices against a frame
+budget (`warmGarden`), which is exactly right for a tab and meaningless for a
+file. The ring is the part worth copying and it is copied honestly — jittered
+angle, jittered radius, staggered ages, and **one air over the whole clearing**,
+because a stand has to be standing in the same wind or the stems disagree about
+which way it is blowing.
+
+⚠ **`GARDEN_RADIUS` is in world units and `unitM` is 0.0625.** Radius 13 is a
+0.8 m clearing holding six 2.9 m plants, which renders as one clump. The first
+stand was exactly that.
+
+**An arc, not a ring**, and this is the first piece of *staging* in the bridge.
+A hero framed at 3.2 m through a 100 mm lens sees a cone about 11 degrees wide,
+so a full ring puts roughly one plant in ten anywhere near it. For a render at
+`azimuth` A the camera sits at GL angle `-(A-90)`, so **behind the subject is
+`270 - A`** — at the shipped `A = 105` that is 165. Where a plant stands was
+never a simulation result (`plantGarden` picks it with a PRNG too) and the arc
+moves **where the camera is pointed, not what grows**. Nothing about any plant
+is chosen by it. Keep it that way.
+
+A stand of fifteen is 2.1 M triangles and 201 k vein strands, and the whole
+weld → proximity → solidify → render path handles it in about 25 s at 720x900.
+Geometry is not the constraint here; it never was.
+
+### Two things that were tried and are off
+
+- **The ground is a studio sweep, not an environment.** A flat plane lit by lamps
+  at the subject's scale gives a pool of light under a hard horizon — a cyc wall,
+  in every variant tried, including a near-black albedo at roughness 0.92 and a
+  dropped camera. `ground=True` still works and is a legitimate choice for a
+  wide; it ships **off** for the hero, and the browser has no ground either.
+- **World-volume fog makes the background blacker, not foggier.** Volume Scatter
+  has albedo 1, so an infinite medium *should* equilibrate to the source
+  radiance — but `volume_bounces = 4` truncates multiple scattering, so at
+  infinite optical depth most paths terminate before ever reaching the sky, and
+  the sky is extinguished instead of reproduced. That also explains the opposite
+  failure: `haze_lit` (a 434 W backlight made visible to the volume) blew the
+  frame to a flat tan wall, because a lamp inside a volume is **directly
+  sampled** at every scatter event and does not depend on the bounce budget at
+  all. Two ladders of renders were burned on this with two wrong explanations
+  before the right one. `haze` ships at **0**.
+
+  **So there is no atmospheric perspective and distant plants do not dim.** That
+  is the one thing the stand still visibly wants, and it needs a *finite* volume
+  whose far wall is behind everything the camera can see — at which point the
+  wall itself becomes the thing to go looking for in the frame. Unbuilt.
