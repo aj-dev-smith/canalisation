@@ -47,8 +47,10 @@ def main(argv):
                     help="JSON kwargs forwarded to blender_import.build()")
     ap.add_argument("--turntable", type=int, default=0,
                     help="render N frames of an orbit into --out as a directory")
-    ap.add_argument("--look", default="hero", choices=("hero", "shipped", "neutral"),
-                    help="hero = art direction; shipped = reproduce 60_render.js; "
+    ap.add_argument("--look", default="hero",
+                    choices=("hero", "shipped", "film", "neutral"),
+                    help="film = the production rig; hero = art direction; "
+                         "shipped = reproduce 60_render.js; "
                          "neutral = the import's own check rig")
     ap.add_argument("--neutral", action="store_true",
                     help="deprecated alias for --look neutral")
@@ -62,6 +64,7 @@ def main(argv):
     ci = _load("ci", os.path.join(here, "blender_import.py"))
     hero = _load("hero", os.path.join(here, "blender_hero.py"))
     look = _load("look", os.path.join(here, "blender_look.py"))
+    film = _load("film", os.path.join(here, "blender_film.py"))
 
     import bpy
     for ob in list(bpy.data.objects):
@@ -77,6 +80,8 @@ def main(argv):
         ci.setup_scene(H, **kw)
     elif mode == "shipped":
         look.shipped(H, **kw)
+    elif mode == "film":
+        film.film(H, **kw)
     else:
         hero.hero(H, **kw)
 
