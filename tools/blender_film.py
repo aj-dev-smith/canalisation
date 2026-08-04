@@ -459,6 +459,159 @@ def _floor(ctr, radius, colour, roughness, drop=0.0, spec=0.12):
     return ob
 
 
+# ---------------------------------------------------------------------------
+# THE SKY, AND WHY A BLACK BACKGROUND IS A BLACK STEM
+# ---------------------------------------------------------------------------
+#
+# IN THE BROWSER THE BACKGROUND IS A BACKDROP. IN A PATH TRACER IT IS A LIGHT.
+# That one sentence is the whole of this function, and missing it cost a look.
+#
+# The film rig shipped with `ambient=0.012` on a world colour of `bgTop * 3`
+# (~0.09 for an Ember Creeper), so the environment contributed about 0.001 —
+# there was effectively no sky. Every photon in the frame came from four lamps,
+# three of them behind the subject. A stem whose albedo is [0.16, 0.06, 0.05]
+# with nothing on its camera-facing side renders exactly what it should: a flat
+# black worm. Side by side against `--look shipped` the same stem is a lit,
+# rounded, warm tube. The background and the stem were one bug.
+#
+# What the shipped renderer actually does is TWO things with two different
+# colours, and it is worth being precise about which:
+#
+#   BG_FS    mix(bgBot, bgTop, pow(uv.y, 0.75)) + bgGlow * exp(-d * 2.1)
+#            — the backdrop. What the eye sees where the plant is not.
+#   MESH_FS  amb = mix(ambBot, ambTop, N.y * 0.5 + 0.5)
+#            — an ambient term BY NORMAL, added to every surface before the key.
+#            It is an unlit cheat and it is why nothing in the browser is ever
+#            unlit: a tube gets top-light and bottom-shadow wherever the key is.
+#
+# A path tracer can hold that split exactly, with `Is Camera Ray`: camera rays
+# get the backdrop, every other ray gets the ambient. That is the standard
+# background/lighting separation every renderer has, and here it is not an
+# invention — it reproduces a term the shipped shader already carries, in the
+# palette's own numbers. `ambTop`/`ambBot` were already in the export header.
+#
+# ⚠ THE BACKDROP MOVES OUT OF THE COMPOSITOR WHEN THIS IS ON. A screen-space
+# card behind a real volume does not compose: the haze would sit in front of a
+# flat sheet with nothing to attenuate. So `film()` turns `film_transparent`
+# off and tells `grade()` to skip its own background when the sky is real.
+def _sky(H, azimuth, elevation=-0.04, sky=1.0, glow=1.0, glow_tight=2.4,
+         glow_elev=0.12, horizon=-0.30, zenith=0.90, backdrop=1.0):
+    """The world as a light and a backdrop at once. Returns the Background node."""
+    pal = H.get("palette", {})
+    sc = bpy.context.scene
+    world = sc.world or bpy.data.worlds.new("World")
+    sc.world = world
+    world.use_nodes = True
+    nt = world.node_tree
+    nt.nodes.clear()
+
+    out = nt.nodes.new("ShaderNodeOutputWorld"); out.location = (1400, 0)
+    bg = nt.nodes.new("ShaderNodeBackground"); bg.location = (1200, 100)
+    bg.inputs["Strength"].default_value = 1.0
+    nt.links.new(bg.outputs[0], out.inputs["Surface"])
+
+    # In a world shader `Generated` is the direction the ray is travelling.
+    tc = nt.nodes.new("ShaderNodeTexCoord"); tc.location = (-1000, 0)
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ"); sep.location = (-820, 0)
+    nt.links.new(tc.outputs["Generated"], sep.inputs[0])
+
+    # ⚠ TWO GRADIENTS, NOT ONE, AND COLLAPSING THEM COST A LADDER OF RENDERS.
+    # `BG_FS` gradients on SCREEN HEIGHT (`pow(uv.y, 0.75)`); `MESH_FS`
+    # gradients on the SURFACE NORMAL (`N.y * 0.5 + 0.5`). Those are different
+    # functions of different things and they only look alike written down.
+    #
+    # It matters most for exactly the thing that was broken: a stem is vertical,
+    # so its normals are HORIZONTAL, so in the browser it samples the precise
+    # midpoint of ambBot->ambTop. Mapped through a photographic horizon at
+    # -0.30 it samples t = 0.25 instead — near ambBot — and every stem in the
+    # frame stayed black while the sky knob appeared to do nothing. Raising the
+    # knob to an absurd 40 was what proved the link was live and the mapping
+    # wrong, which is the fish-scale lesson again: when four values of a knob
+    # give one picture, stop tuning it and go and find what you are not moving.
+    #
+    # So the ambient runs -1..1 — `N.y * 0.5 + 0.5` exactly — and the backdrop
+    # keeps the photographic horizon, which is what a camera sees.
+    tv = nt.nodes.new("ShaderNodeMapRange"); tv.location = (-640, 120)
+    tv.inputs["From Min"].default_value = horizon
+    tv.inputs["From Max"].default_value = zenith
+    tv.clamp = True
+    nt.links.new(sep.outputs["Z"], tv.inputs["Value"])
+
+    ta = nt.nodes.new("ShaderNodeMapRange"); ta.location = (-640, -120)
+    ta.inputs["From Min"].default_value = -1.0
+    ta.inputs["From Max"].default_value = 1.0
+    ta.clamp = True
+    nt.links.new(sep.outputs["Z"], ta.inputs["Value"])
+
+    def ramp(lo, hi, mul, y, t=None):
+        """lo + t * (hi - lo), all VectorMath — see `_vm`'s note on Mix."""
+        a = [c * mul for c in lo]
+        b = [c * mul for c in hi]
+        d = look._vm(nt, "SUBTRACT", (-440, y), a=b, b=a)
+        s = look._vm(nt, "SCALE", (-260, y))
+        nt.links.new(d.outputs["Vector"], s.inputs[0])
+        nt.links.new((t or tv).outputs["Result"], s.inputs["Scale"])
+        add = look._vm(nt, "ADD", (-80, y), b=a)
+        nt.links.new(s.outputs["Vector"], add.inputs[0])
+        return add
+
+    # the backdrop the eye sees, and the ambient every surface is shaded by
+    seen = ramp(pal.get("bgBot", [0, 0, 0]), pal.get("bgTop", [0, 0, 0]),
+                backdrop, 260, tv)
+    amb = ramp(pal.get("ambBot", [0, 0, 0]), pal.get("ambTop", [0, 0, 0]),
+               sky, -260, ta)
+
+    # `bgGlow` as a real lobe in the world rather than a smear in the
+    # compositor, aimed through the subject and away from the camera — which is
+    # where `BG_FS` puts it, and which is also what backlights a silhouette.
+    a = np.radians(azimuth)
+    gd = Vector((-np.sin(a), np.cos(a), glow_elev)).normalized()
+    dot = look._vm(nt, "DOT_PRODUCT", (-640, 460), b=tuple(gd))
+    nt.links.new(tc.outputs["Generated"], dot.inputs[0])
+    mx = look._m(nt, "MAXIMUM", (-460, 460), b=0.0)
+    nt.links.new(dot.outputs["Value"], mx.inputs[0])
+    pw = look._m(nt, "POWER", (-280, 460), b=glow_tight)
+    nt.links.new(mx.outputs[0], pw.inputs[0])
+    gc = look._vm(nt, "SCALE", (-100, 460),
+                  a=[c * glow for c in pal.get("bgGlow", [0, 0, 0])])
+    nt.links.new(pw.outputs[0], gc.inputs["Scale"])
+    lit = look._vm(nt, "ADD", (120, 360))
+    nt.links.new(seen.outputs["Vector"], lit.inputs[0])
+    nt.links.new(gc.outputs["Vector"], lit.inputs[1])
+
+    # camera rays -> backdrop, everything else -> ambient.
+    lp = nt.nodes.new("ShaderNodeLightPath"); lp.location = (300, 620)
+    diff = look._vm(nt, "SUBTRACT", (500, 200))
+    nt.links.new(lit.outputs["Vector"], diff.inputs[0])
+    nt.links.new(amb.outputs["Vector"], diff.inputs[1])
+    sel = look._vm(nt, "SCALE", (700, 200))
+    nt.links.new(diff.outputs["Vector"], sel.inputs[0])
+    nt.links.new(lp.outputs["Is Camera Ray"], sel.inputs["Scale"])
+    fin = look._vm(nt, "ADD", (900, 100))
+    nt.links.new(sel.outputs["Vector"], fin.inputs[0])
+    nt.links.new(amb.outputs["Vector"], fin.inputs[1])
+    nt.links.new(fin.outputs["Vector"], bg.inputs["Color"])
+    return bg
+
+
+# ⚠ AND IT SHIPS AT ZERO, because an UNBOUNDED volume cannot be atmosphere.
+# Optical depth to the background is `density * distance`, and a world volume has
+# no far wall, so the distance is infinite and the sky is ALWAYS fully scattered:
+# every camera ray terminates in fog. Two ladders came back as flat tan walls
+# before that arithmetic got done — the first blamed on the backdrop, the second
+# on `haze_lit` (real, a 434 W backlight made visible to the volume), and neither
+# was the whole story. Density only changes HOW FAST it saturates, never whether.
+#
+# `haze_lit` is off for the same reason the original comment gave: a light strong
+# enough to transilluminate a 0.4 mm lamina will also light the whole sky.
+#
+# What the frame actually wanted from haze — separation of a dark subject, and a
+# background that is not black — the SKY does, and does without a boundary. Real
+# depth should come from things at real distances, which is what `GARDEN=` in
+# `blender_export.mjs` is for. If you want atmosphere back, it needs a FINITE
+# volume whose far wall is behind everything the camera can see, and then the
+# wall itself is the thing to go looking for in the frame.
+#
 # THE AIR IS THE WORLD'S VOLUME, NOT A BOX. It was a box first, and a box has
 # EDGES: the first film render came back with a hard dark band ruled straight
 # across the middle of the frame, which is the top face of the haze cube seen
@@ -623,8 +776,9 @@ def grade(H, bloom=0.30, thresh=1.0, size=9.0, streaks=0.04,
 def film(H, res=(3200, 4000), samples=1024, adaptive=0.004, lens=100.0,
          fstop=4.0, azimuth=105.0, elevation=-0.04, margin=1.12, trim=0.02,
          back=90.0, key=6.0, edge=18.0, bounce=1.5, ambient=0.012,
-         haze=0.010, ground=True, ground_drop=0.0, ground_rough=0.86,
-         ground_spec=0.08, dome_mul=1.0,
+         haze=0.0, haze_lit=False, ground=True, ground_drop=0.0,
+         ground_rough=0.86, ground_spec=0.08, dome_mul=1.0,
+         sky=12.0, sky_glow=1.0, glow_tight=2.4, backdrop=1.0, sky_bg=True,
          sss=0.62, sss_mm=1.4, coat=0.32, tint=1.35, emis_mul=3.0,
          vein_mul=1.0, vein_scale=1.0, px_floor=1.5, do_grade=True, exposure=0.0,
          span=None, pivot=None,
@@ -656,7 +810,12 @@ def film(H, res=(3200, 4000), samples=1024, adaptive=0.004, lens=100.0,
         # RIBBONS is a camera-facing sheet — the exact artefact the curve
         # export exists to delete
         sc.cycles_curves.shape = "THICK"
-    sc.render.film_transparent = bool(do_grade)
+    # ⚠ A REAL SKY HAS TO BE PHOTOGRAPHED, NOT COMPOSITED. With `sky_bg` the
+    # world is the visible background, so the film is opaque and `grade()` skips
+    # its own card — a screen-space backdrop behind a real volume does not
+    # compose, because the haze would sit in front of a flat sheet with nothing
+    # to attenuate and the ground would have no horizon to fade into.
+    sc.render.film_transparent = bool(do_grade) and not sky_bg
 
     for junk in ("Cube", "Light", "canalisation.key", "canalisation.fill",
                  "canalisation.rim", "canalisation.ground", "canalisation.air"):
@@ -694,6 +853,14 @@ def film(H, res=(3200, 4000), samples=1024, adaptive=0.004, lens=100.0,
     if span:
         height = float(span)
         width = height * res[0] / res[1]
+    # ⚠ AND `r` HAS TO FOLLOW THE SUBJECT, NOT THE SET. Every light below is
+    # placed at a multiple of `r` and powered at `r * r`, so `r` is "how big is
+    # the thing being lit". Left at the whole scene's extent it is the size of
+    # the CLEARING the moment a garden is exported — a stand 150 units across
+    # puts the key nine metres from a plant that is three, and the hero gets the
+    # same flat wash as everything behind it. `span`/`pivot` say what the
+    # subject is; this is the half of that statement the lights need.
+    r = max(width, height)
     fit_v = height * res[0] / res[1]
     dist = max(fit_v, width) * (lens / cam.data.sensor_width) * margin
     a = np.radians(azimuth)
@@ -717,8 +884,11 @@ def film(H, res=(3200, 4000), samples=1024, adaptive=0.004, lens=100.0,
                 ctr.z + r * elev)
 
     # BACKLIGHT LEADS — see the note above `_lamp`. Big, low, warm, and behind.
+    # `haze_lit` is what turns the air from a grey lift into shafts: the back
+    # light is the only one with the subject between it and the camera, so it
+    # is the only one whose beam can be broken by the plant.
     _lamp("canalisation.back", place(178.0, 0.10, 1.9), back * r * r, r * 1.5,
-          ctr, (1.0, 0.52, 0.26))
+          ctr, (1.0, 0.52, 0.26), in_air=haze_lit)
     # a small hard key just off-axis, to keep the stems from going to silhouette
     _lamp("canalisation.key", place(52.0, 0.62, 2.2), key * r * r, r * 0.55,
           ctr, (1.0, 0.84, 0.72))
@@ -734,16 +904,20 @@ def film(H, res=(3200, 4000), samples=1024, adaptive=0.004, lens=100.0,
     _lamp("canalisation.bounce", place(20.0, 0.06, 2.4), bounce * r * r, r * 2.4,
           ctr, (1.0, 0.62, 0.44))
 
-    world = sc.world or bpy.data.worlds.new("World")
-    sc.world = world
-    world.use_nodes = True
-    wt = world.node_tree; wt.nodes.clear()
-    wo = wt.nodes.new("ShaderNodeOutputWorld"); wo.location = (300, 0)
-    wb = wt.nodes.new("ShaderNodeBackground"); wb.location = (100, 0)
     bg = ci.bg_colour(H)
-    wb.inputs[0].default_value = (*[c * 3.0 for c in bg], 1.0)
-    wb.inputs[1].default_value = ambient
-    wt.links.new(wb.outputs[0], wo.inputs["Surface"])
+    if sky > 0 or sky_bg:
+        _sky(H, azimuth, elevation=elevation, sky=sky, glow=sky_glow,
+             glow_tight=glow_tight, backdrop=backdrop)
+    else:
+        world = sc.world or bpy.data.worlds.new("World")
+        sc.world = world
+        world.use_nodes = True
+        wt = world.node_tree; wt.nodes.clear()
+        wo = wt.nodes.new("ShaderNodeOutputWorld"); wo.location = (300, 0)
+        wb = wt.nodes.new("ShaderNodeBackground"); wb.location = (100, 0)
+        wb.inputs[0].default_value = (*[c * 3.0 for c in bg], 1.0)
+        wb.inputs[1].default_value = ambient
+        wt.links.new(wb.outputs[0], wo.inputs["Surface"])
 
     if ground:
         # ⚠ ROUGH, AND THAT IS THE WHOLE FIGHT. This shipped at 0.42 and the
@@ -753,14 +927,18 @@ def film(H, res=(3200, 4000), samples=1024, adaptive=0.004, lens=100.0,
         # reflects off a smooth plane at grazing incidence, where Fresnel goes
         # to one regardless of how dark the surface is. A dark floor is not a
         # dim floor. Roughness and a low specular level are what make it dim.
-        _floor(ctr, r * 30.0, [c * 0.9 for c in bg], ground_rough,
+        # FAR ENOUGH THAT ITS EDGE IS BEHIND THE FOG. At r*30 the quad ended
+        # at ~80 m, unlit, and ruled a hard black band across the frame between
+        # the lit near ground and the sky. A horizon is supposed to be where the
+        # air runs out, not where the geometry does.
+        _floor(ctr, r * 400.0, [c * 0.9 for c in bg], ground_rough,
                drop=lo.z + ground_drop, spec=ground_spec)
     if haze > 0:
         vein = pal.get("vein", [1.0, 0.6, 0.4])
         _air(haze, [min(1.0, c * 1.4 + 0.2) for c in vein])
 
     if do_grade:
-        grade(H)
+        grade(H, background=not sky_bg)
 
     print(f"  film: {height:.2f} m at {focus:.2f} m, {lens:.0f}mm f/{fstop}, "
           f"{res[0]}x{res[1]} @ {samples} spp (adaptive {adaptive}), "

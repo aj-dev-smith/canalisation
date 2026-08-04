@@ -34,7 +34,7 @@
 import { App, SPECIES } from '../src/70_app.js';
 import { Buffers, setView } from '../src/50_geom.js';
 import { WORLD } from '../src/37_wind.js';
-import { v3 } from '../src/00_math.js';
+import { v3, mulberry32 } from '../src/00_math.js';
 import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -214,6 +214,77 @@ setView(v3(0, 4, 15), wFloor, 0);
 const B = new Capture();
 App.prototype.drawSpecimen.call(app, B, S, null);
 
+// THE HERO'S OWN EXTENT, MEASURED BEFORE ANYTHING ELSE IS PLANTED. A garden's
+// bbox is the whole clearing, and a camera framed on that frames a wide shot of
+// seven plants. `film()` takes `span`/`pivot`, so the consumer needs to know
+// where the SUBJECT is independently of where the set is.
+const heroBB = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+{
+  const g = (x, y, z) => {
+    if (x < heroBB[0]) heroBB[0] = x; if (y < heroBB[1]) heroBB[1] = y; if (z < heroBB[2]) heroBB[2] = z;
+    if (x > heroBB[3]) heroBB[3] = x; if (y > heroBB[4]) heroBB[4] = y; if (z > heroBB[5]) heroBB[5] = z;
+  };
+  for (let i = 0; i < B.triN; i += 10) g(B.tri[i], B.tri[i + 1], B.tri[i + 2]);
+  for (let i = 0; i < B.segN; i += 12) { g(B.seg[i], B.seg[i + 1], B.seg[i + 2]); g(B.seg[i + 3], B.seg[i + 4], B.seg[i + 5]); }
+}
+
+// --- the clearing ----------------------------------------------------------
+//
+// A BLACK BACKGROUND IS THE PROBLEM AND MORE PLANTS ARE THE ANSWER. A path
+// tracer lights the subject with what is around it, so a specimen alone in a
+// void is lit by nothing but its own practicals — and the alternative to a void
+// is not an imported HDRI or a scanned rock, because the palette IS this
+// piece's look and set dressing nobody grew would be the first thing here that
+// the simulation did not make. The background should be more of the same
+// chemistry, at other ages, out of focus.
+//
+// This is `plantGarden`'s ring, reimplemented rather than called, for one
+// reason: `plantGarden` pays the head start off in slices against a frame
+// budget (`warmGarden`), which is exactly right for a tab and meaningless for a
+// file. The RING is the part worth copying and it is copied honestly — jittered
+// angle, jittered radius, staggered ages — so a stand exported here has the same
+// statistics as a stand on screen.
+const gardenN = +(process.env.GARDEN || 0);
+const gardenPlan = [];
+if (gardenN > 0) {
+  const gseed = +(process.env.GARDEN_SEED || (seed ^ 0x5bf03635)) >>> 0;
+  const rad = +(process.env.GARDEN_RADIUS || 9);
+  const minAge = +(process.env.GARDEN_MIN || 400);
+  const maxAge = +(process.env.GARDEN_MAX || 2600);
+  // ONE species by default, and that is a composition decision worth stating:
+  // the palettes here differ enough between species that a mixed clearing reads
+  // as a colour chart. `GARDEN_SPECIES=*` samples the catalogue instead.
+  const pick = process.env.GARDEN_SPECIES || name;
+  const names = Object.keys(SPECIES);
+  const rnd = mulberry32(gseed);
+  const TAU = Math.PI * 2;
+  for (let i = 0; i < gardenN; i++) {
+    const ang = (i + 0.5) / gardenN * TAU + (rnd() - 0.5) * 0.9;
+    const d = rad * (0.55 + 0.75 * rnd());
+    gardenPlan.push({
+      name: pick === '*' ? names[(rnd() * names.length) | 0] : pick,
+      seed: (gseed + i * 7919) >>> 0,
+      origin: [Math.cos(ang) * d, 0, Math.sin(ang) * d],
+      warm: Math.floor(minAge + (maxAge - minAge) * rnd()),
+    });
+  }
+  // ONE AIR OVER THE WHOLE CLEARING, exactly as `plantGarden` does it — the
+  // stand has to be standing in the same wind or the stems disagree about which
+  // way it is blowing, which is visible the moment two plants overlap.
+  const wind = S.plant.wind;
+  for (const p of gardenPlan) {
+    process.stdout.write(`  planting ${p.name} seed ${p.seed} at ${p.origin.map(v => v.toFixed(1))} age ${p.warm} `);
+    const ga = standIn({ viewName });
+    const GS = App.prototype.makeSpecimen.call(ga, p.name, p.seed, p.origin, wind);
+    for (let i = 1; i <= p.warm; i++) GS.plant.step(1);
+    if (mesh === 'full') { ga.bladeMU = 1e9; ga.bladeMV = 1e9; ga.bladeRef = 1e-9; }
+    App.prototype.drawSpecimen.call(ga, B, GS, null);
+    p.stage = GS.plant.stage();
+    p.organs = GS.plant.axes.reduce((n, a) => n + a.organs.length, 0);
+    console.log(`-> ${p.stage}, ${p.organs} organs`);
+  }
+}
+
 // A TRUNCATED FILE IS WORSE THAN NO FILE, because the picture it makes is
 // merely missing things and looks like a plant. The buffers grow, so this
 // should now be unreachable — it is here because it was NOT unreachable before
@@ -282,6 +353,10 @@ const header = {
     laminaMul: S.pal.laminaMul,
   },
   bbox: { min: bb.slice(0, 3), max: bb.slice(3) },
+  // the SUBJECT's extent, which is not the SET's once a garden is planted
+  heroBbox: { min: heroBB.slice(0, 3), max: heroBB.slice(3) },
+  garden: gardenPlan.map(p => ({ name: p.name, seed: p.seed, origin: p.origin,
+    warm: p.warm, stage: p.stage, organs: p.organs })),
   organs: S.plant.axes.reduce((n, a) => n + a.organs.length, 0),
   axes: S.plant.axes.length,
   // byte offsets into the .bin, all float32
@@ -315,7 +390,9 @@ console.log(`
   vein width  floor ${wFloor}  p10 ${q(0.1).toFixed(5)}  median ${q(0.5).toFixed(5)}  p90 ${q(0.9).toFixed(5)}  max ${(ws[ws.length - 1] || 0).toFixed(5)}
               ${(atFloor * 100).toFixed(1)}% of ribbon ends sit AT the floor
   ${name}  seed ${seed}  view ${viewName}  stage ${stage}
-  ${header.axes} axes, ${header.organs} organs
+  hero: ${header.axes} axes, ${header.organs} organs${gardenPlan.length
+    ? `\n  stand: ${gardenPlan.length} more, ${gardenPlan.reduce((n, p) => n + p.organs, 0)} organs (${gardenPlan.map(p => p.stage).join(', ')})`
+    : ''}
   ${(tri.length / 30).toLocaleString()} triangles
   ${(seg.length / 12).toLocaleString()} segments (veins, needles, thin stems)
   ${(pt.length / 7).toLocaleString()} points
