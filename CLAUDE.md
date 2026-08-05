@@ -92,6 +92,43 @@ node tools/views_shot.mjs shots           # every render view, wide and close
 GARDEN=7 node tools/clip.mjs shots/g 10   # record the stand moving
 ```
 
+**THERE IS A PATH TRACER NOW, AND IT IS A BRIDGE RATHER THAN A SECOND RENDERER
+(#40).** The simulation goes out to Blender/Cycles so a specimen can be
+*photographed* with a physical camera. [tools/README.md](tools/README.md) is the
+whole story; the four things worth knowing before touching it:
+
+```bash
+node tools/blender_export.mjs 'Ember Creeper' 7 2527       # one specimen -> .json + .bin
+GARDEN=6 GARDEN_ONLY=1 node tools/blender_export.mjs ...   # a stand with no hero of its own
+node tools/blender_seq.mjs 'Ember Creeper' 7 2527          # 485 frames of the growth arc
+node tools/blender_clip.mjs export/…_seq shots/clip        # one Blender per frame, resumable
+```
+
+- **It adds no geometry code, deliberately.** It grows with the shipped
+  `makeSpecimen`, draws with the shipped `drawSpecimen`, and supplies only a
+  `Buffers` that keeps a copy — the same argument that keeps `test/views.mjs`
+  driving the real thing through a stand-in App. One thing is thrown away on
+  purpose: a vein ships as a **camera-facing ribbon**, which exported as
+  triangles is a billboard baked at one camera position, so `ribbon()` drops
+  `side` and Blender gets a curve with a radius per point. The view-dependence
+  was in the rasteriser, not the vein.
+- **⚠ The width floor is a PIXEL floor, so a preview is a different plant.** The
+  same stand floors its veins at **6.73 mm at 720x900 and 1.51 mm at 3200x4000**,
+  with 100% of strand ends at the floor in both. A whole ladder of look decisions
+  was taken on veins 4.5x fatter than the deliverable. `px_ref` fixes it; the
+  number is set by eye and is the only one in that rig that could not be
+  computed, same category as the wind's `uRef`.
+- **A life is 20.2 seconds, so there is no timelapse.** The solver runs at 125
+  steps/s and peak is step 2527, so the whole arc at 24 fps is 485 frames at
+  natural speed with the wind moving correctly throughout. **Do not raise the
+  stride to compress it** — the stem's mode is 0.56-0.64 Hz and the fastest gust
+  1.78 Hz, so under ~3.6 Hz sampling the wind judders and reads as a solver bug.
+- **⚠ The arc is the first staging in the bridge.** A stand is planted in an arc
+  behind the camera rather than `plantGarden`'s ring, because a hero framed
+  through a 100 mm lens sees an ~11° cone. It moves where the camera is pointed
+  and not what grows — where a plant stands was never a simulation result — but
+  it is the one place here worth watching.
+
 `tree_shot.mjs` is portrait because every other capture tool here frames into 16:10, and
 a 46-unit spire in a landscape frame occupies the middle fifth of the picture — **"looks
 lost" and "is too sparse" are the same picture**, so the wrong frame cannot answer the
