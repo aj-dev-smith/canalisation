@@ -20,12 +20,25 @@
     color: rgba(235, 238, 245, 0.28); letter-spacing: 0.04em;
     user-select: none; pointer-events: none; text-align: right; white-space: pre;
   }
+  #forms {
+    position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 2;
+    font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.06em; user-select: none; display: flex; gap: 2px;
+  }
+  #forms button {
+    all: unset; cursor: pointer; padding: 4px 10px;
+    color: rgba(235, 238, 245, 0.38);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  }
+  #forms button:hover { color: rgba(235, 238, 245, 0.8); }
+  #forms button.on { color: rgba(235, 238, 245, 0.92); border-bottom: 1px solid rgba(235,238,245,0.5); }
 </style>
 </head>
 <body>
 <div id="stage"></div>
 <div id="hud"></div>
 <div id="hint"></div>
+<div id="forms"></div>
 <script>
 
 // ===== vendor/three.min.js =====
@@ -9290,6 +9303,65 @@ const VIEWS = {
 const _shedFr = { o: v3(), x: v3(), y: v3(), z: v3(), t: 0 };
 const _petC = v3();
 
+// FLORAL FORMS — homeotic programs, as presets over the engine knobs that
+// already exist. Every key here is a species option with a shipped default
+// (whorlBands, receptacle, apexRenew, the floral compression triple...), so a
+// form adds no mechanism: it is a different SETTING of the ABC machinery, the
+// way a species is a different setting of the chemistry. All numbers were
+// measured in flowers/ (the piece these programs were built for, PR #42) and
+// its README carries the derivations. Two honesty notes: `columbine` here is
+// the ARCHITECTURE only — the nectar spur and the bicolor sepals live in
+// flowers.html's petal renderer, so under this renderer it reads as nested
+// whorls carried out on pedicels; and `daisy` raises the organ budget, so a
+// garden planted under it is a heavier garden.
+const FLORAL_FORMS = {
+  wild: null,
+  // the full ABC plan: calyx, corolla, filament ring, pistil. Program B for
+  // the three species whose q sits at zero and then jumps (measured sweep,
+  // flowers/README) — under A a Cathedral Fern is S8 P1.
+  abc: (name) => {
+    const progB = name === 'Cathedral Fern' || name === 'Hoarfrost Thicket'
+      || name === 'Sulphur Rosette';
+    const P = progB
+      ? { renew: 0.75, organs: 28, dome: 2.2, bands: [0.06, 0.24, 0.60] }
+      : { renew: 0.55, organs: 26, dome: 3.0, bands: [0.08, 0.38, 0.65] };
+    return {
+      whorlBands: { sepal: P.bands[0], stamen: P.bands[1], carpel: P.bands[2],
+        filament: 1.8, style: 1.5 },
+      apexRenew: P.renew, floralOrgans: P.organs, floralDome: P.dome,
+      floralElong: 0.08, floralStretch: 0.08, floralNode: 0.008,
+      floralGrace: 960, petalGrade: 0.35,
+    };
+  },
+  // the C-class mutant: stamen whorls founded as petals, determinacy lost —
+  // 20-23 petals in nested graded whorls
+  double: () => ({
+    petalQ: 0.62, apexRenew: 0.7, floralOrgans: 34,
+    floralElong: 0.08, floralStretch: 0.08, floralNode: 0.008,
+    floralGrace: 960, petalGrade: 0.5,
+  }),
+  // the capitulum: florets ride the tip of a bolting peduncle, the head is
+  // the disc the meristem actually was (receptacle un-collapses q)
+  daisy: () => ({
+    whorlBands: { sepal: 0.05, stamen: 0.18, carpel: 0.96, sepalLen: 0.16,
+      petalLen: 0.45, stamenLen: 0.10, filament: 0.9, style: 1.5 },
+    receptacle: 1.1, apexRenew: 0.88, floralOrgans: 90, floralDome: 4.0,
+    floralElong: 0.35, floralStretch: 0.08, floralNode: 0.008,
+    tropism: 0.002, floralGrace: 1600, organBudget: 400, maxOrgans: 140,
+    petalGrade: 0, petalTilt: 1.5,
+  }),
+  // the spurred plan's architecture: petaloid outer whorl counts, whorls
+  // nested on a small receptacle, each flower carried out on a pedicel
+  columbine: () => ({
+    whorlBands: { sepal: 0.02, stamen: 0.28, carpel: 0.75, sepalLen: 0.32,
+      petalLen: 0.26, stamenLen: 0.13, filament: 1.5, style: 1.5 },
+    receptacle: 0.25, apexRenew: 0.70, floralOrgans: 32, floralDome: 3.0,
+    floralElong: 0.30, floralStretch: 0.08, floralNode: 0.008,
+    tropism: 0.004, floralGrace: 1200, organBudget: 260, maxOrgans: 120,
+    petalGrade: 0.15, petalTilt: 0.8,
+  }),
+};
+
 class App {
   constructor(canvas, hud) {
     this.canvas = canvas;
@@ -9316,6 +9388,11 @@ class App {
     this.resumeAfter = 16000;
     this.idleT = 0;
     this.ringWidth = 0;
+    // which floral program new specimens grow under; null = the species as
+    // shipped. Scene-level on purpose: identity is read at each organ's
+    // founding, so a form is a thing a specimen is GROWN under, not a switch
+    // on a standing plant — and a garden planted while it is set joins it.
+    this.floralForm = null;
     this.frame = 0;
     this.t = 0;
     this.fps = 60;
@@ -9387,6 +9464,12 @@ class App {
     if (wind) sp.wind = wind;
     // a specimen planted while the last act is held joins it held
     if (this.senesceHeld) sp.senesceHold = true;
+    // the floral program, applied before the Plant is constructed: identity
+    // is read off sp at each organ's founding, so a form is part of what a
+    // specimen is grown under. null (and any harness's stand-in App, which
+    // never sets it) is the shipped species exactly.
+    if (this.floralForm && FLORAL_FORMS[this.floralForm])
+      Object.assign(sp, FLORAL_FORMS[this.floralForm](name));
     return { name, seed, prm, mo, sp, pal, petalPal, innerPals,
       plant: new Plant(prm, mo, sp, seed) };
   }
@@ -12150,7 +12233,14 @@ function flBoot() {
   // already convert (R0/organR = 3.0); without it a terminal apex founds ten
   // organs at q ~= 0 and reads as one whorl (the Parasol's only flower is
   // terminal, so this is not optional). Compression knobs as the double's.
-  const form = q.get('form') || 'abc';
+  // No ?form= rotates the default PER SEED, so a bare open shows a different
+  // body plan each visit and every form is reachable by reseeding — a piece
+  // titled flowers should not always open on the same one. Deterministic
+  // (seed % 4), same discipline as everything else here: the URL fully
+  // decides the plant. 'wild' stays URL-only — it is the control, not a card
+  // in the deck. (Order puts the default seed, 21, on the columbine.)
+  const FL_FORMS = ['abc', 'columbine', 'daisy', 'double'];
+  const form = q.get('form') || FL_FORMS[seed % FL_FORMS.length];
   if (form === 'abc') {
     // TWO FLORAL PROGRAMS, assigned per species from the measured whorl
     // balance (scratchpad abc_sweep, 8 species x both, step 5200): program A
@@ -12341,6 +12431,24 @@ function flBoot() {
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
   hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso=';
+  // The form rail. A form is decided at founding — every organ's identity is
+  // read off sp the step it is founded — so switching means regrowing, and
+  // the honest way to regrow deterministically is a reload with the form in
+  // the URL, same as everything else on this page.
+  {
+    const rail = document.getElementById('forms');
+    for (const f of FL_FORMS) {
+      const b = document.createElement('button');
+      b.textContent = f;
+      if (f === form) b.classList.add('on');
+      b.onclick = () => {
+        const p = new URLSearchParams(location.search);
+        p.set('form', f);
+        location.search = p.toString();
+      };
+      rail.appendChild(b);
+    }
+  }
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
   // grains sample the same wind field the stem bends in.

@@ -28,6 +28,9 @@ window.__SPECIES = SPECIES;
 // environment, so nothing on the page implies one, and without this a person
 // looking at an infected plant has no way to find out what to type.
 window.__AGENTS = AGENTS;
+// The floral form table, same argument as the three above: `app.floralForm`
+// is settable from the console, so its legal values should be enumerable.
+window.__FORMS = FLORAL_FORMS;
 
 // --- the specimen label ----------------------------------------------------
 let lastHud = 0;
@@ -302,6 +305,36 @@ function infect(name) {
   return true;
 }
 $('infectBtn').onclick = () => infect(agentSel.value);
+
+// --- grow with a floral form ------------------------------------------------
+// The other kind of identity change: a homeotic PROGRAM rather than an agent.
+// One button, not an "apply" pair like the agent's, because whorl identity is
+// read at each organ's founding — a standing plant that has flowered cannot
+// be re-formed, so the honest verb is to grow one under the program. The
+// setting is scene-level and sticky: "new specimen" and a garden planted
+// while it is set stay in the chosen form until it is put back to wild.
+const FORM_TIP = {
+  wild: 'The species as shipped — whatever floral plan its own chemistry settles into.',
+  abc: 'The full ABC model: identity banded outermost-to-innermost on the one coordinate the floral meristem already makes as it consumes itself. A green calyx, a corolla, a ring of filaments carrying anthers, a central pistil.',
+  double: 'The C-class mutant — the doubled rose. Organs that would have been stamens are founded as petals and the apex keeps founding: 20-odd petals in nested whorls, graded outer-large to inner-small.',
+  daisy: 'A composite head. The florets ride the tip of a bolting peduncle and the head becomes the disc the meristem actually was — phyllaries at the rim, rays, disc florets, a fruit at the centre. Costs more organs; a garden grown under it is a heavier garden.',
+  columbine: 'The spurred plan’s architecture: a showy outer whorl, nested inner whorls on a small receptacle, each flower carried clear on its own pedicel. The nectar spur itself and the bicolor live in flowers.html’s petal renderer — here you see the body plan.',
+};
+const formSel = $('formSel');
+for (const name of Object.keys(FLORAL_FORMS)) {
+  const o = document.createElement('option');
+  o.value = name; o.textContent = name;
+  formSel.appendChild(o);
+}
+formSel.value = 'wild';
+$('formBtn').onclick = () => {
+  app.floralForm = formSel.value === 'wild' ? null : formSel.value;
+  app.newSpecimen(app.speciesName);
+  app.giveBack();
+  syncSliders();
+  $('regrowBtn').classList.remove('urge');
+  showTip(FORM_TIP[formSel.value] || '');
+};
 // The reliable demo path: a new specimen, run forward to the middle of its
 // susceptible window, and injected there. Stepping synchronously is fine — this
 // is a few hundred steps on a seedling, not a grown plant.
