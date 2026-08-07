@@ -110,8 +110,16 @@ const FL_PET_FS = `
     // gradient now, and the spots live inside it only.
     float zone = 1.0 - smoothstep(uBull - 0.18, uBull + 0.18, vU);
     float spot = texture2D(uSpots, vec2(vU, (vV + vLib) / 3.0)).r;
+    // NECTAR GUIDE: anthocyanin laid over the vasculature — in Antirrhinum,
+    // Venosa is an MYB active only in epidermal cells OVERLYING veins [D], so
+    // the pigment pattern IS the vein network. vDD is the distance-to-vein
+    // field the engine already computes (translucency reads it too); read as
+    // pigment it draws the guides a pollinator would follow, converging on
+    // the throat, so it deepens inside the bullseye zone and fades distally.
+    float guide = (1.0 - smoothstep(0.0, 0.28, vDD)) * (0.35 + 0.65 * zone);
     float kPig = (1.0 + 0.35 * zone) * mix(1.0, 1.12, vDev)
-               * (1.0 + 0.35 * smoothstep(0.65, 1.0, spot) * zone);
+               * (1.0 + 0.35 * smoothstep(0.65, 1.0, spot) * zone)
+               * (1.0 + 0.55 * guide);
     vec3 alb = pow(max(vC, vec3(0.0)), vec3(kPig));
 
     // THIN TISSUE IS LIT FROM BOTH SIDES. A one-sided lambert throws half of

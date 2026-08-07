@@ -75,15 +75,20 @@ class FlPollen {
     // accumulates fractionally so a low rate still sheds eventually
     const cand = this._cand;
     cand.length = 0;
-    const pQ = S.sp.petalQ;
+    const pQ = S.sp.petalQ, wb = S.sp.whorlBands;
     for (const ax of P.axes) {
       if (!ax.floral) continue;
       for (const org of ax.organs) {
         if (!org.floral || org.petal || org.shed) continue;
         if ((org.dev || 0) < C.devGate || (org.sen || 0) > 0) continue;
         if (!org.frame || org.len < 0.05) continue;
-        const qn = ((org.q || 0) - pQ) / Math.max(1e-3, 1 - pQ);
-        if (qn > C.qBand) continue;
+        // with whorl bands the stamens are NAMED, so the q-band heuristic
+        // retires and only true anthers shed
+        if (wb) { if (org.whorl !== 'stamen') continue; }
+        else {
+          const qn = ((org.q || 0) - pQ) / Math.max(1e-3, 1 - pQ);
+          if (qn > C.qBand) continue;
+        }
         cand.push(org);
       }
     }

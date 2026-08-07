@@ -505,6 +505,21 @@ class Axis {
     // radius it had — it has to, because everything the flower is going to make
     // has to fit in it, and from here nothing replaces what gets used.
     m.rCZ *= sp.floralCZ; m.G *= 2.3;
+    // `floralDome` caps the dome at conversion, in founder-patch radii. A real
+    // floral meristem has a CHARACTERISTIC size — determinate, a few
+    // organ-widths across — not a fraction of whatever apex it converted from,
+    // and the size matters because contraction per organ goes as organR^2 over
+    // the flank area: a huge converted TERMINAL apex barely contracts, its q
+    // never climbs, and (measured) it founds ten organs at q ~= 0 and reads as
+    // all one whorl. A cap shrinks that terminal to the size an axillary bud
+    // already converts at and leaves the axillaries untouched — a multiplier
+    // was tried first and cannot do both (it collapsed the axillaries to 1-3
+    // organs while fixing the terminal). Default 0 is off: shipped exactly.
+    const fd = sp.floralDome || 0;
+    if (fd > 0) {
+      const k = Math.min(1, (fd * m.organR) / Math.max(1e-6, m.rPZ));
+      if (k < 1) { m.R *= k; m.rPZ *= k; m.rCZ *= k; }
+    }
     // The scale the apex had at the moment it converted. Organ identity is read
     // against this fixed reference and not against the apex's current size — a
     // meristem that contracts self-similarly reports the same q forever if you
@@ -629,18 +644,61 @@ class Axis {
       // in, and that gradient is the only thing distinguishing them
       org.q = clamp(1 - (prim.r / Math.max(1e-3, this.floralR0 || this.meristem.o.rPZ)), 0, 1);
       org.floral = true;
-      // the outer ones are petals — leaves whose margin was told to grow broad
-      // and smooth instead of long and toothed
-      org.petal = org.q < sp.petalQ;
-      org.leaf = null;
       // `petalGrade` scales a petal down with its identity q: a homeotically
       // converted stamen is a petaloid stamen, smaller than a true petal, so
       // a doubled corolla grades outer-large to inner-small the way a rose
       // does. Default 0 is exactly the old line for every shipped species.
       const pg = 1 - (sp.petalGrade || 0) * clamp(org.q, 0, 1);
-      org.maxLen = sp.organLen * (org.petal ? 0.30 * pg : 0.13) * (0.82 + 0.36 * org.rnd());
-      org.tilt = org.petal ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
-        : sp.organTilt * 0.30;
+      const wb = sp.whorlBands;
+      if (wb) {
+        // THE FULL ABC MODEL, as bands on the one coordinate the flower already
+        // has. A/B/C domains are concentric and their boundaries are sharp
+        // (AP3/AG mutual antagonism), so identity is a banding of q, outermost
+        // to innermost: sepal, petal, stamen, carpel. A sepal is A-class alone
+        // — a leaf-like organ — and it literally takes a leaf here, because
+        // the non-petal branch of the leaf-request already hands one out.
+        // `whorlBands` is null for every shipped species: this block never runs.
+        org.whorl = org.q < wb.sepal ? 'sepal'
+          : org.q < wb.stamen ? 'petal'
+            : org.q < wb.carpel ? 'stamen' : 'carpel';
+        org.petal = org.whorl === 'petal';
+        org.leaf = null;
+        const frac = org.whorl === 'sepal' ? (wb.sepalLen ?? 0.20)
+          : org.whorl === 'petal' ? 0.30 * pg
+            : org.whorl === 'stamen' ? (wb.stamenLen ?? 0.13)
+              : (wb.carpelLen ?? 0.11);
+        org.maxLen = sp.organLen * frac * (0.82 + 0.36 * org.rnd());
+        // A stamen is an anther on a FILAMENT — a stalk that elongates far past
+        // what the pipe model's length term gives a blade this small. Filament
+        // elongation is its own late developmental program in real flowers
+        // (auxin-driven, rapid at anthesis), so it is a per-organ stalk factor
+        // set at founding, not a drawn length. petioleOf() reads it; radius
+        // still comes off the blade area, so a filament is thin because its
+        // anther is small, which is the right dependency.
+        org.stalkX = org.whorl === 'stamen' ? (wb.filament ?? 3.0)
+          : org.whorl === 'carpel' ? (wb.style ?? 2.2) : 1;
+        // sepals spread beneath the corolla like the leaves they are; stamens
+        // and the carpel stand nearly axial
+        org.tilt = org.whorl === 'sepal' ? sp.organTilt * (0.9 + 0.2 * org.rnd())
+          : org.whorl === 'petal' ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
+            : org.whorl === 'stamen' ? sp.organTilt * 0.22
+              : sp.organTilt * 0.10;
+        // a corolla's insertion is far more regular than a shoot's — floral
+        // symmetry genes canalise organ position, and with five petals the
+        // leaf's full pitch scatter reads as a jumble where the same scatter
+        // vanished inside a 23-petal double (measured, by looking). Sepals
+        // keep the leaf's scatter: they are leaves.
+        if (org.whorl !== 'sepal') org.lift *= 0.3;
+      } else {
+        // the outer ones are petals — leaves whose margin was told to grow broad
+        // and smooth instead of long and toothed
+        org.petal = org.q < sp.petalQ;
+        org.whorl = org.petal ? 'petal' : 'inner';
+        org.leaf = null;
+        org.maxLen = sp.organLen * (org.petal ? 0.30 * pg : 0.13) * (0.82 + 0.36 * org.rnd());
+        org.tilt = org.petal ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
+          : sp.organTilt * 0.30;
+      }
       org.roll *= 0.25;
       // `droopScale` was here — 0.12 for a petal and 0.05 for anything inside it,
       // holding floral organs up because the leaf's droop was far too much for them.
@@ -1095,6 +1153,12 @@ export const SPECIES_DEFAULTS = {
   // took to found its first is 320. 1600 is 3.2x the worst real gap.
   vegGrace: 1600,
   floralCZ: 0.42,       // how much of the central zone survives conversion
+  floralDome: 0,        // cap on the converted dome, in founder-patch radii
+                        // (organR). A floral meristem has a characteristic
+                        // size; capping makes a converted TERMINAL apex
+                        // contract per organ like an axillary bud does, so its
+                        // q climbs and it makes all four whorls instead of one.
+                        // 0 = no cap, the shipped behaviour exactly
   fruitFlow: 0.0060,     // a swelling fruit is a huge sink; the stem answers
   fruitScale: 0.55,
   fruitOpts: {},
@@ -1105,6 +1169,14 @@ export const SPECIES_DEFAULTS = {
   // measured q distribution is skewed (p50 0.06, p90 0.53), so 0.62 left 24 of 42
   // flowers with no inner organs at all. See TUNING.md for the threshold sweep.
   petalQ: 0.28,      // organs founded outside this are petals
+  whorlBands: null,  // the FULL ABC model, off by default. When set — e.g.
+                     // { sepal: 0.08, stamen: 0.62, carpel: 0.90 } — floral
+                     // identity is banded outermost-to-innermost into sepal /
+                     // petal / stamen / carpel instead of the binary petalQ.
+                     // Optional per-whorl terms: sepalLen, stamenLen, carpelLen
+                     // (fractions of organLen), filament and style (stalk
+                     // elongation factors read by petioleOf). null = the
+                     // shipped binary path, bit for bit.
   petalTilt: 1.45,   // petals reflex past perpendicular as they open
   tropism: 0.02,
   wander: 0.35,

@@ -33,7 +33,41 @@ function flEnv(over) {
   };
 }
 
-function flDrawSpecimen(env, B, S) {
+// Whorl palettes, built lazily per specimen. The ANTHER wears the species' own
+// vasculature glow, concentrated — an anther is a packet of what the veins
+// carry, and the pollen it sheds is already lit by the same key. The CARPEL is
+// leaf tissue turned inward: pale green-white style and stigma, faint glow.
+// Grade-category numbers, same standing as the shipped palette scalars.
+function flWhorlPals(S) {
+  const pal = S.pal, pp = S.petalPal, m = pal.laminaMul;
+  const mixc = (a, b, t) => a.map((v, k) => lerp(v, b[k], t));
+  const vein = pal.vein;
+  return {
+    anther: { ...pp,
+      blade0: mixc(pp.blade0, vein.map(v => v * m * 1.05), 0.75),
+      blade1: mixc(pp.blade1, vein.map(v => v * m * 1.25), 0.85),
+      // the first pass ran glow at 2.5x with a 0.9 floor and every anther
+      // saturated to a white bokeh blob through the bloom chain (measured on
+      // the live shader); an anther should read warm, not incandescent
+      vein, glow: Math.min(0.45, pp.glow * 1.4) },
+    carpel: { ...pp,
+      // pale luminous green — a style IS chlorophyll tissue. The first mix sat
+      // at 0.55 toward a dark olive and the carpel read as a black faceted
+      // blob at the flower's crown (isolated live: brightening ONLY this
+      // palette turned the mystery object pale green)
+      blade0: mixc(pal.blade1, [0.55, 0.70, 0.45], 0.8),
+      blade1: mixc(pal.blade1, [0.85, 0.98, 0.70], 0.8),
+      vein, glow: Math.min(0.5, Math.max(pp.glow * 1.3, 0.35)) },
+  };
+}
+
+// `cull` is the shipped sight-line occlusion clearance (70_app.js), ported the
+// day the flower focus got a facing shot: face-on through a canopy is a shot
+// INTO foliage, and without the clearance the frame is mostly defocused blades
+// with a flower peeking through a gap (measured, immediately). Same cone test,
+// same hysteresis, same keep rules — the subject flower's own organs are never
+// cleared. Null (the parity harness, the wide shot) draws everything, as ever.
+function flDrawSpecimen(env, B, S, cull) {
   const pal = S.pal;
   const V = env.view();
   const cpal = V.cellPal ? { ...pal, ...V.cellPal } : pal;
@@ -57,9 +91,31 @@ function flDrawSpecimen(env, B, S) {
       if (org.len < 0.02) continue;
       if (org.shed) continue;               // petals do not fall (yet); leaves that do are the page's story
       const oFr = org.frame;
+      // the shipped cone-from-the-eye occlusion test, hysteresis included: an
+      // organ must be clearly inside the cleared cone to drop and clearly
+      // outside to return, so a wobble at the boundary decides once
+      let occluded = false;
+      if (cull && !(ax === cull.keep && org.floral)) {
+        const ox = oFr.o[0] - env.cam.eye[0];
+        const oy = oFr.o[1] - env.cam.eye[1];
+        const oz = oFr.o[2] - env.cam.eye[2];
+        const t = ox * cull.dx + oy * cull.dy + oz * cull.dz;
+        // the window extends one organ-length PAST the subject: a face-on
+        // shot sits inside the canopy, and a blade rooted just behind the
+        // flower reaches forward across its face (the shipped cull never met
+        // this case — its director shoots from outside the crown)
+        if (t > 0 && t < cull.r + (org.len || 0)) {
+          const px2 = ox - cull.dx * t, py2 = oy - cull.dy * t, pz2 = oz - cull.dz * t;
+          const lat = Math.hypot(px2, py2, pz2) - (org.len || 0);
+          occluded = lat < cull.rad * (t / cull.dist) * (org._occ ? 1.20 : 0.86);
+        }
+      }
+      org._occ = occluded;
+      if (occluded) continue;
       const L = org.leaf;
       const sen = org.sen || 0;
-      const kind = org.petal ? 'petal' : org.floral ? 'inner' : 'leaf';
+      const kind = org.whorl && org.whorl !== 'inner' ? org.whorl
+        : org.petal ? 'petal' : org.floral ? 'inner' : 'leaf';
       B.beginOrgan({ kind, ax: ai, org: oi, q: org.q || 0, sen, dev: org.dev || 0, len: org.len });
       // petiole — the stalk on screen is the stalk in the solver (ROADMAP 5)
       const a = oFr.o;
@@ -67,14 +123,18 @@ function flDrawSpecimen(env, B, S) {
       const pet = pt.len;
       const b = v3(a[0] + oFr.x[0] * pet, a[1] + oFr.x[1] * pet, a[2] + oFr.x[2] * pet);
       let petC = pal.stem1;
-      if (org.petal) {
+      if (org.petal || kind === 'stamen' || kind === 'carpel') {
         // a petal's stalk wears the petal's base colour, not the stem's: a
         // doubled corolla draws 20+ of these, and in stem-brown they read as
-        // a wire armature through the flower (measured on the double)
-        const pb = S.petalPal.blade0;
-        _petC[0] = lerp(pal.stem1[0], pb[0], 0.65);
-        _petC[1] = lerp(pal.stem1[1], pb[1], 0.65);
-        _petC[2] = lerp(pal.stem1[2], pb[2], 0.65);
+        // a wire armature through the flower (measured on the double). A
+        // stamen's FILAMENT is paler still — it reads as light structure
+        // holding the anthers up — and the carpel's style stays green.
+        const pb = kind === 'stamen' ? S.petalPal.blade1
+          : kind === 'carpel' ? pal.blade1 : S.petalPal.blade0;
+        const t = kind === 'stamen' ? 0.85 : kind === 'carpel' ? 0.55 : 0.65;
+        _petC[0] = lerp(pal.stem1[0], pb[0], t);
+        _petC[1] = lerp(pal.stem1[1], pb[1], t);
+        _petC[2] = lerp(pal.stem1[2], pb[2], t);
         petC = _petC;
       } else if (sen > 0) {
         senesceTint(_petC, pal.stem1[0], pal.stem1[1], pal.stem1[2], sen * 0.85);
@@ -87,11 +147,16 @@ function flDrawSpecimen(env, B, S) {
       const dev = clamp((org.dev || 0) * 1.06 - 0.03, 0, 1);
       const bl = drawnBladeLen(org.len, sen);
       if (bl < 0.02) { B.endOrgan(); continue; }
+      const wp = (kind === 'stamen' || kind === 'carpel')
+        && (S._whorlPals || (S._whorlPals = flWhorlPals(S)));
       const bp = org.petal ? S.petalPal
-        : org.floral ? S.innerPals[clamp(
-          Math.round(((org.q - S.sp.petalQ) / Math.max(1e-3, 1 - S.sp.petalQ)) * (INNER_STEPS - 1)),
-          0, INNER_STEPS - 1)]
-          : pal;
+        : kind === 'sepal' ? pal            // a sepal IS a leaf — A-class alone
+          : kind === 'stamen' ? wp.anther
+            : kind === 'carpel' ? wp.carpel
+              : org.floral ? S.innerPals[clamp(
+                Math.round(((org.q - S.sp.petalQ) / Math.max(1e-3, 1 - S.sp.petalQ)) * (INNER_STEPS - 1)),
+                0, INNER_STEPS - 1)]
+                : pal;
       const curl = -bl * (org.petal ? 0.05 : 0.16) * (1 + sen * 2.2);
       const ripple = bl * 0.014;
       // A flower close-up lives at the mesh resolution the shipped page only

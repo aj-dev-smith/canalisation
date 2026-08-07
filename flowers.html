@@ -4706,8 +4706,15 @@ function bladeAreaOf(org, sen) {
 function petioleOf(org, opt) {
   const p = opt || PETIOLE;
   const r = Math.max(1e-5, Math.sqrt(p.kappa * bladeAreaOf(org) / Math.PI));
+  // `stalkX` is a per-organ stalk elongation factor, set at founding and 1 (or
+  // absent) for every organ the shipped species make. A stamen's filament and a
+  // carpel's style are stalks that elongate far past the blade-proportional
+  // length — their own developmental program, not a drawn number. The radius
+  // still comes off the blade area: a filament is thin BECAUSE its anther is
+  // small, and everything downstream (bendOf, the stem's load) sees the same
+  // stalk the renderer draws.
   return {
-    len: Math.max(1e-4, org.len * p.ofOrganLen + org.radius * p.ofRadius),
+    len: Math.max(1e-4, (org.len * p.ofOrganLen + org.radius * p.ofRadius) * (org.stalkX || 1)),
     r0: r,
     r1: r,
   };
@@ -6160,6 +6167,21 @@ class Axis {
     // radius it had — it has to, because everything the flower is going to make
     // has to fit in it, and from here nothing replaces what gets used.
     m.rCZ *= sp.floralCZ; m.G *= 2.3;
+    // `floralDome` caps the dome at conversion, in founder-patch radii. A real
+    // floral meristem has a CHARACTERISTIC size — determinate, a few
+    // organ-widths across — not a fraction of whatever apex it converted from,
+    // and the size matters because contraction per organ goes as organR^2 over
+    // the flank area: a huge converted TERMINAL apex barely contracts, its q
+    // never climbs, and (measured) it founds ten organs at q ~= 0 and reads as
+    // all one whorl. A cap shrinks that terminal to the size an axillary bud
+    // already converts at and leaves the axillaries untouched — a multiplier
+    // was tried first and cannot do both (it collapsed the axillaries to 1-3
+    // organs while fixing the terminal). Default 0 is off: shipped exactly.
+    const fd = sp.floralDome || 0;
+    if (fd > 0) {
+      const k = Math.min(1, (fd * m.organR) / Math.max(1e-6, m.rPZ));
+      if (k < 1) { m.R *= k; m.rPZ *= k; m.rCZ *= k; }
+    }
     // The scale the apex had at the moment it converted. Organ identity is read
     // against this fixed reference and not against the apex's current size — a
     // meristem that contracts self-similarly reports the same q forever if you
@@ -6284,18 +6306,61 @@ class Axis {
       // in, and that gradient is the only thing distinguishing them
       org.q = clamp(1 - (prim.r / Math.max(1e-3, this.floralR0 || this.meristem.o.rPZ)), 0, 1);
       org.floral = true;
-      // the outer ones are petals — leaves whose margin was told to grow broad
-      // and smooth instead of long and toothed
-      org.petal = org.q < sp.petalQ;
-      org.leaf = null;
       // `petalGrade` scales a petal down with its identity q: a homeotically
       // converted stamen is a petaloid stamen, smaller than a true petal, so
       // a doubled corolla grades outer-large to inner-small the way a rose
       // does. Default 0 is exactly the old line for every shipped species.
       const pg = 1 - (sp.petalGrade || 0) * clamp(org.q, 0, 1);
-      org.maxLen = sp.organLen * (org.petal ? 0.30 * pg : 0.13) * (0.82 + 0.36 * org.rnd());
-      org.tilt = org.petal ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
-        : sp.organTilt * 0.30;
+      const wb = sp.whorlBands;
+      if (wb) {
+        // THE FULL ABC MODEL, as bands on the one coordinate the flower already
+        // has. A/B/C domains are concentric and their boundaries are sharp
+        // (AP3/AG mutual antagonism), so identity is a banding of q, outermost
+        // to innermost: sepal, petal, stamen, carpel. A sepal is A-class alone
+        // — a leaf-like organ — and it literally takes a leaf here, because
+        // the non-petal branch of the leaf-request already hands one out.
+        // `whorlBands` is null for every shipped species: this block never runs.
+        org.whorl = org.q < wb.sepal ? 'sepal'
+          : org.q < wb.stamen ? 'petal'
+            : org.q < wb.carpel ? 'stamen' : 'carpel';
+        org.petal = org.whorl === 'petal';
+        org.leaf = null;
+        const frac = org.whorl === 'sepal' ? (wb.sepalLen ?? 0.20)
+          : org.whorl === 'petal' ? 0.30 * pg
+            : org.whorl === 'stamen' ? (wb.stamenLen ?? 0.13)
+              : (wb.carpelLen ?? 0.11);
+        org.maxLen = sp.organLen * frac * (0.82 + 0.36 * org.rnd());
+        // A stamen is an anther on a FILAMENT — a stalk that elongates far past
+        // what the pipe model's length term gives a blade this small. Filament
+        // elongation is its own late developmental program in real flowers
+        // (auxin-driven, rapid at anthesis), so it is a per-organ stalk factor
+        // set at founding, not a drawn length. petioleOf() reads it; radius
+        // still comes off the blade area, so a filament is thin because its
+        // anther is small, which is the right dependency.
+        org.stalkX = org.whorl === 'stamen' ? (wb.filament ?? 3.0)
+          : org.whorl === 'carpel' ? (wb.style ?? 2.2) : 1;
+        // sepals spread beneath the corolla like the leaves they are; stamens
+        // and the carpel stand nearly axial
+        org.tilt = org.whorl === 'sepal' ? sp.organTilt * (0.9 + 0.2 * org.rnd())
+          : org.whorl === 'petal' ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
+            : org.whorl === 'stamen' ? sp.organTilt * 0.22
+              : sp.organTilt * 0.10;
+        // a corolla's insertion is far more regular than a shoot's — floral
+        // symmetry genes canalise organ position, and with five petals the
+        // leaf's full pitch scatter reads as a jumble where the same scatter
+        // vanished inside a 23-petal double (measured, by looking). Sepals
+        // keep the leaf's scatter: they are leaves.
+        if (org.whorl !== 'sepal') org.lift *= 0.3;
+      } else {
+        // the outer ones are petals — leaves whose margin was told to grow broad
+        // and smooth instead of long and toothed
+        org.petal = org.q < sp.petalQ;
+        org.whorl = org.petal ? 'petal' : 'inner';
+        org.leaf = null;
+        org.maxLen = sp.organLen * (org.petal ? 0.30 * pg : 0.13) * (0.82 + 0.36 * org.rnd());
+        org.tilt = org.petal ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
+          : sp.organTilt * 0.30;
+      }
       org.roll *= 0.25;
       // `droopScale` was here — 0.12 for a petal and 0.05 for anything inside it,
       // holding floral organs up because the leaf's droop was far too much for them.
@@ -6750,6 +6815,12 @@ const SPECIES_DEFAULTS = {
   // took to found its first is 320. 1600 is 3.2x the worst real gap.
   vegGrace: 1600,
   floralCZ: 0.42,       // how much of the central zone survives conversion
+  floralDome: 0,        // cap on the converted dome, in founder-patch radii
+                        // (organR). A floral meristem has a characteristic
+                        // size; capping makes a converted TERMINAL apex
+                        // contract per organ like an axillary bud does, so its
+                        // q climbs and it makes all four whorls instead of one.
+                        // 0 = no cap, the shipped behaviour exactly
   fruitFlow: 0.0060,     // a swelling fruit is a huge sink; the stem answers
   fruitScale: 0.55,
   fruitOpts: {},
@@ -6760,6 +6831,14 @@ const SPECIES_DEFAULTS = {
   // measured q distribution is skewed (p50 0.06, p90 0.53), so 0.62 left 24 of 42
   // flowers with no inner organs at all. See TUNING.md for the threshold sweep.
   petalQ: 0.28,      // organs founded outside this are petals
+  whorlBands: null,  // the FULL ABC model, off by default. When set — e.g.
+                     // { sepal: 0.08, stamen: 0.62, carpel: 0.90 } — floral
+                     // identity is banded outermost-to-innermost into sepal /
+                     // petal / stamen / carpel instead of the binary petalQ.
+                     // Optional per-whorl terms: sepalLen, stamenLen, carpelLen
+                     // (fractions of organLen), filament and style (stalk
+                     // elongation factors read by petioleOf). null = the
+                     // shipped binary path, bit for bit.
   petalTilt: 1.45,   // petals reflex past perpendicular as they open
   tropism: 0.02,
   wander: 0.35,
@@ -10910,15 +10989,20 @@ class FlPollen {
     // accumulates fractionally so a low rate still sheds eventually
     const cand = this._cand;
     cand.length = 0;
-    const pQ = S.sp.petalQ;
+    const pQ = S.sp.petalQ, wb = S.sp.whorlBands;
     for (const ax of P.axes) {
       if (!ax.floral) continue;
       for (const org of ax.organs) {
         if (!org.floral || org.petal || org.shed) continue;
         if ((org.dev || 0) < C.devGate || (org.sen || 0) > 0) continue;
         if (!org.frame || org.len < 0.05) continue;
-        const qn = ((org.q || 0) - pQ) / Math.max(1e-3, 1 - pQ);
-        if (qn > C.qBand) continue;
+        // with whorl bands the stamens are NAMED, so the q-band heuristic
+        // retires and only true anthers shed
+        if (wb) { if (org.whorl !== 'stamen') continue; }
+        else {
+          const qn = ((org.q || 0) - pQ) / Math.max(1e-3, 1 - pQ);
+          if (qn > C.qBand) continue;
+        }
         cand.push(org);
       }
     }
@@ -11000,7 +11084,41 @@ function flEnv(over) {
   };
 }
 
-function flDrawSpecimen(env, B, S) {
+// Whorl palettes, built lazily per specimen. The ANTHER wears the species' own
+// vasculature glow, concentrated — an anther is a packet of what the veins
+// carry, and the pollen it sheds is already lit by the same key. The CARPEL is
+// leaf tissue turned inward: pale green-white style and stigma, faint glow.
+// Grade-category numbers, same standing as the shipped palette scalars.
+function flWhorlPals(S) {
+  const pal = S.pal, pp = S.petalPal, m = pal.laminaMul;
+  const mixc = (a, b, t) => a.map((v, k) => lerp(v, b[k], t));
+  const vein = pal.vein;
+  return {
+    anther: { ...pp,
+      blade0: mixc(pp.blade0, vein.map(v => v * m * 1.05), 0.75),
+      blade1: mixc(pp.blade1, vein.map(v => v * m * 1.25), 0.85),
+      // the first pass ran glow at 2.5x with a 0.9 floor and every anther
+      // saturated to a white bokeh blob through the bloom chain (measured on
+      // the live shader); an anther should read warm, not incandescent
+      vein, glow: Math.min(0.45, pp.glow * 1.4) },
+    carpel: { ...pp,
+      // pale luminous green — a style IS chlorophyll tissue. The first mix sat
+      // at 0.55 toward a dark olive and the carpel read as a black faceted
+      // blob at the flower's crown (isolated live: brightening ONLY this
+      // palette turned the mystery object pale green)
+      blade0: mixc(pal.blade1, [0.55, 0.70, 0.45], 0.8),
+      blade1: mixc(pal.blade1, [0.85, 0.98, 0.70], 0.8),
+      vein, glow: Math.min(0.5, Math.max(pp.glow * 1.3, 0.35)) },
+  };
+}
+
+// `cull` is the shipped sight-line occlusion clearance (70_app.js), ported the
+// day the flower focus got a facing shot: face-on through a canopy is a shot
+// INTO foliage, and without the clearance the frame is mostly defocused blades
+// with a flower peeking through a gap (measured, immediately). Same cone test,
+// same hysteresis, same keep rules — the subject flower's own organs are never
+// cleared. Null (the parity harness, the wide shot) draws everything, as ever.
+function flDrawSpecimen(env, B, S, cull) {
   const pal = S.pal;
   const V = env.view();
   const cpal = V.cellPal ? { ...pal, ...V.cellPal } : pal;
@@ -11024,9 +11142,31 @@ function flDrawSpecimen(env, B, S) {
       if (org.len < 0.02) continue;
       if (org.shed) continue;               // petals do not fall (yet); leaves that do are the page's story
       const oFr = org.frame;
+      // the shipped cone-from-the-eye occlusion test, hysteresis included: an
+      // organ must be clearly inside the cleared cone to drop and clearly
+      // outside to return, so a wobble at the boundary decides once
+      let occluded = false;
+      if (cull && !(ax === cull.keep && org.floral)) {
+        const ox = oFr.o[0] - env.cam.eye[0];
+        const oy = oFr.o[1] - env.cam.eye[1];
+        const oz = oFr.o[2] - env.cam.eye[2];
+        const t = ox * cull.dx + oy * cull.dy + oz * cull.dz;
+        // the window extends one organ-length PAST the subject: a face-on
+        // shot sits inside the canopy, and a blade rooted just behind the
+        // flower reaches forward across its face (the shipped cull never met
+        // this case — its director shoots from outside the crown)
+        if (t > 0 && t < cull.r + (org.len || 0)) {
+          const px2 = ox - cull.dx * t, py2 = oy - cull.dy * t, pz2 = oz - cull.dz * t;
+          const lat = Math.hypot(px2, py2, pz2) - (org.len || 0);
+          occluded = lat < cull.rad * (t / cull.dist) * (org._occ ? 1.20 : 0.86);
+        }
+      }
+      org._occ = occluded;
+      if (occluded) continue;
       const L = org.leaf;
       const sen = org.sen || 0;
-      const kind = org.petal ? 'petal' : org.floral ? 'inner' : 'leaf';
+      const kind = org.whorl && org.whorl !== 'inner' ? org.whorl
+        : org.petal ? 'petal' : org.floral ? 'inner' : 'leaf';
       B.beginOrgan({ kind, ax: ai, org: oi, q: org.q || 0, sen, dev: org.dev || 0, len: org.len });
       // petiole — the stalk on screen is the stalk in the solver (ROADMAP 5)
       const a = oFr.o;
@@ -11034,14 +11174,18 @@ function flDrawSpecimen(env, B, S) {
       const pet = pt.len;
       const b = v3(a[0] + oFr.x[0] * pet, a[1] + oFr.x[1] * pet, a[2] + oFr.x[2] * pet);
       let petC = pal.stem1;
-      if (org.petal) {
+      if (org.petal || kind === 'stamen' || kind === 'carpel') {
         // a petal's stalk wears the petal's base colour, not the stem's: a
         // doubled corolla draws 20+ of these, and in stem-brown they read as
-        // a wire armature through the flower (measured on the double)
-        const pb = S.petalPal.blade0;
-        _petC[0] = lerp(pal.stem1[0], pb[0], 0.65);
-        _petC[1] = lerp(pal.stem1[1], pb[1], 0.65);
-        _petC[2] = lerp(pal.stem1[2], pb[2], 0.65);
+        // a wire armature through the flower (measured on the double). A
+        // stamen's FILAMENT is paler still — it reads as light structure
+        // holding the anthers up — and the carpel's style stays green.
+        const pb = kind === 'stamen' ? S.petalPal.blade1
+          : kind === 'carpel' ? pal.blade1 : S.petalPal.blade0;
+        const t = kind === 'stamen' ? 0.85 : kind === 'carpel' ? 0.55 : 0.65;
+        _petC[0] = lerp(pal.stem1[0], pb[0], t);
+        _petC[1] = lerp(pal.stem1[1], pb[1], t);
+        _petC[2] = lerp(pal.stem1[2], pb[2], t);
         petC = _petC;
       } else if (sen > 0) {
         senesceTint(_petC, pal.stem1[0], pal.stem1[1], pal.stem1[2], sen * 0.85);
@@ -11054,11 +11198,16 @@ function flDrawSpecimen(env, B, S) {
       const dev = clamp((org.dev || 0) * 1.06 - 0.03, 0, 1);
       const bl = drawnBladeLen(org.len, sen);
       if (bl < 0.02) { B.endOrgan(); continue; }
+      const wp = (kind === 'stamen' || kind === 'carpel')
+        && (S._whorlPals || (S._whorlPals = flWhorlPals(S)));
       const bp = org.petal ? S.petalPal
-        : org.floral ? S.innerPals[clamp(
-          Math.round(((org.q - S.sp.petalQ) / Math.max(1e-3, 1 - S.sp.petalQ)) * (INNER_STEPS - 1)),
-          0, INNER_STEPS - 1)]
-          : pal;
+        : kind === 'sepal' ? pal            // a sepal IS a leaf — A-class alone
+          : kind === 'stamen' ? wp.anther
+            : kind === 'carpel' ? wp.carpel
+              : org.floral ? S.innerPals[clamp(
+                Math.round(((org.q - S.sp.petalQ) / Math.max(1e-3, 1 - S.sp.petalQ)) * (INNER_STEPS - 1)),
+                0, INNER_STEPS - 1)]
+                : pal;
       const curl = -bl * (org.petal ? 0.05 : 0.16) * (1 + sen * 2.2);
       const ripple = bl * 0.014;
       // A flower close-up lives at the mesh resolution the shipped page only
@@ -11244,8 +11393,16 @@ const FL_PET_FS = `
     // gradient now, and the spots live inside it only.
     float zone = 1.0 - smoothstep(uBull - 0.18, uBull + 0.18, vU);
     float spot = texture2D(uSpots, vec2(vU, (vV + vLib) / 3.0)).r;
+    // NECTAR GUIDE: anthocyanin laid over the vasculature — in Antirrhinum,
+    // Venosa is an MYB active only in epidermal cells OVERLYING veins [D], so
+    // the pigment pattern IS the vein network. vDD is the distance-to-vein
+    // field the engine already computes (translucency reads it too); read as
+    // pigment it draws the guides a pollinator would follow, converging on
+    // the throat, so it deepens inside the bullseye zone and fades distally.
+    float guide = (1.0 - smoothstep(0.0, 0.28, vDD)) * (0.35 + 0.65 * zone);
     float kPig = (1.0 + 0.35 * zone) * mix(1.0, 1.12, vDev)
-               * (1.0 + 0.35 * smoothstep(0.65, 1.0, spot) * zone);
+               * (1.0 + 0.35 * smoothstep(0.65, 1.0, spot) * zone)
+               * (1.0 + 0.55 * guide);
     vec3 alb = pow(max(vC, vec3(0.0)), vec3(kPig));
 
     // THIN TISSUE IS LIT FROM BOTH SIDES. A one-sided lambert throws half of
@@ -11823,7 +11980,51 @@ function flBoot() {
   // The double ships as the DEFAULT form — the piece is titled flowers, and a
   // 20-petal graded corolla is the strongest image it makes. `?form=wild` is
   // the shipped configuration, untouched.
-  if ((q.get('form') || 'double') === 'double') {
+  // `?form=abc` — now the DEFAULT — is the FULL ABC model: whorlBands cuts q
+  // into sepal / petal / stamen / carpel (sharp boundaries — AP3/AG mutual
+  // antagonism), so a flower is a green calyx, a corolla, a ring of filaments
+  // carrying glowing anthers, and a central pistil, in that order, off the one
+  // coordinate the meristem's self-consumption already produces. The bands are
+  // set against the MEASURED q founding sequence (abc_probe: renewal 0.45 +
+  // floralDome 3 spans q 0 -> 0.85 over ~13 organs), not an idealised one:
+  // {0.08, 0.30, 0.65} gives S4-6 P4-6 A3-5 C0-2, which is a eudicot plan.
+  // floralDome 3 is the measured size at which Ember's WORKING axillaries
+  // already convert (R0/organR = 3.0); without it a terminal apex founds ten
+  // organs at q ~= 0 and reads as one whorl (the Parasol's only flower is
+  // terminal, so this is not optional). Compression knobs as the double's.
+  const form = q.get('form') || 'abc';
+  if (form === 'abc') {
+    // TWO FLORAL PROGRAMS, assigned per species from the measured whorl
+    // balance (scratchpad abc_sweep, 8 species x both, step 5200): program A
+    // for species whose q climbs steadily; program B — smaller dome, more
+    // renewal, bands shifted down — for species whose q sits at zero for
+    // most foundings and then jumps (a Cathedral Fern under A is S8 P1 A0
+    // C1; under B it is S3 P5 A4 C1, a real eudicot plan). Spiral Ossuary
+    // founds only 3 floral organs even WILD — its flowers were always
+    // inconspicuous, and no program can conjure organs its meristem does
+    // not make; it takes A and does what it always did.
+    const progB = new Set(['Cathedral Fern', 'Hoarfrost Thicket', 'Sulphur Rosette']);
+    const P = progB.has(name)
+      ? { renew: 0.75, organs: 28, dome: 2.2, bands: [0.06, 0.24, 0.60] }
+      : { renew: 0.55, organs: 26, dome: 3.0, bands: [0.08, 0.38, 0.65] };
+    const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || P.renew)));
+    const over = {
+      whorlBands: {
+        sepal: +(q.get('sepal') || P.bands[0]),
+        stamen: +(q.get('stamen') || P.bands[1]),
+        carpel: +(q.get('carpel') || P.bands[2]),
+        // filament 3.0 threw the anthers clear of the flower; 1.8 holds them
+        // just above the corolla (by eye, like the wind's uRef)
+        filament: 1.8, style: 1.5,
+      },
+      apexRenew: rn, floralOrgans: P.organs, floralDome: P.dome,
+      floralElong: 0.08, floralStretch: 0.08, floralNode: 0.008,
+      floralGrace: 960, petalGrade: 0.35,
+    };
+    S.sp = { ...S.sp, ...over };
+    Object.assign(S.plant.sp, over);
+  }
+  if (form === 'double') {
     const pq = Math.min(0.94, Math.max(0.05, +(q.get('homeo') || 0.62)));
     const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || 0.7)));
     // Compression, the founding gate and the grace move TOGETHER (all three
@@ -11853,7 +12054,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=wild|double ?homeo= ?renew=';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|double|wild ?renew= ?homeo=';
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
   // grains sample the same wind field the stem bends in.
@@ -11876,6 +12077,15 @@ function flBoot() {
   // petalled one: the terminal flower's organs ride the whole curling apex,
   // so its bound is a third of the plant and "focus" degenerates to a wide
   // shot. Score petals against drawn reach.
+  // the main trunk's point nearest a height — the thing a close-up must clear
+  function trunkNear(y) {
+    let tp = null, bd = 1e9;
+    for (const p of S.plant.axes[0].pts) {
+      const d = Math.abs(p[1] - y);
+      if (d < bd) { bd = d; tp = p; }
+    }
+    return tp;
+  }
   function bestFlower() {
     let best = -1, bestScore = 0;
     for (let ai = 0; ai < S.plant.axes.length; ai++) {
@@ -11886,7 +12096,16 @@ function flBoot() {
       if (n < 3) continue;
       const bb = B.floralBounds(ai);
       if (!bb) continue;
-      const score = n / (0.6 + bb.r);
+      // a corolla pressed against the trunk cannot be photographed — the
+      // trunk above it crosses every facing shot (measured: a flower 0.36
+      // units off a trunk, corolla radius 2.13, framed with the trunk through
+      // its face). Prefer clearance, in units of the corolla's own radius.
+      const tp = ai === 0 ? null : trunkNear(bb.c[1]);
+      const clear = tp
+        ? smoothstep(0.25, 1.0,
+          Math.hypot(bb.c[0] - tp[0], bb.c[2] - tp[2]) / Math.max(0.3, bb.r))
+        : 1;
+      const score = n / (0.6 + bb.r) * (0.15 + 0.85 * clear);
       if (score > bestScore) { bestScore = score; best = ai; }
     }
     return best;
@@ -11902,14 +12121,50 @@ function flBoot() {
     target.lerp(new THREE.Vector3(bb.c[0], bb.c[1], bb.c[2]), 0.03);
     // r * 1.8 with the 2.35 dolly law puts the corolla at ~55% of frame height
     radius += (Math.max(1.0, bb.r * 1.8) - radius) * 0.03;
+    // A flower has a facing: down its own axis. Face-on is the shot that shows
+    // a radial corolla AS a corolla, and for an axillary flower it puts the
+    // trunk BEHIND the subject instead of through it (the framing used to set
+    // target and dolly but never azimuth, so the camera routinely looked at a
+    // flower bisected by the stem it grew from). Only while the viewer is not
+    // orbiting — a drag owns the camera for a while.
+    if (performance.now() - lastOrbit > 6000) {
+      const ax = S.plant.axes[ai];
+      const a = ax.pts[0], b = ax.pts[ax.pts.length - 1];
+      const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      if (d.lengthSq() > 1e-6) {
+        d.normalize();
+        // blend AWAY from the trunk: an axillary flower's pedicel often points
+        // nearly straight up, and the pure axis shot looks down through the
+        // trunk above it. Pushing the eye to the flower's open side gives the
+        // three-quarter view a photographer would walk to.
+        if (ai !== 0) {
+          const tp = trunkNear(target.y);
+          const lx = target.x - tp[0], lz = target.z - tp[2];
+          const ll = Math.hypot(lx, lz);
+          if (ll > 1e-4) { d.x += 0.9 * lx / ll; d.z += 0.9 * lz / ll; d.normalize(); }
+        }
+        // keep some horizon: a terminal flower points straight up and a pure
+        // overhead shot flattens it
+        d.y = Math.min(d.y, 0.60); d.normalize();
+        const eye = scene.camera.position, want = radius * 2.35;
+        _desiredEye.copy(target).addScaledVector(d, want);
+        eye.lerp(_desiredEye, 0.012);
+      }
+    }
     return true;
   }
+  const _desiredEye = new THREE.Vector3();
+  let lastOrbit = -1e9;
+  scene.controls.addEventListener('start', () => { lastOrbit = performance.now(); });
+  let framedAx = -1;   // which axis the flower shot is on; -1 = no clearance
   function updateFraming() {
+    framedAx = -1;
     if (focus === 'flower') {
       // >= 0, not truthy: the best flower is often the TERMINAL one, axis 0,
       // and a truthiness test silently fell through to the wide shot
       const ax = bestFlower();
       if (ax >= 0 && frameAxisFlower(ax)) {
+        framedAx = ax;
         scene.controls.target.copy(target);
         scene.fogU.uFogNear.value = Math.max(0, scene.camera.position.distanceTo(target) - radius * 1.1);
         const eye = scene.camera.position;
@@ -11965,8 +12220,28 @@ function flBoot() {
     env.cam.dist = e.distanceTo(target);
     // width floor as shipped, LOD off: every vein the chemistry grew.
     setView(env.cam.eye, 0.004, 0);
+    // the sight-line clearance, sized off the subject flower's DRAWN bounds
+    // FROM THE LAST FRAME (they must be read before reset() empties the
+    // streams; one frame stale is invisible) and opened only as the camera
+    // arrives (the shipped ramp — engaging at full width from the wide shot
+    // made half the plant vanish in one frame)
+    let cull = null;
+    if (framedAx >= 0) {
+      const bb = B.floralBounds(framedAx);
+      if (bb) {
+        let rad = Math.max(S.sp.fruitScale * 2.2, bb.r * 1.25);
+        const dx0 = bb.c[0] - e.x, dy0 = bb.c[1] - e.y, dz0 = bb.c[2] - e.z;
+        const de = Math.hypot(dx0, dy0, dz0) || 1;
+        const near = smoothstep(0.20, 0.38, 2 * rad / de);
+        if (near >= 0.01) {
+          rad *= near;
+          cull = { keep: S.plant.axes[framedAx], rad, dist: de, r: de - rad,
+            dx: dx0 / de, dy: dy0 / de, dz: dz0 / de };
+        }
+      }
+    }
     B.reset();
-    flDrawSpecimen(env, B, S);
+    flDrawSpecimen(env, B, S, cull);
     scene.upload(B);
   }
 
@@ -11998,7 +12273,14 @@ function flBoot() {
     }
     env.t = step;
 
-    if (stepped > 0 || !frame.drawn) { capture(); frame.drawn = true; }
+    // recapture on camera motion too, not just sim steps: the sight-line
+    // clearance is computed at capture time from the capture eye, so a frozen
+    // plant with a moving camera (speed=0, or orbiting) kept the clearance —
+    // and the whole cull — from wherever the camera was steps ago
+    const _e = scene.camera.position;
+    const camMoved = Math.hypot(_e.x - env.cam.eye[0], _e.y - env.cam.eye[1],
+      _e.z - env.cam.eye[2]) > 0.02;
+    if (stepped > 0 || camMoved || !frame.drawn) { capture(); frame.drawn = true; }
     if (stepped > 0) pollen.step(S, stepped, step);
     scene.uploadPollen(pollen.buf, pollen.n * 7);
     // spot fields bake lazily in the draw loop; ship each to the GPU once

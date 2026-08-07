@@ -45,7 +45,51 @@ function flBoot() {
   // The double ships as the DEFAULT form — the piece is titled flowers, and a
   // 20-petal graded corolla is the strongest image it makes. `?form=wild` is
   // the shipped configuration, untouched.
-  if ((q.get('form') || 'double') === 'double') {
+  // `?form=abc` — now the DEFAULT — is the FULL ABC model: whorlBands cuts q
+  // into sepal / petal / stamen / carpel (sharp boundaries — AP3/AG mutual
+  // antagonism), so a flower is a green calyx, a corolla, a ring of filaments
+  // carrying glowing anthers, and a central pistil, in that order, off the one
+  // coordinate the meristem's self-consumption already produces. The bands are
+  // set against the MEASURED q founding sequence (abc_probe: renewal 0.45 +
+  // floralDome 3 spans q 0 -> 0.85 over ~13 organs), not an idealised one:
+  // {0.08, 0.30, 0.65} gives S4-6 P4-6 A3-5 C0-2, which is a eudicot plan.
+  // floralDome 3 is the measured size at which Ember's WORKING axillaries
+  // already convert (R0/organR = 3.0); without it a terminal apex founds ten
+  // organs at q ~= 0 and reads as one whorl (the Parasol's only flower is
+  // terminal, so this is not optional). Compression knobs as the double's.
+  const form = q.get('form') || 'abc';
+  if (form === 'abc') {
+    // TWO FLORAL PROGRAMS, assigned per species from the measured whorl
+    // balance (scratchpad abc_sweep, 8 species x both, step 5200): program A
+    // for species whose q climbs steadily; program B — smaller dome, more
+    // renewal, bands shifted down — for species whose q sits at zero for
+    // most foundings and then jumps (a Cathedral Fern under A is S8 P1 A0
+    // C1; under B it is S3 P5 A4 C1, a real eudicot plan). Spiral Ossuary
+    // founds only 3 floral organs even WILD — its flowers were always
+    // inconspicuous, and no program can conjure organs its meristem does
+    // not make; it takes A and does what it always did.
+    const progB = new Set(['Cathedral Fern', 'Hoarfrost Thicket', 'Sulphur Rosette']);
+    const P = progB.has(name)
+      ? { renew: 0.75, organs: 28, dome: 2.2, bands: [0.06, 0.24, 0.60] }
+      : { renew: 0.55, organs: 26, dome: 3.0, bands: [0.08, 0.38, 0.65] };
+    const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || P.renew)));
+    const over = {
+      whorlBands: {
+        sepal: +(q.get('sepal') || P.bands[0]),
+        stamen: +(q.get('stamen') || P.bands[1]),
+        carpel: +(q.get('carpel') || P.bands[2]),
+        // filament 3.0 threw the anthers clear of the flower; 1.8 holds them
+        // just above the corolla (by eye, like the wind's uRef)
+        filament: 1.8, style: 1.5,
+      },
+      apexRenew: rn, floralOrgans: P.organs, floralDome: P.dome,
+      floralElong: 0.08, floralStretch: 0.08, floralNode: 0.008,
+      floralGrace: 960, petalGrade: 0.35,
+    };
+    S.sp = { ...S.sp, ...over };
+    Object.assign(S.plant.sp, over);
+  }
+  if (form === 'double') {
     const pq = Math.min(0.94, Math.max(0.05, +(q.get('homeo') || 0.62)));
     const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || 0.7)));
     // Compression, the founding gate and the grace move TOGETHER (all three
@@ -75,7 +119,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=wild|double ?homeo= ?renew=';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|double|wild ?renew= ?homeo=';
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
   // grains sample the same wind field the stem bends in.
@@ -98,6 +142,15 @@ function flBoot() {
   // petalled one: the terminal flower's organs ride the whole curling apex,
   // so its bound is a third of the plant and "focus" degenerates to a wide
   // shot. Score petals against drawn reach.
+  // the main trunk's point nearest a height — the thing a close-up must clear
+  function trunkNear(y) {
+    let tp = null, bd = 1e9;
+    for (const p of S.plant.axes[0].pts) {
+      const d = Math.abs(p[1] - y);
+      if (d < bd) { bd = d; tp = p; }
+    }
+    return tp;
+  }
   function bestFlower() {
     let best = -1, bestScore = 0;
     for (let ai = 0; ai < S.plant.axes.length; ai++) {
@@ -108,7 +161,16 @@ function flBoot() {
       if (n < 3) continue;
       const bb = B.floralBounds(ai);
       if (!bb) continue;
-      const score = n / (0.6 + bb.r);
+      // a corolla pressed against the trunk cannot be photographed — the
+      // trunk above it crosses every facing shot (measured: a flower 0.36
+      // units off a trunk, corolla radius 2.13, framed with the trunk through
+      // its face). Prefer clearance, in units of the corolla's own radius.
+      const tp = ai === 0 ? null : trunkNear(bb.c[1]);
+      const clear = tp
+        ? smoothstep(0.25, 1.0,
+          Math.hypot(bb.c[0] - tp[0], bb.c[2] - tp[2]) / Math.max(0.3, bb.r))
+        : 1;
+      const score = n / (0.6 + bb.r) * (0.15 + 0.85 * clear);
       if (score > bestScore) { bestScore = score; best = ai; }
     }
     return best;
@@ -124,14 +186,50 @@ function flBoot() {
     target.lerp(new THREE.Vector3(bb.c[0], bb.c[1], bb.c[2]), 0.03);
     // r * 1.8 with the 2.35 dolly law puts the corolla at ~55% of frame height
     radius += (Math.max(1.0, bb.r * 1.8) - radius) * 0.03;
+    // A flower has a facing: down its own axis. Face-on is the shot that shows
+    // a radial corolla AS a corolla, and for an axillary flower it puts the
+    // trunk BEHIND the subject instead of through it (the framing used to set
+    // target and dolly but never azimuth, so the camera routinely looked at a
+    // flower bisected by the stem it grew from). Only while the viewer is not
+    // orbiting — a drag owns the camera for a while.
+    if (performance.now() - lastOrbit > 6000) {
+      const ax = S.plant.axes[ai];
+      const a = ax.pts[0], b = ax.pts[ax.pts.length - 1];
+      const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      if (d.lengthSq() > 1e-6) {
+        d.normalize();
+        // blend AWAY from the trunk: an axillary flower's pedicel often points
+        // nearly straight up, and the pure axis shot looks down through the
+        // trunk above it. Pushing the eye to the flower's open side gives the
+        // three-quarter view a photographer would walk to.
+        if (ai !== 0) {
+          const tp = trunkNear(target.y);
+          const lx = target.x - tp[0], lz = target.z - tp[2];
+          const ll = Math.hypot(lx, lz);
+          if (ll > 1e-4) { d.x += 0.9 * lx / ll; d.z += 0.9 * lz / ll; d.normalize(); }
+        }
+        // keep some horizon: a terminal flower points straight up and a pure
+        // overhead shot flattens it
+        d.y = Math.min(d.y, 0.60); d.normalize();
+        const eye = scene.camera.position, want = radius * 2.35;
+        _desiredEye.copy(target).addScaledVector(d, want);
+        eye.lerp(_desiredEye, 0.012);
+      }
+    }
     return true;
   }
+  const _desiredEye = new THREE.Vector3();
+  let lastOrbit = -1e9;
+  scene.controls.addEventListener('start', () => { lastOrbit = performance.now(); });
+  let framedAx = -1;   // which axis the flower shot is on; -1 = no clearance
   function updateFraming() {
+    framedAx = -1;
     if (focus === 'flower') {
       // >= 0, not truthy: the best flower is often the TERMINAL one, axis 0,
       // and a truthiness test silently fell through to the wide shot
       const ax = bestFlower();
       if (ax >= 0 && frameAxisFlower(ax)) {
+        framedAx = ax;
         scene.controls.target.copy(target);
         scene.fogU.uFogNear.value = Math.max(0, scene.camera.position.distanceTo(target) - radius * 1.1);
         const eye = scene.camera.position;
@@ -187,8 +285,28 @@ function flBoot() {
     env.cam.dist = e.distanceTo(target);
     // width floor as shipped, LOD off: every vein the chemistry grew.
     setView(env.cam.eye, 0.004, 0);
+    // the sight-line clearance, sized off the subject flower's DRAWN bounds
+    // FROM THE LAST FRAME (they must be read before reset() empties the
+    // streams; one frame stale is invisible) and opened only as the camera
+    // arrives (the shipped ramp — engaging at full width from the wide shot
+    // made half the plant vanish in one frame)
+    let cull = null;
+    if (framedAx >= 0) {
+      const bb = B.floralBounds(framedAx);
+      if (bb) {
+        let rad = Math.max(S.sp.fruitScale * 2.2, bb.r * 1.25);
+        const dx0 = bb.c[0] - e.x, dy0 = bb.c[1] - e.y, dz0 = bb.c[2] - e.z;
+        const de = Math.hypot(dx0, dy0, dz0) || 1;
+        const near = smoothstep(0.20, 0.38, 2 * rad / de);
+        if (near >= 0.01) {
+          rad *= near;
+          cull = { keep: S.plant.axes[framedAx], rad, dist: de, r: de - rad,
+            dx: dx0 / de, dy: dy0 / de, dz: dz0 / de };
+        }
+      }
+    }
     B.reset();
-    flDrawSpecimen(env, B, S);
+    flDrawSpecimen(env, B, S, cull);
     scene.upload(B);
   }
 
@@ -220,7 +338,14 @@ function flBoot() {
     }
     env.t = step;
 
-    if (stepped > 0 || !frame.drawn) { capture(); frame.drawn = true; }
+    // recapture on camera motion too, not just sim steps: the sight-line
+    // clearance is computed at capture time from the capture eye, so a frozen
+    // plant with a moving camera (speed=0, or orbiting) kept the clearance —
+    // and the whole cull — from wherever the camera was steps ago
+    const _e = scene.camera.position;
+    const camMoved = Math.hypot(_e.x - env.cam.eye[0], _e.y - env.cam.eye[1],
+      _e.z - env.cam.eye[2]) > 0.02;
+    if (stepped > 0 || camMoved || !frame.drawn) { capture(); frame.drawn = true; }
     if (stepped > 0) pollen.step(S, stepped, step);
     scene.uploadPollen(pollen.buf, pollen.n * 7);
     // spot fields bake lazily in the draw loop; ship each to the GPU once
