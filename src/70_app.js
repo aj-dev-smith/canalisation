@@ -647,6 +647,17 @@ export class App {
       gExp: lerp(1.3, 2.6, fr2()), gAux: lerp(0.00035, 0.00075, fr2()),
       seedThresh: lerp(1.25, 1.7, fr2()),
     };
+    // A STERILE CORNER lived in that draw for as long as it existed: ovule
+    // patterning on the 642-cell shell fails outright when T/D < ~5.3 (the
+    // spot wavelength misfits the shell — measured on a 6x5 T-D grid, 6 fruit
+    // seeds each, the boundary is sharp: 12-20 ovules on one side, ZERO on
+    // the other, nothing between). The ranges above include that corner, and
+    // 5 of 40 specimen seeds landed in it — barren for life, no ripening, a
+    // seed head with nothing in it. Clamping D after the draws keeps every
+    // fertile specimen bit-identical (their values pass through) and the
+    // PRNG call order untouched; only the sterile 12.5% change, from nothing
+    // to a finer-lobed fruit. T/6 leaves ~15% margin over the measured cliff.
+    sp.fruitOpts.D = Math.min(sp.fruitOpts.D, sp.fruitOpts.T / 6);
     if (origin) sp.origin = origin;
     if (wind) sp.wind = wind;
     // a specimen planted while the last act is held joins it held

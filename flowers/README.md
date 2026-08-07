@@ -79,6 +79,42 @@ Dorsal petals enlarge and stand (the upper lip), ventral petals reflex
 (the landing lip), and a strongly dorsal stamen aborts to a staminode
 **[D]**. Applied once per organ, the first time it has a direction.
 
+## The capitulum — a daisy is a hundred flowers (`?form=daisy`)
+
+A composite flower head, and the round-3 machinery read at a different
+scale rather than new identity code: the SAME four whorl bands land on
+Asteraceae anatomy exactly — the sepal band is the involucre's
+phyllaries, the petal band the ray florets, the stamen band the disc
+florets (which is why the disc glows and sheds pollen: those organs were
+already anthers), and the centre sets a fruit. Two engine additions,
+both defaulting to the shipped behaviour bit for bit:
+
+- **`receptacle`** un-collapses the floral dome. `q` RECORDS the radius
+  each organ was founded at (`1 - prim.r/floralR0`); placing every
+  floret on the axis line threw that away. Under the knob a floret's
+  base is offset by `receptacle*(1-q)` — rim founded first, centre last,
+  the head becomes the disc the meristem actually was. 52-53 florets per
+  axillary head (S~17 P5-13 A16-29), measured.
+- **A receptacle does not elongate.** Under the same knob every floret
+  rides the TIP (`elongate`), so the disc stays one station — span 2.9
+  units of smear collapses to 0.0 — while floral elongation below it
+  becomes the PEDUNCLE: the daisy bolts a 9-10 unit scape, exactly what
+  a real one does. `tropism` .002 (against the herb's .02) holds the
+  head ~3 units clear of the trunk; at .02 a 12-unit peduncle climbs the
+  trunk and ends 0.4 units from it (measured, both).
+
+**Finding the daisy's centre found a sterile corner that had been in the
+app since before this piece existed.** Every specimen draws its fruit
+chemistry from its seed (`makeSpecimen`), and ovule patterning on the
+642-cell shell fails outright when `T/D < ~5.3` — the boundary is sharp
+(12-20 ovules one side, ZERO the other) and the draw ranges include the
+corner, so **5 of 40 specimen seeds were barren for life** — no
+ripening, a seed head with nothing in it, in canalisation.html too.
+Ember seed 21, both round-record seeds' neighbours, drew T 15.1 and
+could never have ripened anything. One clamp (`D <= T/6`) after the
+draws fixes it: fertile specimens bit-identical, PRNG order untouched.
+Every daisy head now ripens a 14-16-ovule fruit at the disc's centre.
+
 ## The double flower — the C-class mutant, grown (`?form=double`)
 
 `?form=double` is a **doubled flower**: 20-23 petals per corolla in
