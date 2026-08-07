@@ -20,7 +20,7 @@ class FlowerBuffers extends Buffers {
     super();
     this.seg = new Float32Array(1 << 18);   // 12 floats per vein segment
     this.segN = 0;
-    this.petb = new Float32Array(1 << 18);  // 14 floats per petal vertex
+    this.petb = new Float32Array(1 << 18);  // 16 floats per petal vertex
     this.petbN = 0;
     this.organs = [];                        // [{ meta, tri0,tri1, seg0,seg1, pt0,pt1 }]
     this._open = null;
@@ -60,7 +60,7 @@ class FlowerBuffers extends Buffers {
       const m = o.meta;
       if (m.ax !== axIdx) continue;
       if (m.kind === 'petal' || m.kind === 'inner') {
-        for (let k = o.pet0; k < o.pet1; k += 14) {
+        for (let k = o.pet0; k < o.pet1; k += 16) {
           const x = this.petb[k], y = this.petb[k + 1], z = this.petb[k + 2];
           if (x < x0) x0 = x; if (x > x1) x1 = x;
           if (y < y0) y0 = y; if (y > y1) y1 = y;
@@ -89,10 +89,10 @@ class FlowerBuffers extends Buffers {
     if (this.ptN + 7 > this.pt.length) this._grow('pt');
     super.point(p, c, s);
   }
-  // The petal stream: pos3 nrm3 col3 emis dd q u v. Written from grid arrays
-  // by index so flPetalSurface pays one call, not four copies.
-  petal(pos, nrm, k3, col, k4, dd, q, u, v) {
-    if (this.petbN + 14 > this.petb.length) this._grow('petb');
+  // The petal stream: pos3 nrm3 col3 emis dd q u v dev lib. Written from grid
+  // arrays by index so flPetalSurface pays one call, not four copies.
+  petal(pos, nrm, k3, col, k4, dd, q, u, v, dev, lib) {
+    if (this.petbN + 16 > this.petb.length) this._grow('petb');
     const s = this.petb;
     let n = this.petbN;
     s[n++] = pos[k3]; s[n++] = pos[k3 + 1]; s[n++] = pos[k3 + 2];
@@ -100,6 +100,7 @@ class FlowerBuffers extends Buffers {
     s[n++] = col[k4]; s[n++] = col[k4 + 1]; s[n++] = col[k4 + 2];
     s[n++] = col[k4 + 3];
     s[n++] = dd; s[n++] = q; s[n++] = u; s[n++] = v;
+    s[n++] = dev; s[n++] = lib || 0;
     this.petbN = n;
   }
   // seg2() in the parent funnels through here, so PIN needles arrive free.

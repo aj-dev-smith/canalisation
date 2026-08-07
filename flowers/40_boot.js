@@ -22,6 +22,15 @@ function flBoot() {
   if (q.get('hold') !== 'none') S.plant.sp.senesceHold = true;
   const B = new FlowerBuffers();
   const scene = new FlowerScene(document.getElementById('stage'), S.pal);
+  // The bullseye threshold: one number per specimen, drawn from the published
+  // trimodal distribution (Todesco 2022 [D]: 0.33 / 0.59 / 0.78, sd ~0.16 —
+  // we jitter by a modest fraction of that). Same PRNG discipline as the
+  // fruit's chemistry: a derived stream off the specimen seed.
+  {
+    const r = mulberry32((seed ^ 0xb0117e) >>> 0);
+    const modes = [0.33, 0.59, 0.78];
+    scene.petMat.uniforms.uBull.value = modes[Math.floor(r() * 3)] + (r() - 0.5) * 0.10;
+  }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
   hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff=';
@@ -58,7 +67,8 @@ function flBoot() {
     const bb = B.floralBounds(ai);
     if (!bb) return false;
     target.lerp(new THREE.Vector3(bb.c[0], bb.c[1], bb.c[2]), 0.03);
-    radius += (Math.max(1.0, bb.r * 1.15) - radius) * 0.03;
+    // r * 1.8 with the 2.35 dolly law puts the corolla at ~55% of frame height
+    radius += (Math.max(1.0, bb.r * 1.8) - radius) * 0.03;
     return true;
   }
   function updateFraming() {

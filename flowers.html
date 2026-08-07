@@ -11352,7 +11352,7 @@ class FlowerBuffers extends Buffers {
     super();
     this.seg = new Float32Array(1 << 18);   // 12 floats per vein segment
     this.segN = 0;
-    this.petb = new Float32Array(1 << 18);  // 14 floats per petal vertex
+    this.petb = new Float32Array(1 << 18);  // 16 floats per petal vertex
     this.petbN = 0;
     this.organs = [];                        // [{ meta, tri0,tri1, seg0,seg1, pt0,pt1 }]
     this._open = null;
@@ -11392,7 +11392,7 @@ class FlowerBuffers extends Buffers {
       const m = o.meta;
       if (m.ax !== axIdx) continue;
       if (m.kind === 'petal' || m.kind === 'inner') {
-        for (let k = o.pet0; k < o.pet1; k += 14) {
+        for (let k = o.pet0; k < o.pet1; k += 16) {
           const x = this.petb[k], y = this.petb[k + 1], z = this.petb[k + 2];
           if (x < x0) x0 = x; if (x > x1) x1 = x;
           if (y < y0) y0 = y; if (y > y1) y1 = y;
@@ -11421,10 +11421,10 @@ class FlowerBuffers extends Buffers {
     if (this.ptN + 7 > this.pt.length) this._grow('pt');
     super.point(p, c, s);
   }
-  // The petal stream: pos3 nrm3 col3 emis dd q u v. Written from grid arrays
-  // by index so flPetalSurface pays one call, not four copies.
-  petal(pos, nrm, k3, col, k4, dd, q, u, v) {
-    if (this.petbN + 14 > this.petb.length) this._grow('petb');
+  // The petal stream: pos3 nrm3 col3 emis dd q u v dev lib. Written from grid
+  // arrays by index so flPetalSurface pays one call, not four copies.
+  petal(pos, nrm, k3, col, k4, dd, q, u, v, dev, lib) {
+    if (this.petbN + 16 > this.petb.length) this._grow('petb');
     const s = this.petb;
     let n = this.petbN;
     s[n++] = pos[k3]; s[n++] = pos[k3 + 1]; s[n++] = pos[k3 + 2];
@@ -11432,6 +11432,7 @@ class FlowerBuffers extends Buffers {
     s[n++] = col[k4]; s[n++] = col[k4 + 1]; s[n++] = col[k4 + 2];
     s[n++] = col[k4 + 3];
     s[n++] = dd; s[n++] = q; s[n++] = u; s[n++] = v;
+    s[n++] = dev; s[n++] = lib || 0;
     this.petbN = n;
   }
   // seg2() in the parent funnels through here, so PIN needles arrive free.
@@ -11448,40 +11449,137 @@ class FlowerBuffers extends Buffers {
   }
 }
 
+// ===================== flowers/12_form.js =====================
+// PETAL FORM, FROM A GROWTH LAW RATHER THAN A POSE.
+//
+// The shipped petal is a flat card with a 5% droop (`curl = -bl * 0.05`).
+// This file replaces that pose with the two published results that make a
+// petal a petal, evaluated in closed form each frame — no relaxation loop, no
+// keyframes, nothing scheduled:
+//
+// 1. ANTHESIS AS A PITCHFORK (Liang & Mahadevan 2011, PNAS 108:5516 [D]).
+//    A petal is a curved shell. Excess growth along its edge loads it; at a
+//    critical strain the shell bifurcates and "becomes a perfectly efficient
+//    bending actuator": longitudinal curvature UNBENDS while lateral
+//    curvature CURLS, which is a flower opening. Their equations, m = 1 case:
+//
+//      beta* = (1 - nu) + (1/4)(1 - nu)(3 + nu) k0^2
+//      past it:  kx = ((1+nu)/2) k0 - sqrt(beta_g - beta*)
+//                ky = ((1+nu)/2) k0 + sqrt(beta_g - beta*)
+//
+//    Below threshold the bud is a closed cup (kx = ky = k0); past it the
+//    petal lays back and gains a lateral roll. The BLOOM IS THE BIFURCATION.
+//
+// 2. EDGE RIPPLES BY CERDA & MAHADEVAN'S WAVELENGTH LAW (PRL 90:074302 [D],
+//    experimentally verified; chosen over Marder's thickness-free form, which
+//    over-predicts the lily by ~8x — the literature sweep's numbers):
+//
+//      lambda = sqrt(2 pi L t) / [3 (1 - nu^2) eps]^(1/4)
+//      A      = sqrt(nu L t) * [16 eps / (3 pi^2 (1 - nu^2))]^(1/4)
+//
+//    with the lily's measured edge-strain profile, ~0.2 at the base rising to
+//    ~0.5 at the tip (Liang & Mahadevan 2011 [D]; Portet 2022 measures the
+//    same rise). Amplitude and wavelength both come out in millimetres, and
+//    they are drawn in millimetres — no artistic multiplier.
+//
+// What each constant is:
+//   NU        0.3        physical (Poisson; Kennaway 2011 uses exactly this)
+//   T_PETAL   0.0024     petal thickness in world units = 150 um at the
+//                        world's own 0.0625 m/unit. Published range is
+//                        75-419 um (van der Kooi 2016 [D]); 150 sits in the
+//                        thick of it. ONE stated number.
+//   K0        1.0        dimensionless rest curvature of the bud. "Flower
+//                        petals are almost always naturally curved, unlike
+//                        leaves" (L&M [D]); O(1) is their regime. Stated.
+//   BETA_MAX  2.6*beta*  how far past threshold a fully mature petal loads.
+//                        Sets WHERE in dev the bloom lands (~dev 0.62), not
+//                        whether it happens. Stated, structural.
+//   EPS0/EPS1 0.2/0.5    the lily's measured edge strain profile [D].
+//
+// Driving beta_g with the organ's own `dev` is the one [OURS] construction:
+// dev is the engine's maturation wave, and edge strain in the papers grows
+// with maturation. It is the same coupling the furl already uses.
+
+const FL_NU = 0.3;
+const FL_T_PETAL = 0.0024;
+const FL_K0 = 1.0;
+const FL_EPS0 = 0.2, FL_EPS1 = 0.5;
+const FL_BSTAR = (1 - FL_NU) + 0.25 * (1 - FL_NU) * (3 + FL_NU) * FL_K0 * FL_K0;
+const FL_BETA_MAX = 2.0 * FL_BSTAR;
+
+// -> { kx, ky, lam, amp } — curvatures in 1/world-units, ripple in world units.
+// Curvatures are L&M's dimensionless k-bar made dimensional with the blade
+// length as the shell scale.
+function flPetalForm(bl, dev, q) {
+  const bg = FL_BETA_MAX * dev * dev;
+  // Inner organs stay nearer the bud state: identity holds them at a smaller
+  // effective load. SCIENCE.md books "enclosing growth at high q" as imposed
+  // and unbuilt; the pitchfork gives it a lever — high q lags the bloom.
+  // The 0.85 is stated. [OURS]
+  const lag = 1 - 0.85 * clamp(q, 0, 1);
+  const open = (bg / FL_BSTAR - 1) * lag;
+  let kbx = FL_K0, kby = FL_K0;
+  if (open > 0) {
+    const s = Math.sqrt(Math.min(6, open) * FL_BSTAR);
+    kbx = ((1 + FL_NU) / 2) * FL_K0 - s;
+    kby = ((1 + FL_NU) / 2) * FL_K0 + s;
+  }
+  const eps = FL_EPS0 + (FL_EPS1 - FL_EPS0) * dev;
+  const L = Math.max(0.05, bl);
+  const lam = Math.sqrt(2 * Math.PI * L * FL_T_PETAL) / Math.pow(3 * (1 - FL_NU * FL_NU) * eps, 0.25);
+  const amp = Math.sqrt(FL_NU * L * FL_T_PETAL) * Math.pow(16 * eps / (3 * Math.PI * Math.PI * (1 - FL_NU * FL_NU)), 0.25);
+  return { kx: kbx / L, ky: kby / L, lam, amp, eps };
+}
+
 // ===================== flowers/15_petal.js =====================
-// The petal surface, as a stream of its own.
+// The petal surface, as a stream of its own — and no longer a flat card.
 //
 // This is blade()'s surface half (50_geom.js:351-455) with the SAME
 // parametrisation — bladeMap, the asymmetric half-widths, the furl, the
-// fenestration cut — emitting to a fourth stream that carries, per vertex,
-// what the shipped 10-float layout has no room for:
+// fenestration cut — but the out-of-plane displacement is 12_form.js's
+// physics instead of the shipped `curl*u^2` pose: the Liang & Mahadevan
+// shell curvatures (the bloom), plus Cerda & Mahadevan edge ripples at their
+// published wavelength and amplitude. The veins are mapped through the SAME
+// displacement — a vein floating off a curved petal was the first thing the
+// first build of this file produced.
 //
-//   pos3 nrm3 col3 emis · dd · q · u · v        (14 floats)
+// Stream layout, 16 floats per vertex:
+//   pos3 nrm3 col3 emis · dd · q · u · v · dev · lib
 //
-// col/emis are baked EXACTLY as shipped (same veinTint, same 0.24 glow), so
-// with a shader that ignores the last four floats this stream is
-// pixel-identical to the shipped lamina. That is deliberate: parity first,
-// then mechanisms — dd is the distance field of a vein network that canalised
-// itself, q is how far in from the rim the organ was founded, and both are
-// channels the project computes and has never drawn. What the petal shader
-// does with them is argued in 35_shade.js, not here.
-//
-// The vasculature half is not copied: the draw loop still calls the shipped
-// blade() with { surface: false } and the veins arrive through the ribbon
-// stream like everyone else's.
+// col/emis are baked EXACTLY as shipped (same veinTint, same 0.24 glow); the
+// shader mechanisms (35_shade) MODULATE that baseline, they do not replace it.
 
 const _fpP = v3(), _fpPu = v3(), _fpPv = v3(), _fpE1 = v3(), _fpE2 = v3(), _fpN = v3();
-const _fpQp = [v3(), v3(), v3(), v3()];
-const _fpQn = [v3(), v3(), v3(), v3()];
+const _fpQ0 = v3(), _fpQ1 = v3(), _fpSide = v3(), _fpSenV = v3();
 let _fpPos = new Float32Array(0), _fpNrm = new Float32Array(0), _fpCol = new Float32Array(0), _fpDD = new Float32Array(0);
 
-function flPetalSurface(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV, dev, sen, q) {
+// Out-of-plane height of petal tissue at (u, v): the shell curvatures bend
+// the sheet, the edge ripple corrugates it. `tN` is the normalised lateral
+// coordinate (-1..1) for the ripple envelope; `off` carries furl and vein lift.
+// The ripple's spatial weight is the measured strain geography: strain rises
+// base to tip (Liang & Mahadevan [D]) and lives at the margin, so the
+// envelope is u-ramped and edge-weighted. The 0.4/0.6 and 0.25/0.75 splits
+// are stated shape constants inside a [D] profile.
+function flPetalPoint(out, frame, u, v, len, wid, form, phase, tN, off) {
+  const x = u * len, y = v * wid;
+  const shell = 0.5 * form.kx * x * x + 0.5 * form.ky * y * y;
+  const env = (0.4 + 0.6 * u) * (0.25 + 0.75 * tN * tN);
+  const rip = form.amp * env * Math.sin(2 * Math.PI * y / form.lam + phase);
+  const n = shell + rip + (off || 0);
+  out[0] = frame.o[0] + frame.x[0] * x + frame.z[0] * y + frame.y[0] * n;
+  out[1] = frame.o[1] + frame.x[1] * x + frame.z[1] * y + frame.y[1] * n;
+  out[2] = frame.o[2] + frame.x[2] * x + frame.z[2] * y + frame.y[2] * n;
+  return out;
+}
+
+function flPetalSurface(B, leaf, frame, len, wid, pal, glow, MU, MV, dev, sen, q, phase, lib) {
   if (!leaf.margin || !leaf.margin.mature) return;
   MU = MU || 22; MV = MV || 10;
   dev = dev === undefined ? 1 : dev;
   sen = sen || 0;
   const o = leaf.o;
   const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
+  const form = flPetalForm(len, dev, q);
   const vdf = leaf.vdf, res = leaf.vdfRes || 0;
   const nearVein = (u, v) => {
     if (!vdf) return 9;
@@ -11503,9 +11601,9 @@ function flPetalSurface(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, M
     for (let j = 0; j < NV; j++) {
       const t = (j / MV) * 2 - 1;
       const k3 = (i * NV + j) * 3, k4 = (i * NV + j) * 4, k1 = i * NV + j;
-      bladePoint(_fpP, frame, u, at(u, t), len, wid, curl, ripple, furlAt(u));
-      bladePoint(_fpPu, frame, u + h, at(u + h, t), len, wid, curl, ripple, furlAt(u + h));
-      bladePoint(_fpPv, frame, u, at(u, t + h), len, wid, curl, ripple, furlAt(u));
+      flPetalPoint(_fpP, frame, u, at(u, t), len, wid, form, phase, t, furlAt(u));
+      flPetalPoint(_fpPu, frame, u + h, at(u + h, t), len, wid, form, phase, t, furlAt(u + h));
+      flPetalPoint(_fpPv, frame, u, at(u, t + h), len, wid, form, phase, t + h, furlAt(u));
       v3sub(_fpE1, _fpPu, _fpP); v3sub(_fpE2, _fpPv, _fpP);
       v3norm(_fpN, v3cross(_fpN, _fpE1, _fpE2));
       pos[k3] = _fpP[0]; pos[k3 + 1] = _fpP[1]; pos[k3 + 2] = _fpP[2];
@@ -11527,7 +11625,7 @@ function flPetalSurface(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, M
   const emit = (i, j) => {
     const k3 = (i * NV + j) * 3, k4 = (i * NV + j) * 4, k1 = i * NV + j;
     const u = i / MU, t = (j / MV) * 2 - 1;
-    B.petal(pos, nrm, k3, col, k4, ddb[k1], q, u, t);
+    B.petal(pos, nrm, k3, col, k4, ddb[k1], q, u, t, dev, lib);
   };
   for (let i = 0; i < MU; i++) {
     const u0 = i / MU, u1 = (i + 1) / MU;
@@ -11540,6 +11638,35 @@ function flPetalSurface(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, M
       emit(i, j); emit(i, j + 1); emit(i + 1, j + 1);
       emit(i, j); emit(i + 1, j + 1); emit(i + 1, j);
     }
+  }
+}
+
+// The petal's vasculature, mapped through the SAME displacement the surface
+// uses. This mirrors the shipped bladeVeins (50_geom.js:464) in its PXR=0
+// form — this piece runs with vein LOD off, so the cull, the relight and the
+// per-blade floor all reduce to identities; what remains is the dev gate, the
+// half-width guards, the width law and the emission law, kept verbatim.
+function flPetalVeins(B, leaf, frame, len, wid, pal, glow, dev, sen, q, phase, veinMul) {
+  const segs = leaf.veins;
+  if (!segs || veinMul <= 0) return;
+  const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
+  const form = flPetalForm(len, dev, q);
+  const lift = len * 0.010 + 0.005;
+  const base = len * 0.0034;
+  const sv = sen > 0 ? clamp((sen - VEIN_LAG) / (1 - VEIN_LAG), 0, 1) : 0;
+  senesceTint(_fpSenV, pal.vein[0], pal.vein[1], pal.vein[2], sv);
+  const vglow = glow * (1 - sv * 0.92);
+  for (let k = 0; k < segs.length; k++) {
+    const s = segs[k];
+    if (s.x0 > dev + 0.04 || s.x1 > dev + 0.04) continue;
+    const w0 = wMat(s.x0, s.y0), w1 = wMat(s.x1, s.y1);
+    if (w0 < 1e-3 || w1 < 1e-3) continue;
+    const t0 = clamp(s.y0 / w0, -1, 1), t1 = clamp(s.y1 / w1, -1, 1);
+    flPetalPoint(_fpQ0, frame, s.x0, t0 * wAt(s.x0, s.y0), len, wid, form, phase, t0, lift + furlAt(s.x0));
+    flPetalPoint(_fpQ1, frame, s.x1, t1 * wAt(s.x1, s.y1), len, wid, form, phase, t1, lift + furlAt(s.x1));
+    const w = Math.max(0.004, base * (0.25 + s.w * 1.35));
+    // side is irrelevant to FlowerBuffers.ribbon (camera-faced in the shader)
+    B.ribbon(_fpQ0, _fpQ1, null, w, w, _fpSenV, vglow * (0.06 + s.w * 0.52) * veinMul);
   }
 }
 
@@ -11631,14 +11758,25 @@ function flDrawSpecimen(env, B, S) {
           : pal;
       const curl = -bl * (org.petal ? 0.05 : 0.16) * (1 + sen * 2.2);
       const ripple = bl * 0.014;
-      const mesh = env.bladeMesh(L, bl, 0, env._mesh);
+      // A flower close-up lives at the mesh resolution the shipped page only
+      // reaches under its microscope: at 22x10 a fenestration cut is a row of
+      // rectangles and a petal rim is a hexagon (measured on the Parasol).
+      // Floral organs get the microscope's refinement all the time — there are
+      // ~9 of them per flower, so it is cheap where it matters.
+      const mesh = env.bladeMesh(L, bl, org.floral ? 0.85 : 0, env._mesh);
       if (org.floral && V.lamina > 0) {
-        // Floral tissue goes to the petal stream — same grid, same colours,
-        // plus dd/q/u/v — and its veins ride the shipped path below.
-        flPetalSurface(B, L, fr, bl, bl, bp, curl, ripple, bp.glow,
-          mesh[0], mesh[1], dev, sen, org.q || 0);
-        blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mesh[0], mesh[1], dev,
-          1, sen, { surface: false, veinMul: V.veins });
+        // Floral tissue goes to the petal stream: same grid and colours, but
+        // the out-of-plane form is 12_form.js's shell + ripple physics, and
+        // the veins are mapped through that SAME displacement (a vein floats
+        // off the surface otherwise). Ripple phase must be deterministic and
+        // stable across frames — hashing the organ's place in the plant is
+        // safe where calling org.rnd() here would burn the organ's own
+        // PRNG stream and change the plant.
+        const phase = (ai * 37 + oi * 101) % 251 * 0.0793;
+        const lib = Math.max(0, (S.plant.leaves.plib || []).indexOf(L));
+        flPetalSurface(B, L, fr, bl, bl, bp, bp.glow,
+          mesh[0], mesh[1], dev, sen, org.q || 0, phase, lib);
+        flPetalVeins(B, L, fr, bl, bl, bp, bp.glow, dev, sen, org.q || 0, phase, V.veins);
       } else {
         blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mesh[0], mesh[1], dev,
           1, sen, { surface: V.lamina > 0, veinMul: V.veins });
@@ -11735,26 +11873,44 @@ const FL_TRI_FS = `
   }
 `;
 
-// The petal stream: shipped lighting, with the chemistry channels along for
-// the ride. vDD is the distance-to-vein field, vQ the floral identity, vU the
-// proximodistal coordinate — 35_shade.js (the mechanism layer) is what reads
-// them; until it lands this is the tri shader with more varyings.
+// The petal stream: shipped lighting as the baseline, with four published
+// mechanisms layered on top, each reading a channel the engine computes:
+//
+//   TRANSLUCENCY  van der Kooi 2016 [D]: petal transmittance usually EXCEEDS
+//     reflectance. The shipped back-transmission term (0.55) is boosted where
+//     tissue is far from a vein (vDD low) — a vascular bundle is the thick
+//     part of a petal, so dd doubles as a thinness map [OURS coupling]. Light
+//     through pigment filters twice (Beer-Lambert), hence the col^2 tint.
+//   CONICAL CELLS  Ren 2017 + Gorton & Vogelmann 1996 + Noda 1994 [D]:
+//     the epidermis' microfacet normals are a RING that tilts 18deg->52deg as
+//     cells mature — a velvet sheen, not a gloss — and the cone's optical job
+//     is to steer light INTO the pigment (x3.5-4.7 vs x2.1-2.7 flat), so
+//     maturity deepens saturation at constant pigment. Both ride vDev.
+//   BULLSEYE  Todesco 2022 [D]: a proximal pigment zone bounded by a
+//     threshold on the normalised proximodistal coordinate — one number per
+//     specimen, drawn from the published trimodal distribution. Deepening is
+//     a pigment-exponent, not a paint: pow(albedo, k) is what more absorber
+//     in the same tissue does.
 const FL_PET_VS = `
   attribute vec3 col;
   attribute float emis;
   attribute float aDD; attribute float aQ; attribute float aU; attribute float aV;
+  attribute float aDev; attribute float aLib;
   varying vec3 vP; varying vec3 vN; varying vec3 vC; varying float vE;
   varying float vDD; varying float vQ; varying float vU; varying float vV;
+  varying float vDev; varying float vLib;
   void main() {
     vP = position; vN = normal; vC = col; vE = emis;
-    vDD = aDD; vQ = aQ; vU = aU; vV = aV;
+    vDD = aDD; vQ = aQ; vU = aU; vV = aV; vDev = aDev; vLib = aLib;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 const FL_PET_FS = `
   varying vec3 vP; varying vec3 vN; varying vec3 vC; varying float vE;
   varying float vDD; varying float vQ; varying float vU; varying float vV;
+  varying float vDev; varying float vLib;
   uniform vec3 uEye, uKey, uKeyCol, uAmbTop, uAmbBot;
+  uniform float uBull;
   ${FL_FOG}
   void main() {
     vec3 N = normalize(vN);
@@ -11764,8 +11920,28 @@ const FL_PET_FS = `
     float back = pow(max(dot(-N, uKey), 0.0), 2.0);
     float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
     vec3 amb = mix(uAmbBot, uAmbTop, N.y * 0.5 + 0.5);
-    vec3 c = vC * (amb + uKeyCol * d * 0.9) + vC * uKeyCol * back * 0.55 + rim * uAmbTop * 0.7;
-    c += vC * vE * 3.0;
+
+    // pigment: bullseye zone + conical-cell path-length deepening
+    float zone = 1.0 - smoothstep(uBull - 0.07, uBull + 0.07, vU);
+    float kPig = (1.0 + 1.2 * zone) * mix(1.0, 1.30, vDev);
+    vec3 alb = pow(max(vC, vec3(0.0)), vec3(kPig));
+
+    // translucency: thin between veins, pigment filters the pass twice
+    float transW = 0.55 * (1.0 + 1.1 * (1.0 - vDD));
+    vec3 transCol = alb * alb * 2.2;
+
+    vec3 c = alb * (amb + uKeyCol * d * 0.9)
+           + transCol * uKeyCol * back * transW
+           + rim * uAmbTop * 0.7;
+
+    // velvet: ring NDF whose tilt matures 22deg -> 52deg
+    vec3 H = normalize(uKey + V);
+    float ang = acos(clamp(dot(N, H), 0.0, 1.0));
+    float thn = radians(mix(22.0, 52.0, vDev));
+    float sheen = exp(-pow((ang - thn) / radians(14.0), 2.0));
+    c += uKeyCol * sheen * 0.40 * (0.25 + 0.75 * d);
+
+    c += alb * vE * 3.0;
     c = mix(c, uFog, flFog(vP, uEye) * 0.80);
     gl_FragColor = vec4(c, 1.0);
   }
@@ -11937,7 +12113,7 @@ class FlowerScene {
     this.petMat = new THREE.ShaderMaterial({
       vertexShader: FL_PET_VS, fragmentShader: FL_PET_FS,
       side: THREE.DoubleSide,
-      uniforms: this.triMat.uniforms,
+      uniforms: { ...this.triMat.uniforms, uBull: { value: 0.59 } },
     });
     this.petMesh = new THREE.Mesh(this.petGeo, this.petMat);
     this.petMesh.frustumCulled = false;
@@ -12026,7 +12202,7 @@ class FlowerScene {
     this.triGeo.setAttribute('emis', new THREE.InterleavedBufferAttribute(ib, 1, 9));
   }
   _bindPet() {
-    const ib = new THREE.InterleavedBuffer(this.petArr, 14);
+    const ib = new THREE.InterleavedBuffer(this.petArr, 16);
     ib.setUsage(THREE.DynamicDrawUsage);
     this._petIB = ib;
     this.petGeo.setAttribute('position', new THREE.InterleavedBufferAttribute(ib, 3, 0));
@@ -12037,6 +12213,8 @@ class FlowerScene {
     this.petGeo.setAttribute('aQ', new THREE.InterleavedBufferAttribute(ib, 1, 11));
     this.petGeo.setAttribute('aU', new THREE.InterleavedBufferAttribute(ib, 1, 12));
     this.petGeo.setAttribute('aV', new THREE.InterleavedBufferAttribute(ib, 1, 13));
+    this.petGeo.setAttribute('aDev', new THREE.InterleavedBufferAttribute(ib, 1, 14));
+    this.petGeo.setAttribute('aLib', new THREE.InterleavedBufferAttribute(ib, 1, 15));
   }
   _bindSeg() {
     const ib = new THREE.InstancedInterleavedBuffer(this.segArr, 12);
@@ -12075,7 +12253,7 @@ class FlowerScene {
     }
     this.petArr.set(B.petb.subarray(0, B.petbN));
     this._petIB.needsUpdate = true;
-    this.petGeo.setDrawRange(0, B.petbN / 14);
+    this.petGeo.setDrawRange(0, B.petbN / 16);
 
     if (B.segN > this.segCap) {
       while (this.segCap < B.segN) this.segCap *= 2;
@@ -12130,6 +12308,15 @@ function flBoot() {
   if (q.get('hold') !== 'none') S.plant.sp.senesceHold = true;
   const B = new FlowerBuffers();
   const scene = new FlowerScene(document.getElementById('stage'), S.pal);
+  // The bullseye threshold: one number per specimen, drawn from the published
+  // trimodal distribution (Todesco 2022 [D]: 0.33 / 0.59 / 0.78, sd ~0.16 —
+  // we jitter by a modest fraction of that). Same PRNG discipline as the
+  // fruit's chemistry: a derived stream off the specimen seed.
+  {
+    const r = mulberry32((seed ^ 0xb0117e) >>> 0);
+    const modes = [0.33, 0.59, 0.78];
+    scene.petMat.uniforms.uBull.value = modes[Math.floor(r() * 3)] + (r() - 0.5) * 0.10;
+  }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
   hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff=';
@@ -12166,7 +12353,8 @@ function flBoot() {
     const bb = B.floralBounds(ai);
     if (!bb) return false;
     target.lerp(new THREE.Vector3(bb.c[0], bb.c[1], bb.c[2]), 0.03);
-    radius += (Math.max(1.0, bb.r * 1.15) - radius) * 0.03;
+    // r * 1.8 with the 2.35 dolly law puts the corolla at ~55% of frame height
+    radius += (Math.max(1.0, bb.r * 1.8) - radius) * 0.03;
     return true;
   }
   function updateFraming() {

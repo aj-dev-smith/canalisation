@@ -85,14 +85,25 @@ function flDrawSpecimen(env, B, S) {
           : pal;
       const curl = -bl * (org.petal ? 0.05 : 0.16) * (1 + sen * 2.2);
       const ripple = bl * 0.014;
-      const mesh = env.bladeMesh(L, bl, 0, env._mesh);
+      // A flower close-up lives at the mesh resolution the shipped page only
+      // reaches under its microscope: at 22x10 a fenestration cut is a row of
+      // rectangles and a petal rim is a hexagon (measured on the Parasol).
+      // Floral organs get the microscope's refinement all the time — there are
+      // ~9 of them per flower, so it is cheap where it matters.
+      const mesh = env.bladeMesh(L, bl, org.floral ? 0.85 : 0, env._mesh);
       if (org.floral && V.lamina > 0) {
-        // Floral tissue goes to the petal stream — same grid, same colours,
-        // plus dd/q/u/v — and its veins ride the shipped path below.
-        flPetalSurface(B, L, fr, bl, bl, bp, curl, ripple, bp.glow,
-          mesh[0], mesh[1], dev, sen, org.q || 0);
-        blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mesh[0], mesh[1], dev,
-          1, sen, { surface: false, veinMul: V.veins });
+        // Floral tissue goes to the petal stream: same grid and colours, but
+        // the out-of-plane form is 12_form.js's shell + ripple physics, and
+        // the veins are mapped through that SAME displacement (a vein floats
+        // off the surface otherwise). Ripple phase must be deterministic and
+        // stable across frames — hashing the organ's place in the plant is
+        // safe where calling org.rnd() here would burn the organ's own
+        // PRNG stream and change the plant.
+        const phase = (ai * 37 + oi * 101) % 251 * 0.0793;
+        const lib = Math.max(0, (S.plant.leaves.plib || []).indexOf(L));
+        flPetalSurface(B, L, fr, bl, bl, bp, bp.glow,
+          mesh[0], mesh[1], dev, sen, org.q || 0, phase, lib);
+        flPetalVeins(B, L, fr, bl, bl, bp, bp.glow, dev, sen, org.q || 0, phase, V.veins);
       } else {
         blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mesh[0], mesh[1], dev,
           1, sen, { surface: V.lamina > 0, veinMul: V.veins });

@@ -53,26 +53,44 @@ const FL_TRI_FS = `
   }
 `;
 
-// The petal stream: shipped lighting, with the chemistry channels along for
-// the ride. vDD is the distance-to-vein field, vQ the floral identity, vU the
-// proximodistal coordinate — 35_shade.js (the mechanism layer) is what reads
-// them; until it lands this is the tri shader with more varyings.
+// The petal stream: shipped lighting as the baseline, with four published
+// mechanisms layered on top, each reading a channel the engine computes:
+//
+//   TRANSLUCENCY  van der Kooi 2016 [D]: petal transmittance usually EXCEEDS
+//     reflectance. The shipped back-transmission term (0.55) is boosted where
+//     tissue is far from a vein (vDD low) — a vascular bundle is the thick
+//     part of a petal, so dd doubles as a thinness map [OURS coupling]. Light
+//     through pigment filters twice (Beer-Lambert), hence the col^2 tint.
+//   CONICAL CELLS  Ren 2017 + Gorton & Vogelmann 1996 + Noda 1994 [D]:
+//     the epidermis' microfacet normals are a RING that tilts 18deg->52deg as
+//     cells mature — a velvet sheen, not a gloss — and the cone's optical job
+//     is to steer light INTO the pigment (x3.5-4.7 vs x2.1-2.7 flat), so
+//     maturity deepens saturation at constant pigment. Both ride vDev.
+//   BULLSEYE  Todesco 2022 [D]: a proximal pigment zone bounded by a
+//     threshold on the normalised proximodistal coordinate — one number per
+//     specimen, drawn from the published trimodal distribution. Deepening is
+//     a pigment-exponent, not a paint: pow(albedo, k) is what more absorber
+//     in the same tissue does.
 const FL_PET_VS = `
   attribute vec3 col;
   attribute float emis;
   attribute float aDD; attribute float aQ; attribute float aU; attribute float aV;
+  attribute float aDev; attribute float aLib;
   varying vec3 vP; varying vec3 vN; varying vec3 vC; varying float vE;
   varying float vDD; varying float vQ; varying float vU; varying float vV;
+  varying float vDev; varying float vLib;
   void main() {
     vP = position; vN = normal; vC = col; vE = emis;
-    vDD = aDD; vQ = aQ; vU = aU; vV = aV;
+    vDD = aDD; vQ = aQ; vU = aU; vV = aV; vDev = aDev; vLib = aLib;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 const FL_PET_FS = `
   varying vec3 vP; varying vec3 vN; varying vec3 vC; varying float vE;
   varying float vDD; varying float vQ; varying float vU; varying float vV;
+  varying float vDev; varying float vLib;
   uniform vec3 uEye, uKey, uKeyCol, uAmbTop, uAmbBot;
+  uniform float uBull;
   ${FL_FOG}
   void main() {
     vec3 N = normalize(vN);
@@ -82,8 +100,28 @@ const FL_PET_FS = `
     float back = pow(max(dot(-N, uKey), 0.0), 2.0);
     float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
     vec3 amb = mix(uAmbBot, uAmbTop, N.y * 0.5 + 0.5);
-    vec3 c = vC * (amb + uKeyCol * d * 0.9) + vC * uKeyCol * back * 0.55 + rim * uAmbTop * 0.7;
-    c += vC * vE * 3.0;
+
+    // pigment: bullseye zone + conical-cell path-length deepening
+    float zone = 1.0 - smoothstep(uBull - 0.07, uBull + 0.07, vU);
+    float kPig = (1.0 + 1.2 * zone) * mix(1.0, 1.30, vDev);
+    vec3 alb = pow(max(vC, vec3(0.0)), vec3(kPig));
+
+    // translucency: thin between veins, pigment filters the pass twice
+    float transW = 0.55 * (1.0 + 1.1 * (1.0 - vDD));
+    vec3 transCol = alb * alb * 2.2;
+
+    vec3 c = alb * (amb + uKeyCol * d * 0.9)
+           + transCol * uKeyCol * back * transW
+           + rim * uAmbTop * 0.7;
+
+    // velvet: ring NDF whose tilt matures 22deg -> 52deg
+    vec3 H = normalize(uKey + V);
+    float ang = acos(clamp(dot(N, H), 0.0, 1.0));
+    float thn = radians(mix(22.0, 52.0, vDev));
+    float sheen = exp(-pow((ang - thn) / radians(14.0), 2.0));
+    c += uKeyCol * sheen * 0.40 * (0.25 + 0.75 * d);
+
+    c += alb * vE * 3.0;
     c = mix(c, uFog, flFog(vP, uEye) * 0.80);
     gl_FragColor = vec4(c, 1.0);
   }
@@ -255,7 +293,7 @@ class FlowerScene {
     this.petMat = new THREE.ShaderMaterial({
       vertexShader: FL_PET_VS, fragmentShader: FL_PET_FS,
       side: THREE.DoubleSide,
-      uniforms: this.triMat.uniforms,
+      uniforms: { ...this.triMat.uniforms, uBull: { value: 0.59 } },
     });
     this.petMesh = new THREE.Mesh(this.petGeo, this.petMat);
     this.petMesh.frustumCulled = false;
@@ -344,7 +382,7 @@ class FlowerScene {
     this.triGeo.setAttribute('emis', new THREE.InterleavedBufferAttribute(ib, 1, 9));
   }
   _bindPet() {
-    const ib = new THREE.InterleavedBuffer(this.petArr, 14);
+    const ib = new THREE.InterleavedBuffer(this.petArr, 16);
     ib.setUsage(THREE.DynamicDrawUsage);
     this._petIB = ib;
     this.petGeo.setAttribute('position', new THREE.InterleavedBufferAttribute(ib, 3, 0));
@@ -355,6 +393,8 @@ class FlowerScene {
     this.petGeo.setAttribute('aQ', new THREE.InterleavedBufferAttribute(ib, 1, 11));
     this.petGeo.setAttribute('aU', new THREE.InterleavedBufferAttribute(ib, 1, 12));
     this.petGeo.setAttribute('aV', new THREE.InterleavedBufferAttribute(ib, 1, 13));
+    this.petGeo.setAttribute('aDev', new THREE.InterleavedBufferAttribute(ib, 1, 14));
+    this.petGeo.setAttribute('aLib', new THREE.InterleavedBufferAttribute(ib, 1, 15));
   }
   _bindSeg() {
     const ib = new THREE.InstancedInterleavedBuffer(this.segArr, 12);
@@ -393,7 +433,7 @@ class FlowerScene {
     }
     this.petArr.set(B.petb.subarray(0, B.petbN));
     this._petIB.needsUpdate = true;
-    this.petGeo.setDrawRange(0, B.petbN / 14);
+    this.petGeo.setDrawRange(0, B.petbN / 16);
 
     if (B.segN > this.segCap) {
       while (this.segCap < B.segN) this.segCap *= 2;
