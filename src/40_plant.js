@@ -318,7 +318,13 @@ class Axis {
     // shared by all eight species, which is why `test/conifer.mjs` found the
     // taper slope floored in (0.72, 1) with nothing able to reach below it. It
     // is a share of a partitioned flux now; see the apical-control note above.
-    const rate = sp.elongation * this.vigour * (this.floral ? 0.22 : 1);
+    // A flower is a compressed shoot: floral identity suppresses internode
+    // elongation (the same fact ROADMAP 0z1's whorls lean on). 0.22 was the
+    // hardwired suppression; `floralElong` names it so a doubled flower —
+    // which keeps founding organs far longer — can pack into a corolla
+    // instead of stretching into a raceme of petals. Default is exactly 0.22.
+    const fe = sp.floralElong === undefined ? 0.22 : sp.floralElong;
+    const rate = sp.elongation * this.vigour * (this.floral ? fe : 1);
     const tip = this.tipPos();
     // WHERE THE TIP IS TRYING TO POINT, which is not simply up. `gsa` is the
     // angle from vertical at which this axis's two statocyte fluxes cancel;
@@ -404,8 +410,14 @@ class Axis {
     while (m.emitted.length && !this.fruit) {
       const prim = m.emitted.shift();
       if (this.organs.length >= sp.maxOrgans) break;
-      // two organs cannot share an internode, however fast the tip patterns
-      const mi = this.floral ? sp.minInternode * 0.10 : sp.minInternode;
+      // two organs cannot share an internode, however fast the tip patterns.
+      // The floral factor was a hardwired 0.10; `floralNode` names it because
+      // a COMPRESSED flower (low floralElong/floralStretch) cannot clear even
+      // that between foundings and silently discards its primordia — the
+      // stalled-shoot trap, measured as a double flower un-doubling to 9
+      // petals. Floral organs sharing a node is what a whorl IS.
+      const fn = sp.floralNode === undefined ? 0.10 : sp.floralNode;
+      const mi = this.floral ? sp.minInternode * fn : sp.minInternode;
       if (this.length - this.lastOrganLen < mi) continue;
       this.lastOrganLen = this.length;
       this.addOrgan(prim);
@@ -512,7 +524,18 @@ class Axis {
     const m = this.meristem.o;
     const comp = Math.PI * (m.rPZ * m.rPZ - m.rCZ * m.rCZ);
     const lost = Math.PI * m.organR * m.organR;
-    const k = Math.sqrt(clamp(1 - lost / Math.max(1e-3, comp), 0.35, 1));
+    let k = Math.sqrt(clamp(1 - lost / Math.max(1e-3, comp), 0.35, 1));
+    // C-class determinacy. AGAMOUS terminates the real floral meristem by
+    // shutting off WUS stem-cell renewal (Lohmann 2001, Lenhard 2001), and a
+    // double flower is that shutoff failing: the pool replaces part of what
+    // each organ recruits, the flank contracts more slowly, and identity —
+    // which IS the contraction here — climbs so slowly the carpel band may
+    // never be reached. Petal after petal after petal, the ag-1 phenotype,
+    // with nothing anywhere counting petals. `apexRenew` is the fraction
+    // replaced; at the default 0 this line is exactly the old one and every
+    // shipped species is untouched.
+    const rn = this.plant.sp.apexRenew || 0;
+    if (rn > 0) k = lerp(k, 1, rn);
     m.R *= k; m.rPZ *= k; m.rCZ *= k;
   }
 
@@ -659,7 +682,15 @@ class Axis {
     // taper slope came out 0.94 where the 0.72 above was supposed to put it.
     // A suppressed shoot has short internodes as well as a slow tip; both are
     // the same shoot growing less.
-    const stretch = sp.internode * this.vigour;
+    // A floral axis's stretch has its own factor: the tip's extension was
+    // always taxed 0.22 on conversion while this line ran untaxed — that
+    // asymmetry is the shipped look (a flower riding a curling apex) and
+    // `floralStretch: 1` keeps it exactly. A doubled flower founds organs
+    // for far longer, so at full stretch its corolla strings out into a
+    // raceme — measured: 22 petals spread over 8.6 units of axis. Packing
+    // it is the "a bud is a compressed shoot" fact applied to a flower.
+    const fst = sp.floralStretch === undefined ? 1 : sp.floralStretch;
+    const stretch = sp.internode * this.vigour * (this.floral ? fst : 1);
     for (let i = 0; i < n - 1; i++) {
       const belowTip = total - oldArc[i];
       const e = stretch * Math.exp(-belowTip / sp.internodeSpan);
@@ -1035,6 +1066,21 @@ export const SPECIES_DEFAULTS = {
   florigenThresh: 12,    // how much has to reach the tip before it converts
   floralOrgans: 9,      // ceiling on floral organs; the apex usually stops first
   floralGrace: 320,     // idle steps before a floral apex counts as spent
+  apexRenew: 0,         // C-class determinacy: fraction of each recruited patch
+                        // the stem-cell pool replaces. 0 = AG intact (all
+                        // shipped species); toward 1 the floral meristem keeps
+                        // renewing and the flower doubles. See consumeApex()
+  floralElong: 0.22,    // internode elongation retained after floral
+                        // conversion — a flower is a compressed shoot. 0.22
+                        // is the number that was hardwired at the elongation
+                        // site; lower packs a many-organ flower into a corolla
+  floralStretch: 1,     // same factor for the SUBAPICAL stretch, which was
+                        // never taxed on floral axes (that asymmetry is the
+                        // shipped look; 1 preserves it exactly). A doubled
+                        // flower needs both low or it grows as a raceme
+  floralNode: 0.10,     // the floral minInternode factor (was hardwired).
+                        // A compressed flower needs it near zero or the
+                        // founding gate discards its primordia
   // Idle steps before a VEGETATIVE apex counts as stalled. Chosen from measured
   // gaps, not guessed: across all eight species the longest a healthy shoot ever
   // went between founding organs is 500 steps, and the longest any new lateral
