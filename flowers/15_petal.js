@@ -91,7 +91,11 @@ function flPetalSurface(B, leaf, frame, len, wid, pal, glow, MU, MV, dev, sen, q
   const emit = (i, j) => {
     const k3 = (i * NV + j) * 3, k4 = (i * NV + j) * 4, k1 = i * NV + j;
     const u = i / MU, t = (j / MV) * 2 - 1;
-    B.petal(pos, nrm, k3, col, k4, ddb[k1], q, u, t, dev, lib);
+    // the v slot carries the vdf-style texture coordinate (material lateral
+    // over aspect), so the shader samples the spot field exactly where the
+    // CPU samples the vein distance field
+    const tex = clamp((matAtUV(u, t) / (o.aspect || 1)) * 0.5 + 0.5, 0, 1);
+    B.petal(pos, nrm, k3, col, k4, ddb[k1], q, u, tex, dev, lib);
   };
   for (let i = 0; i < MU; i++) {
     const u0 = i / MU, u1 = (i + 1) / MU;

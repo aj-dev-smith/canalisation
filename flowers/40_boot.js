@@ -47,14 +47,22 @@ function flBoot() {
   const focus = q.get('focus') || 'plant';
   const target = new THREE.Vector3(0, 2, 0);
   let radius = 6;
+  // The best close-up subject is the most COMPACT flower, not the most
+  // petalled one: the terminal flower's organs ride the whole curling apex,
+  // so its bound is a third of the plant and "focus" degenerates to a wide
+  // shot. Score petals against drawn reach.
   function bestFlower() {
-    let best = -1, bestN = 0;
+    let best = -1, bestScore = 0;
     for (let ai = 0; ai < S.plant.axes.length; ai++) {
       const ax = S.plant.axes[ai];
       if (!ax.floral) continue;
       let n = 0;
       for (const org of ax.organs) if (org.petal && org.len > 0.05) n++;
-      if (n > bestN) { bestN = n; best = ai; }
+      if (n < 3) continue;
+      const bb = B.floralBounds(ai);
+      if (!bb) continue;
+      const score = n / (0.6 + bb.r);
+      if (score > bestScore) { bestScore = score; best = ai; }
     }
     return best;
   }
@@ -164,6 +172,12 @@ function flBoot() {
     env.t = step;
 
     if (stepped > 0 || !frame.drawn) { capture(); frame.drawn = true; }
+    // spot fields bake lazily in the draw loop; ship each to the GPU once
+    const plib = S.plant.leaves.plib || [];
+    for (let li = 0; li < plib.length; li++) {
+      const L = plib[li];
+      if (L._flSpots && !L._flSpotsUp) { scene.setSpots(li, L._flSpots); L._flSpotsUp = true; }
+    }
     updateFraming();
     scene.render(now);
 

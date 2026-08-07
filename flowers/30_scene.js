@@ -91,6 +91,7 @@ const FL_PET_FS = `
   varying float vDev; varying float vLib;
   uniform vec3 uEye, uKey, uKeyCol, uAmbTop, uAmbBot;
   uniform float uBull;
+  uniform sampler2D uSpots;
   ${FL_FOG}
   void main() {
     vec3 N = normalize(vN);
@@ -101,9 +102,13 @@ const FL_PET_FS = `
     float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
     vec3 amb = mix(uAmbBot, uAmbTop, N.y * 0.5 + 0.5);
 
-    // pigment: bullseye zone + conical-cell path-length deepening
+    // pigment: bullseye zone + conical-cell path-length deepening + the
+    // reaction-diffusion anthocyanin foci, strongest in the guide zone
+    // (Mimulus spots live in the throat)
     float zone = 1.0 - smoothstep(uBull - 0.07, uBull + 0.07, vU);
-    float kPig = (1.0 + 1.2 * zone) * mix(1.0, 1.30, vDev);
+    float spot = texture2D(uSpots, vec2(vU, (vV + vLib) / 3.0)).r;
+    float kPig = (1.0 + 0.8 * zone) * mix(1.0, 1.25, vDev)
+               * (1.0 + 0.9 * smoothstep(0.55, 0.9, spot) * (0.35 + 0.65 * zone));
     vec3 alb = pow(max(vC, vec3(0.0)), vec3(kPig));
 
     // translucency: thin between veins, pigment filters the pass twice
@@ -293,8 +298,17 @@ class FlowerScene {
     this.petMat = new THREE.ShaderMaterial({
       vertexShader: FL_PET_VS, fragmentShader: FL_PET_FS,
       side: THREE.DoubleSide,
-      uniforms: { ...this.triMat.uniforms, uBull: { value: 0.59 } },
+      uniforms: { ...this.triMat.uniforms, uBull: { value: 0.59 }, uSpots: { value: null } },
     });
+    // 3-row atlas for the per-library-petal spot fields, filled as they bake
+    this._spotRes = FL_SPOT_RES;
+    this._spotData = new Float32Array(this._spotRes * this._spotRes * 3);
+    this._spotTex = new THREE.DataTexture(
+      this._spotData, this._spotRes, this._spotRes * 3,
+      THREE.RedFormat, THREE.FloatType);
+    this._spotTex.minFilter = THREE.LinearFilter;
+    this._spotTex.magFilter = THREE.LinearFilter;
+    this.petMat.uniforms.uSpots.value = this._spotTex;
     this.petMesh = new THREE.Mesh(this.petGeo, this.petMat);
     this.petMesh.frustumCulled = false;
     this.scene.add(this.petMesh);
@@ -413,6 +427,18 @@ class FlowerScene {
     this.ptGeo.setAttribute('position', new THREE.InterleavedBufferAttribute(ib, 3, 0));
     this.ptGeo.setAttribute('col', new THREE.InterleavedBufferAttribute(ib, 3, 3));
     this.ptGeo.setAttribute('psize', new THREE.InterleavedBufferAttribute(ib, 1, 6));
+  }
+
+  // Install a baked spot field into the atlas row for one library petal.
+  // flSpotsRun bakes out[a*res+b] with a = u-index; the texture samples
+  // x = u, so the write is the transpose.
+  setSpots(lib, out) {
+    const res = this._spotRes;
+    if (lib < 0 || lib > 2) return;
+    for (let a = 0; a < res; a++)
+      for (let b = 0; b < res; b++)
+        this._spotData[(lib * res + b) * res + a] = out[a * res + b];
+    this._spotTex.needsUpdate = true;
   }
 
   // Push one captured frame into the GPU-side buffers.

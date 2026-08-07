@@ -32,7 +32,7 @@ let code = '';
 const SRC_SKIP = new Set(['60_render.js', '80_main.js']);
 for (const f of readdirSync(join(root, 'src')).filter(f => f.endsWith('.js') && !SRC_SKIP.has(f)).sort())
   code += strip(readFileSync(join(root, 'src', f), 'utf8')) + '\n';
-for (const f of ['10_capture.js', '12_form.js', '15_petal.js', '20_draw.js'])
+for (const f of ['10_capture.js', '12_form.js', '15_petal.js', '17_spots.js', '20_draw.js'])
   code += strip(readFileSync(join(here, f), 'utf8')) + '\n';
 code += '\nreturn { App, Buffers, FlowerBuffers, flEnv, flDrawSpecimen, SPECIES, setView, v3 };\n';
 

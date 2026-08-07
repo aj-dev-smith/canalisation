@@ -101,6 +101,9 @@ function flDrawSpecimen(env, B, S) {
         // PRNG stream and change the plant.
         const phase = (ai * 37 + oi * 101) % 251 * 0.0793;
         const lib = Math.max(0, (S.plant.leaves.plib || []).indexOf(L));
+        // one-time bake per library petal: the Mimulus reaction-diffusion
+        // field on this petal's own lattice (17_spots.js)
+        if (L.mature && !L._flSpots) L._flSpots = flSpotsRun(L);
         flPetalSurface(B, L, fr, bl, bl, bp, bp.glow,
           mesh[0], mesh[1], dev, sen, org.q || 0, phase, lib);
         flPetalVeins(B, L, fr, bl, bl, bp, bp.glow, dev, sen, org.q || 0, phase, V.veins);
