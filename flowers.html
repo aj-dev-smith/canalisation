@@ -11371,14 +11371,47 @@ class FlowerBuffers extends Buffers {
     this[name] = next;
   }
   beginOrgan(meta) {
-    this._open = { meta, tri0: this.triN, seg0: this.segN, pt0: this.ptN };
+    this._open = { meta, tri0: this.triN, seg0: this.segN, pt0: this.ptN, pet0: this.petbN };
   }
   endOrgan() {
     const o = this._open;
     if (!o) return;
-    o.tri1 = this.triN; o.seg1 = this.segN; o.pt1 = this.ptN;
+    o.tri1 = this.triN; o.seg1 = this.segN; o.pt1 = this.ptN; o.pet1 = this.petbN;
     this.organs.push(o);
     this._open = null;
+  }
+  // The union bound of everything one axis's floral organs actually put on
+  // screen — petals from the petal stream, the fruit from the tri stream.
+  // This is what a flower close-up frames from: the DRAWN reach, not a guess
+  // reconstructed from organ lengths (two guesses shipped screenshots taken
+  // from inside the corolla before this was written).
+  floralBounds(axIdx) {
+    let n = 0;
+    let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+    for (const o of this.organs) {
+      const m = o.meta;
+      if (m.ax !== axIdx) continue;
+      if (m.kind === 'petal' || m.kind === 'inner') {
+        for (let k = o.pet0; k < o.pet1; k += 14) {
+          const x = this.petb[k], y = this.petb[k + 1], z = this.petb[k + 2];
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+          if (z < z0) z0 = z; if (z > z1) z1 = z;
+          n++;
+        }
+      } else if (m.kind === 'fruit') {
+        for (let k = o.tri0; k < o.tri1; k += 10) {
+          const x = this.tri[k], y = this.tri[k + 1], z = this.tri[k + 2];
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+          if (z < z0) z0 = z; if (z > z1) z1 = z;
+          n++;
+        }
+      }
+    }
+    if (!n) return null;
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
+    return { c: [cx, cy, cz], r: Math.hypot(x1 - cx, y1 - cy, z1 - cz) };
   }
   vert(p, n, c, e) {
     if (this.triN + 10 > this.tri.length) this._grow('tri');
@@ -12103,13 +12136,54 @@ function flBoot() {
 
   let step = 0, acc = 0, last = performance.now();
   let fpsA = 0;
+  // console access, and the screenshot harness's window into the piece
+  window.__fl = { S, env, scene, B, state: () => ({ step, radius, target: target.toArray(), dist: scene.camera.position.distanceTo(target) }) };
 
   // Frame the flowers once there are flowers; the whole plant until then.
   // Petal REACH, not axis length — a flower framed from `ax.length` reads as
   // a speck (JOURNAL 2026-07-2x, and 70_app.js:1324 is the shipped fix).
+  // ?focus=flower tightens onto the single best flower (most petals).
+  const focus = q.get('focus') || 'plant';
   const target = new THREE.Vector3(0, 2, 0);
   let radius = 6;
+  function bestFlower() {
+    let best = -1, bestN = 0;
+    for (let ai = 0; ai < S.plant.axes.length; ai++) {
+      const ax = S.plant.axes[ai];
+      if (!ax.floral) continue;
+      let n = 0;
+      for (const org of ax.organs) if (org.petal && org.len > 0.05) n++;
+      if (n > bestN) { bestN = n; best = ai; }
+    }
+    return best;
+  }
+  // Frame from the DRAWN reach — the bound of what the capture actually put in
+  // the petal stream for this axis. Two hand-derived versions of this framed
+  // from organ bases and organ lengths, and both put the camera inside the
+  // corolla: a petal rides a petiole and is as wide as it is long, so nothing
+  // short of the geometry knows where the flower ends.
+  function frameAxisFlower(ai) {
+    const bb = B.floralBounds(ai);
+    if (!bb) return false;
+    target.lerp(new THREE.Vector3(bb.c[0], bb.c[1], bb.c[2]), 0.03);
+    radius += (Math.max(1.0, bb.r * 1.15) - radius) * 0.03;
+    return true;
+  }
   function updateFraming() {
+    if (focus === 'flower') {
+      const ax = bestFlower();
+      if (ax && frameAxisFlower(ax)) {
+        scene.controls.target.copy(target);
+        scene.fogU.uFogNear.value = Math.max(0, scene.camera.position.distanceTo(target) - radius * 1.1);
+        const eye = scene.camera.position;
+        const d = eye.distanceTo(target);
+        const want = radius * 2.35;
+        if (Math.abs(d - want) > 0.01) {
+          eye.sub(target).multiplyScalar(1 + (want / Math.max(1e-3, d) - 1) * 0.03).add(target);
+        }
+        return;
+      }
+    }
     let n = 0, cx = 0, cy = 0, cz = 0, r = 0;
     for (const ax of S.plant.axes) {
       if (!ax.floral) continue;

@@ -39,14 +39,47 @@ class FlowerBuffers extends Buffers {
     this[name] = next;
   }
   beginOrgan(meta) {
-    this._open = { meta, tri0: this.triN, seg0: this.segN, pt0: this.ptN };
+    this._open = { meta, tri0: this.triN, seg0: this.segN, pt0: this.ptN, pet0: this.petbN };
   }
   endOrgan() {
     const o = this._open;
     if (!o) return;
-    o.tri1 = this.triN; o.seg1 = this.segN; o.pt1 = this.ptN;
+    o.tri1 = this.triN; o.seg1 = this.segN; o.pt1 = this.ptN; o.pet1 = this.petbN;
     this.organs.push(o);
     this._open = null;
+  }
+  // The union bound of everything one axis's floral organs actually put on
+  // screen — petals from the petal stream, the fruit from the tri stream.
+  // This is what a flower close-up frames from: the DRAWN reach, not a guess
+  // reconstructed from organ lengths (two guesses shipped screenshots taken
+  // from inside the corolla before this was written).
+  floralBounds(axIdx) {
+    let n = 0;
+    let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+    for (const o of this.organs) {
+      const m = o.meta;
+      if (m.ax !== axIdx) continue;
+      if (m.kind === 'petal' || m.kind === 'inner') {
+        for (let k = o.pet0; k < o.pet1; k += 14) {
+          const x = this.petb[k], y = this.petb[k + 1], z = this.petb[k + 2];
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+          if (z < z0) z0 = z; if (z > z1) z1 = z;
+          n++;
+        }
+      } else if (m.kind === 'fruit') {
+        for (let k = o.tri0; k < o.tri1; k += 10) {
+          const x = this.tri[k], y = this.tri[k + 1], z = this.tri[k + 2];
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+          if (z < z0) z0 = z; if (z > z1) z1 = z;
+          n++;
+        }
+      }
+    }
+    if (!n) return null;
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
+    return { c: [cx, cy, cz], r: Math.hypot(x1 - cx, y1 - cy, z1 - cz) };
   }
   vert(p, n, c, e) {
     if (this.triN + 10 > this.tri.length) this._grow('tri');
