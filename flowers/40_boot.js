@@ -1,0 +1,129 @@
+// Boot: grow a real specimen with the shipped factory, at the solver's own
+// clock, and keep the camera on the flowers.
+//
+// ?species=Ember%20Creeper  ?seed=21  ?speed=2  ?ff=900
+//
+// `ff` fast-forwards in chunks before settling into real time — for arriving
+// at bloom in a screenshot harness. Growth is deterministic from (species,
+// seed, steps), so a fast-forwarded plant IS the plant you'd have watched.
+
+function flBoot() {
+  const q = new URLSearchParams(location.search);
+  const name = q.get('species') || 'Ember Creeper';
+  const seed = +(q.get('seed') || 21);
+  let speed = +(q.get('speed') || 1);
+  let ff = Math.max(0, +(q.get('ff') || 0));
+
+  const env = flEnv();
+  const S = App.prototype.makeSpecimen.call(env, name, seed);
+  // Flowers are the subject and floral organs never senesce, but the canopy
+  // under them does; hold it unless asked to watch the whole arc. NOTE
+  // plant.sp, not S.sp — Plant copies its options at construction (PITFALLS).
+  if (q.get('hold') !== 'none') S.plant.sp.senesceHold = true;
+  const B = new FlowerBuffers();
+  const scene = new FlowerScene(document.getElementById('stage'), S.pal);
+  const hud = document.getElementById('hud');
+  const hint = document.getElementById('hint');
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff=';
+
+  let step = 0, acc = 0, last = performance.now();
+  let fpsA = 0;
+
+  // Frame the flowers once there are flowers; the whole plant until then.
+  // Petal REACH, not axis length — a flower framed from `ax.length` reads as
+  // a speck (JOURNAL 2026-07-2x, and 70_app.js:1324 is the shipped fix).
+  const target = new THREE.Vector3(0, 2, 0);
+  let radius = 6;
+  function updateFraming() {
+    let n = 0, cx = 0, cy = 0, cz = 0, r = 0;
+    for (const ax of S.plant.axes) {
+      if (!ax.floral) continue;
+      for (const org of ax.organs) {
+        if (!org.floral || org.len < 0.05 || !org.frame) continue;
+        const o = org.frame.o;
+        cx += o[0]; cy += o[1]; cz += o[2]; n++;
+      }
+    }
+    if (n >= 3) {
+      cx /= n; cy /= n; cz /= n;
+      for (const ax of S.plant.axes) {
+        if (!ax.floral) continue;
+        for (const org of ax.organs) {
+          if (!org.floral || org.len < 0.05 || !org.frame) continue;
+          const o = org.frame.o;
+          r = Math.max(r, Math.hypot(o[0] - cx, o[1] - cy, o[2] - cz) + org.len);
+        }
+      }
+      target.lerp(new THREE.Vector3(cx, cy, cz), 0.02);
+      radius += (Math.max(1.6, r * 2.1) - radius) * 0.02;
+    } else {
+      // vegetative: frame the shoot
+      let ymax = 0.5;
+      for (const ax of S.plant.axes) for (const p of ax.pts) ymax = Math.max(ymax, p[1]);
+      target.lerp(new THREE.Vector3(0, ymax * 0.62, 0), 0.02);
+      radius += (Math.max(4, ymax * 1.35) - radius) * 0.02;
+    }
+    scene.controls.target.copy(target);
+    scene.fogU.uFogNear.value = Math.max(0, scene.camera.position.distanceTo(target) - radius * 1.1);
+    const eye = scene.camera.position;
+    const d = eye.distanceTo(target);
+    const want = radius * 2.35;
+    if (Math.abs(d - want) > 0.01) {
+      eye.sub(target).multiplyScalar(1 + (want / Math.max(1e-3, d) - 1) * 0.02).add(target);
+    }
+  }
+
+  function capture() {
+    const e = scene.camera.position;
+    env.cam.eye[0] = e.x; env.cam.eye[1] = e.y; env.cam.eye[2] = e.z;
+    env.cam.dist = e.distanceTo(target);
+    // width floor as shipped, LOD off: every vein the chemistry grew.
+    setView(env.cam.eye, 0.004, 0);
+    B.reset();
+    flDrawSpecimen(env, B, S);
+    scene.upload(B);
+  }
+
+  function countPetals() {
+    let p = 0, fl = 0;
+    for (const ax of S.plant.axes) {
+      if (ax.floral) fl++;
+      for (const org of ax.organs) if (org.petal) p++;
+    }
+    return { p, fl };
+  }
+
+  function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    fpsA = fpsA * 0.95 + (1 / Math.max(1e-3, dt)) * 0.05;
+
+    let stepped = 0;
+    if (ff > 0) {
+      const n = Math.min(ff, 40);
+      for (let i = 0; i < n; i++) S.plant.step(1);
+      step += n; ff -= n; stepped = n;
+    } else {
+      acc += dt * 125 * speed;
+      const n = Math.min(6, Math.floor(acc));
+      acc -= n;
+      for (let i = 0; i < n; i++) S.plant.step(1);
+      step += n; stepped = n;
+    }
+    env.t = step;
+
+    if (stepped > 0 || !frame.drawn) { capture(); frame.drawn = true; }
+    updateFraming();
+    scene.render(now);
+
+    const c = countPetals();
+    hud.textContent =
+      `${name}  seed ${seed}\n` +
+      `${S.plant.stage()}  step ${step}${ff > 0 ? '  (fast-forward ' + ff + ')' : ''}\n` +
+      `${c.fl} floral axes · ${c.p} petals · ${Math.round(fpsA)} fps`;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+flBoot();
