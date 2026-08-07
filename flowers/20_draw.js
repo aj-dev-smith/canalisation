@@ -67,7 +67,16 @@ function flDrawSpecimen(env, B, S) {
       const pet = pt.len;
       const b = v3(a[0] + oFr.x[0] * pet, a[1] + oFr.x[1] * pet, a[2] + oFr.x[2] * pet);
       let petC = pal.stem1;
-      if (sen > 0) {
+      if (org.petal) {
+        // a petal's stalk wears the petal's base colour, not the stem's: a
+        // doubled corolla draws 20+ of these, and in stem-brown they read as
+        // a wire armature through the flower (measured on the double)
+        const pb = S.petalPal.blade0;
+        _petC[0] = lerp(pal.stem1[0], pb[0], 0.65);
+        _petC[1] = lerp(pal.stem1[1], pb[1], 0.65);
+        _petC[2] = lerp(pal.stem1[2], pb[2], 0.65);
+        petC = _petC;
+      } else if (sen > 0) {
         senesceTint(_petC, pal.stem1[0], pal.stem1[1], pal.stem1[2], sen * 0.85);
         petC = _petC;
       }

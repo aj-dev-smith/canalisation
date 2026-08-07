@@ -633,7 +633,12 @@ class Axis {
       // and smooth instead of long and toothed
       org.petal = org.q < sp.petalQ;
       org.leaf = null;
-      org.maxLen = sp.organLen * (org.petal ? 0.30 : 0.13) * (0.82 + 0.36 * org.rnd());
+      // `petalGrade` scales a petal down with its identity q: a homeotically
+      // converted stamen is a petaloid stamen, smaller than a true petal, so
+      // a doubled corolla grades outer-large to inner-small the way a rose
+      // does. Default 0 is exactly the old line for every shipped species.
+      const pg = 1 - (sp.petalGrade || 0) * clamp(org.q, 0, 1);
+      org.maxLen = sp.organLen * (org.petal ? 0.30 * pg : 0.13) * (0.82 + 0.36 * org.rnd());
       org.tilt = org.petal ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
         : sp.organTilt * 0.30;
       org.roll *= 0.25;
@@ -1081,6 +1086,9 @@ export const SPECIES_DEFAULTS = {
   floralNode: 0.10,     // the floral minInternode factor (was hardwired).
                         // A compressed flower needs it near zero or the
                         // founding gate discards its primordia
+  petalGrade: 0,        // how much a petal shrinks with its identity q —
+                        // a converted stamen is a petaloid stamen, smaller
+                        // than a true petal. 0 = the old line exactly
   // Idle steps before a VEGETATIVE apex counts as stalled. Chosen from measured
   // gaps, not guessed: across all eight species the longest a healthy shoot ever
   // went between founding organs is 500 steps, and the longest any new lateral

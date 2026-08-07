@@ -16,7 +16,49 @@ node flowers/parity.test.mjs # the gate: captured streams == shipped drawSpecime
 
 URL parameters: `?species=Nightglass%20Parasol` `?seed=7` `?speed=2`
 `?ff=1100` (fast-forward, deterministic) `?focus=flower` (frame the most
-compact flower from its *drawn* bounds) `?hold=none` (let senescence run).
+compact flower from its *drawn* bounds) `?hold=none` (let senescence run)
+`?form=wild|double` (**double is the default** — see below) `?homeo=0.62`
+(where the petal identity threshold sits) `?renew=0.7` (how much
+determinacy the floral meristem loses).
+
+## The double flower — the C-class mutant, grown
+
+The default form is a **doubled flower**: 20-23 petals per corolla in
+nested whorls, outer-large to inner-small, the inner whorls still cupped
+while the outer ones recurve. None of it is drawn; it is the ABC model's
+C-class failure expressed through four engine parameters that all default
+to the numbers that were previously hardwired (PR: "Four floral
+determinacy knobs"):
+
+- *B-class expansion* — `petalQ` 0.28 -> 0.62. `org.petal = q < petalQ`
+  (40_plant.js), so raising the threshold founds the stamen-analog whorls
+  as petals: a real doubled rose IS petaloid stamens (Meyerowitz ABC
+  **[D]**). Petal library, length, tilt and the q-lagged bloom all follow
+  from the identity, so the conversion costs nothing downstream.
+- *C-class determinacy loss* — `apexRenew` 0.7. AGAMOUS terminates the
+  floral meristem by shutting off WUS stem-cell renewal (Lohmann 2001,
+  Lenhard 2001 **[D]**); in this engine floral organ identity IS the apex
+  consuming itself, so renewal is one factor on the contraction in
+  `consumeApex()`. Measured: 6 petals/flower wild, 14 at renewal 0.6, 23
+  at 0.8 — and with `petalQ` untouched, renewal alone gives the *ag-1*
+  petal-petal-petal phenotype.
+- *A flower is a compressed shoot* — `floralElong`/`floralStretch` 0.08.
+  An indeterminate flower at shipped elongation strings its petals over
+  8.4-13.0 units of axis (a raceme); compressed, the same organs pack
+  into a 0.26-0.40-unit corolla. **Three traps, all measured**: the
+  compression must drop `floralNode` with it (the founding gate discards
+  primordia otherwise — the stalled-shoot trap, and the flower silently
+  un-doubles to 9 petals), must raise `floralGrace` (the compressed
+  flower's early cadence outruns 320 steps and the axillaries die), and
+  on the Nightglass Parasol the compressed corolla ends up wrapped
+  around the terminal fruit — a glowing moon in a ring of fenestrated
+  petals, which nobody designed.
+- *Petaloid stamens are smaller than true petals* — `petalGrade` 0.5
+  scales a petal down with its identity q, so the corolla grades the way
+  a rose does.
+
+`?form=wild` is the shipped configuration, bit for bit — every default
+equals the old literal, `test/smoke.mjs` 73/73 before and after.
 
 ## What it is
 
@@ -29,9 +71,24 @@ compact flower from its *drawn* bounds) `?hold=none` (let senescence run).
   camera-faced per frame in the vertex shader (ROADMAP 11's twelve floats).
 - **The shading baseline is 60_render.js transliterated** — hemisphere
   ambient, key at 0.9, back-transmission at 0.55, rim at 0.7, emissive x3,
-  fog from the subject's near face, veins additive at colour x emissive,
-  ACES -> vignette -> grain -> gamma. The palettes were tuned against that
-  pipeline; an improvised renderer hands back a silhouette (measured).
+  fog from the subject's near face, veins additive at colour x emissive.
+  The palettes were tuned against that pipeline; an improvised renderer
+  hands back a silhouette (measured).
+- **The post chain is 60_render.js whole**: bright pass + three widening
+  gaussian blurs for bloom, the scene blurred at half res for defocus
+  with linear depth carried in alpha, COMP_FS verbatim (defocus mix,
+  bloom, lateral chroma, ACES -> vignette -> grain -> gamma). Focus racks
+  on the shipped director's law — tight on a flower close-up. The
+  additive passes preserve destination alpha (the Three spelling of
+  `blendFuncSeparate(SRC_ALPHA, ONE, ZERO, ONE)`), because alpha is the
+  depth channel.
+- **Pollen rides the one air** (18_pollen.js): grains shed by the mature
+  stamen-analog band sample `windAt()` at their own positions — the same
+  field the stem bends in — plus a Stokes settling speed of 3.3 cm/s
+  (30 um, 1200 kg/m^3, published pine-pollen range 2-4 **[D]**). The
+  drawn size and shed rate are legibility choices, same category as the
+  vein width floor; a mote's colour is the key light's, because that is
+  what a backlit mote shows you.
 - **`flowers/parity.test.mjs`** reconciles the captured streams against the
   shipped `drawSpecimen` float for float (petal stream accounted, exact
   ribbon-count parity) and checks the organ bracketing. 20 checks, 2 species.
@@ -56,8 +113,12 @@ computed by the engine, none previously drawn.
   experimentally verified: `lambda = sqrt(2 pi L t)/[3(1-nu^2) eps]^(1/4)`,
   amplitude likewise closed-form, evaluated with a 150 um petal (published
   range 75-419 um) at the world's own 0.0625 m/unit and the lily's measured
-  base-to-tip strain rise (0.2 -> 0.5 **[D]**). The ripple is drawn at the
-  millimetres the formula returns.
+  base-to-tip strain rise (0.2 -> 0.5 **[D]**). **The formula returns
+  ~7 mm and the petal grid samples the width at ~2.5 mm**, so drawn
+  naively the sine aliases into jagged offsets — the crumpled-foil mottle
+  AJ caught in a minute. `flPetalForm` fades the amplitude below ~4
+  samples per wavelength: the vein-LOD law, applied to a ripple. What the
+  instrument cannot resolve, it does not draw as noise.
 - Veins are mapped through the same displacement (`flPetalVeins` mirrors the
   shipped `bladeVeins` in its PXR=0 form) — otherwise they float off the
   curved surface, which is exactly what the first build did.
@@ -83,6 +144,25 @@ computed by the engine, none previously drawn.
   lamina lattice (17_spots.js) — zero-flux for free on the cut lattice, baked
   once per library petal, never the same twice. Two numerical departures are
   flagged in that file's header.
+
+**What the second pass corrected (all measured, none guessed)**: the
+pigment stack ran at full strength and turned the bake's smooth pale ramp
+into sharp maroon blotches — isolating raw albedo in the live shader
+showed the bake was beautiful on its own, so the bullseye is a wide soft
+gradient now and the spots whisper inside it; a one-sided lambert threw
+half of every cupped petal into hard shadow, which read as meat — thin
+tissue is lit from both sides now (wrapped diffuse, wide transmission
+lobe), which is van der Kooi's transmittance point applied to the model
+rather than bolted on; inner organs fed through the petal shell rolled
+into crumpled tubes (curvature scales 1/L; the shell was derived for a
+petal's aspect ratio, not a stamen's) and take the shipped card now; and
+the shell was being driven to a ~60 deg edge roll, where 1.25x the
+bifurcation threshold gives the shallow cup that reads as a petal.
+
+**Known gap**: `?focus=flower` on a dense canopy (Cathedral Fern) shoots
+through foliage — the shipped page's sight-line occlusion cull was
+deliberately dropped here as "no director, no subject", and the flower
+focus is precisely a subject. Port it next.
 
 **Not built, deliberately**: the diffraction-grating blue halo (needs
 spectral rendering an RGB pipeline can only fake); nyctinasty (needs a

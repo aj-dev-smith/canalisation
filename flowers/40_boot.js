@@ -42,7 +42,10 @@ function flBoot() {
   // B alone ~8; B + renewal 0.6 -> 14, 0.8 -> 23 — peony-grade — and C alone
   // gives 11 with petalQ untouched, which is the pure ag phenotype. Fruit
   // still sets in every case; the apex spends through floralGrace.
-  if (q.get('form') === 'double') {
+  // The double ships as the DEFAULT form — the piece is titled flowers, and a
+  // 20-petal graded corolla is the strongest image it makes. `?form=wild` is
+  // the shipped configuration, untouched.
+  if ((q.get('form') || 'double') === 'double') {
     const pq = Math.min(0.94, Math.max(0.05, +(q.get('homeo') || 0.62)));
     const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || 0.7)));
     // Compression, the founding gate and the grace move TOGETHER (all three
@@ -55,7 +58,7 @@ function flBoot() {
     // against 8.4-13.0 loose — a corolla, not a raceme.
     const over = { petalQ: pq, apexRenew: rn, floralOrgans: 34,
       floralElong: 0.08, floralStretch: 0.08, floralNode: 0.008,
-      floralGrace: 960 };
+      floralGrace: 960, petalGrade: 0.5 };
     S.sp = { ...S.sp, ...over };
     Object.assign(S.plant.sp, over);
   }
@@ -72,7 +75,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff=';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=wild|double ?homeo= ?renew=';
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
   // grains sample the same wind field the stem bends in.

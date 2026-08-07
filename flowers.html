@@ -6288,7 +6288,12 @@ class Axis {
       // and smooth instead of long and toothed
       org.petal = org.q < sp.petalQ;
       org.leaf = null;
-      org.maxLen = sp.organLen * (org.petal ? 0.30 : 0.13) * (0.82 + 0.36 * org.rnd());
+      // `petalGrade` scales a petal down with its identity q: a homeotically
+      // converted stamen is a petaloid stamen, smaller than a true petal, so
+      // a doubled corolla grades outer-large to inner-small the way a rose
+      // does. Default 0 is exactly the old line for every shipped species.
+      const pg = 1 - (sp.petalGrade || 0) * clamp(org.q, 0, 1);
+      org.maxLen = sp.organLen * (org.petal ? 0.30 * pg : 0.13) * (0.82 + 0.36 * org.rnd());
       org.tilt = org.petal ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
         : sp.organTilt * 0.30;
       org.roll *= 0.25;
@@ -6736,6 +6741,9 @@ const SPECIES_DEFAULTS = {
   floralNode: 0.10,     // the floral minInternode factor (was hardwired).
                         // A compressed flower needs it near zero or the
                         // founding gate discards its primordia
+  petalGrade: 0,        // how much a petal shrinks with its identity q —
+                        // a converted stamen is a petaloid stamen, smaller
+                        // than a true petal. 0 = the old line exactly
   // Idle steps before a VEGETATIVE apex counts as stalled. Chosen from measured
   // gaps, not guessed: across all eight species the longest a healthy shoot ever
   // went between founding organs is 500 steps, and the longest any new lateral
@@ -11026,7 +11034,16 @@ function flDrawSpecimen(env, B, S) {
       const pet = pt.len;
       const b = v3(a[0] + oFr.x[0] * pet, a[1] + oFr.x[1] * pet, a[2] + oFr.x[2] * pet);
       let petC = pal.stem1;
-      if (sen > 0) {
+      if (org.petal) {
+        // a petal's stalk wears the petal's base colour, not the stem's: a
+        // doubled corolla draws 20+ of these, and in stem-brown they read as
+        // a wire armature through the flower (measured on the double)
+        const pb = S.petalPal.blade0;
+        _petC[0] = lerp(pal.stem1[0], pb[0], 0.65);
+        _petC[1] = lerp(pal.stem1[1], pb[1], 0.65);
+        _petC[2] = lerp(pal.stem1[2], pb[2], 0.65);
+        petC = _petC;
+      } else if (sen > 0) {
         senesceTint(_petC, pal.stem1[0], pal.stem1[1], pal.stem1[2], sen * 0.85);
         petC = _petC;
       }
@@ -11803,7 +11820,10 @@ function flBoot() {
   // B alone ~8; B + renewal 0.6 -> 14, 0.8 -> 23 — peony-grade — and C alone
   // gives 11 with petalQ untouched, which is the pure ag phenotype. Fruit
   // still sets in every case; the apex spends through floralGrace.
-  if (q.get('form') === 'double') {
+  // The double ships as the DEFAULT form — the piece is titled flowers, and a
+  // 20-petal graded corolla is the strongest image it makes. `?form=wild` is
+  // the shipped configuration, untouched.
+  if ((q.get('form') || 'double') === 'double') {
     const pq = Math.min(0.94, Math.max(0.05, +(q.get('homeo') || 0.62)));
     const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || 0.7)));
     // Compression, the founding gate and the grace move TOGETHER (all three
@@ -11816,7 +11836,7 @@ function flBoot() {
     // against 8.4-13.0 loose — a corolla, not a raceme.
     const over = { petalQ: pq, apexRenew: rn, floralOrgans: 34,
       floralElong: 0.08, floralStretch: 0.08, floralNode: 0.008,
-      floralGrace: 960 };
+      floralGrace: 960, petalGrade: 0.5 };
     S.sp = { ...S.sp, ...over };
     Object.assign(S.plant.sp, over);
   }
@@ -11833,7 +11853,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff=';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=wild|double ?homeo= ?renew=';
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
   // grains sample the same wind field the stem bends in.
