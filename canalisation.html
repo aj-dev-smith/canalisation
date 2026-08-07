@@ -255,6 +255,11 @@
          parameter. Both want the sheet closed again immediately afterwards,
          which is why neither is in the bar. -->
     <span class="inject"><select id="agentSel" title="which agent"></select><button class="btn" id="infectBtn" title="inject into this specimen as it stands">inject</button><button class="btn" id="infectNewBtn" title="a new specimen, grown to the middle of its susceptible window, then injected">fresh + inject</button></span>
+    <!-- A FLORAL FORM. Beside the agent picker because it is the other kind of
+         change a person can make to what a plant IS rather than how it runs:
+         a homeotic program, applied by growing a specimen under it — identity
+         is read at founding, so there is no meaningful mid-life switch. -->
+    <span class="inject"><select id="formSel" title="which floral program"></select><button class="btn" id="formBtn" title="a new specimen, grown under this floral program">grow with form</button></span>
     <button class="btn" id="cineBtn">cinema</button>
     <span id="stats"><span>fps <b id="fps">60</b></span><span id="sat"></span></span>
   </div>
@@ -8960,6 +8965,65 @@ const VIEWS = {
 const _shedFr = { o: v3(), x: v3(), y: v3(), z: v3(), t: 0 };
 const _petC = v3();
 
+// FLORAL FORMS — homeotic programs, as presets over the engine knobs that
+// already exist. Every key here is a species option with a shipped default
+// (whorlBands, receptacle, apexRenew, the floral compression triple...), so a
+// form adds no mechanism: it is a different SETTING of the ABC machinery, the
+// way a species is a different setting of the chemistry. All numbers were
+// measured in flowers/ (the piece these programs were built for, PR #42) and
+// its README carries the derivations. Two honesty notes: `columbine` here is
+// the ARCHITECTURE only — the nectar spur and the bicolor sepals live in
+// flowers.html's petal renderer, so under this renderer it reads as nested
+// whorls carried out on pedicels; and `daisy` raises the organ budget, so a
+// garden planted under it is a heavier garden.
+const FLORAL_FORMS = {
+  wild: null,
+  // the full ABC plan: calyx, corolla, filament ring, pistil. Program B for
+  // the three species whose q sits at zero and then jumps (measured sweep,
+  // flowers/README) — under A a Cathedral Fern is S8 P1.
+  abc: (name) => {
+    const progB = name === 'Cathedral Fern' || name === 'Hoarfrost Thicket'
+      || name === 'Sulphur Rosette';
+    const P = progB
+      ? { renew: 0.75, organs: 28, dome: 2.2, bands: [0.06, 0.24, 0.60] }
+      : { renew: 0.55, organs: 26, dome: 3.0, bands: [0.08, 0.38, 0.65] };
+    return {
+      whorlBands: { sepal: P.bands[0], stamen: P.bands[1], carpel: P.bands[2],
+        filament: 1.8, style: 1.5 },
+      apexRenew: P.renew, floralOrgans: P.organs, floralDome: P.dome,
+      floralElong: 0.08, floralStretch: 0.08, floralNode: 0.008,
+      floralGrace: 960, petalGrade: 0.35,
+    };
+  },
+  // the C-class mutant: stamen whorls founded as petals, determinacy lost —
+  // 20-23 petals in nested graded whorls
+  double: () => ({
+    petalQ: 0.62, apexRenew: 0.7, floralOrgans: 34,
+    floralElong: 0.08, floralStretch: 0.08, floralNode: 0.008,
+    floralGrace: 960, petalGrade: 0.5,
+  }),
+  // the capitulum: florets ride the tip of a bolting peduncle, the head is
+  // the disc the meristem actually was (receptacle un-collapses q)
+  daisy: () => ({
+    whorlBands: { sepal: 0.05, stamen: 0.18, carpel: 0.96, sepalLen: 0.16,
+      petalLen: 0.45, stamenLen: 0.10, filament: 0.9, style: 1.5 },
+    receptacle: 1.1, apexRenew: 0.88, floralOrgans: 90, floralDome: 4.0,
+    floralElong: 0.35, floralStretch: 0.08, floralNode: 0.008,
+    tropism: 0.002, floralGrace: 1600, organBudget: 400, maxOrgans: 140,
+    petalGrade: 0, petalTilt: 1.5,
+  }),
+  // the spurred plan's architecture: petaloid outer whorl counts, whorls
+  // nested on a small receptacle, each flower carried out on a pedicel
+  columbine: () => ({
+    whorlBands: { sepal: 0.02, stamen: 0.28, carpel: 0.75, sepalLen: 0.32,
+      petalLen: 0.26, stamenLen: 0.13, filament: 1.5, style: 1.5 },
+    receptacle: 0.25, apexRenew: 0.70, floralOrgans: 32, floralDome: 3.0,
+    floralElong: 0.30, floralStretch: 0.08, floralNode: 0.008,
+    tropism: 0.004, floralGrace: 1200, organBudget: 260, maxOrgans: 120,
+    petalGrade: 0.15, petalTilt: 0.8,
+  }),
+};
+
 class App {
   constructor(canvas, hud) {
     this.canvas = canvas;
@@ -8986,6 +9050,11 @@ class App {
     this.resumeAfter = 16000;
     this.idleT = 0;
     this.ringWidth = 0;
+    // which floral program new specimens grow under; null = the species as
+    // shipped. Scene-level on purpose: identity is read at each organ's
+    // founding, so a form is a thing a specimen is GROWN under, not a switch
+    // on a standing plant — and a garden planted while it is set joins it.
+    this.floralForm = null;
     this.frame = 0;
     this.t = 0;
     this.fps = 60;
@@ -9057,6 +9126,12 @@ class App {
     if (wind) sp.wind = wind;
     // a specimen planted while the last act is held joins it held
     if (this.senesceHeld) sp.senesceHold = true;
+    // the floral program, applied before the Plant is constructed: identity
+    // is read off sp at each organ's founding, so a form is part of what a
+    // specimen is grown under. null (and any harness's stand-in App, which
+    // never sets it) is the shipped species exactly.
+    if (this.floralForm && FLORAL_FORMS[this.floralForm])
+      Object.assign(sp, FLORAL_FORMS[this.floralForm](name));
     return { name, seed, prm, mo, sp, pal, petalPal, innerPals,
       plant: new Plant(prm, mo, sp, seed) };
   }
@@ -10232,6 +10307,9 @@ window.__SPECIES = SPECIES;
 // environment, so nothing on the page implies one, and without this a person
 // looking at an infected plant has no way to find out what to type.
 window.__AGENTS = AGENTS;
+// The floral form table, same argument as the three above: `app.floralForm`
+// is settable from the console, so its legal values should be enumerable.
+window.__FORMS = FLORAL_FORMS;
 
 // --- the specimen label ----------------------------------------------------
 let lastHud = 0;
@@ -10506,6 +10584,36 @@ function infect(name) {
   return true;
 }
 $('infectBtn').onclick = () => infect(agentSel.value);
+
+// --- grow with a floral form ------------------------------------------------
+// The other kind of identity change: a homeotic PROGRAM rather than an agent.
+// One button, not an "apply" pair like the agent's, because whorl identity is
+// read at each organ's founding — a standing plant that has flowered cannot
+// be re-formed, so the honest verb is to grow one under the program. The
+// setting is scene-level and sticky: "new specimen" and a garden planted
+// while it is set stay in the chosen form until it is put back to wild.
+const FORM_TIP = {
+  wild: 'The species as shipped — whatever floral plan its own chemistry settles into.',
+  abc: 'The full ABC model: identity banded outermost-to-innermost on the one coordinate the floral meristem already makes as it consumes itself. A green calyx, a corolla, a ring of filaments carrying anthers, a central pistil.',
+  double: 'The C-class mutant — the doubled rose. Organs that would have been stamens are founded as petals and the apex keeps founding: 20-odd petals in nested whorls, graded outer-large to inner-small.',
+  daisy: 'A composite head. The florets ride the tip of a bolting peduncle and the head becomes the disc the meristem actually was — phyllaries at the rim, rays, disc florets, a fruit at the centre. Costs more organs; a garden grown under it is a heavier garden.',
+  columbine: 'The spurred plan’s architecture: a showy outer whorl, nested inner whorls on a small receptacle, each flower carried clear on its own pedicel. The nectar spur itself and the bicolor live in flowers.html’s petal renderer — here you see the body plan.',
+};
+const formSel = $('formSel');
+for (const name of Object.keys(FLORAL_FORMS)) {
+  const o = document.createElement('option');
+  o.value = name; o.textContent = name;
+  formSel.appendChild(o);
+}
+formSel.value = 'wild';
+$('formBtn').onclick = () => {
+  app.floralForm = formSel.value === 'wild' ? null : formSel.value;
+  app.newSpecimen(app.speciesName);
+  app.giveBack();
+  syncSliders();
+  $('regrowBtn').classList.remove('urge');
+  showTip(FORM_TIP[formSel.value] || '');
+};
 // The reliable demo path: a new specimen, run forward to the middle of its
 // susceptible window, and injected there. Stepping synchronously is fine — this
 // is a few hundred steps on a seedling, not a grown plant.
