@@ -149,7 +149,14 @@ function flDrawSpecimen(env, B, S, cull) {
       if (bl < 0.02) { B.endOrgan(); continue; }
       const wp = (kind === 'stamen' || kind === 'carpel')
         && (S._whorlPals || (S._whorlPals = flWhorlPals(S)));
+      // PETALOID SEPALS (wb.sepalPetaloid): B-class expression reaching whorl
+      // 1 — the homeotic move that makes a columbine's or a tulip's outer
+      // whorl showy. The organ still IS a leaf (ordinary library, margin,
+      // veins); only its stream and palette change, which is exactly what a
+      // homeotic identity is — same tissue, different program reading it.
+      const sepP = kind === 'sepal' && S.sp.whorlBands && S.sp.whorlBands.sepalPetaloid;
       const bp = org.petal ? S.petalPal
+        : sepP ? (S.sepalPal || S.petalPal)
         : kind === 'sepal' ? pal            // a sepal IS a leaf — A-class alone
           : kind === 'stamen' ? wp.anther
             : kind === 'carpel' ? wp.carpel
@@ -168,7 +175,7 @@ function flDrawSpecimen(env, B, S, cull) {
       // the ripple's Nyquist guard in flPetalForm assumes the grid IS the
       // lattice, and at 0.85 the two drifted apart.
       const mesh = env.bladeMesh(L, bl, org.floral ? 1.0 : 0, env._mesh);
-      if (org.petal && V.lamina > 0) {
+      if ((org.petal || sepP) && V.lamina > 0) {
         // PETALS ONLY go to the petal stream: same grid and colours, but the
         // out-of-plane form is 12_form.js's shell + ripple physics, and the
         // veins are mapped through that SAME displacement (a vein floats off
@@ -186,9 +193,12 @@ function flDrawSpecimen(env, B, S, cull) {
         // one-time bake per library petal: the Mimulus reaction-diffusion
         // field on this petal's own lattice (17_spots.js)
         if (L.mature && !L._flSpots) L._flSpots = flSpotsRun(L);
+        // the spur is PETAL-whorl identity: a sepal routed through this stream
+        // stays flat — in Aquilegia only the second whorl makes spurs
+        const spur = org.petal && S.sp.whorlBands ? S.sp.whorlBands.spur : null;
         flPetalSurface(B, L, fr, bl, bl, bp, bp.glow,
-          mesh[0], mesh[1], dev, sen, org.q || 0, phase, lib);
-        flPetalVeins(B, L, fr, bl, bl, bp, bp.glow, dev, sen, org.q || 0, phase, V.veins);
+          mesh[0], mesh[1], dev, sen, org.q || 0, phase, lib, spur);
+        flPetalVeins(B, L, fr, bl, bl, bp, bp.glow, dev, sen, org.q || 0, phase, V.veins, spur);
       } else {
         blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mesh[0], mesh[1], dev,
           1, sen, { surface: V.lamina > 0, veinMul: V.veins });

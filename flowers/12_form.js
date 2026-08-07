@@ -62,10 +62,49 @@ const FL_BSTAR = (1 - FL_NU) + 0.25 * (1 - FL_NU) * (3 + FL_NU) * FL_K0 * FL_K0;
 // and the bifurcation's sign still carries the whole bud-to-bloom story.
 const FL_BETA_MAX = 1.25 * FL_BSTAR;
 
+// THE NECTAR SPUR (Aquilegia). Puzey, Gerbode, Hodges, Kramer & Mahadevan
+// (Proc. R. Soc. B 279:1640, 2012 [D] — the same Mahadevan as both mechanisms
+// above, so the whole corolla now runs on one lab's physics): petal growth is
+// two phases, cell proliferation then HIGHLY ANISOTROPIC cell elongation, and
+// all spur-length diversity across the genus is achieved SOLELY by the degree
+// of anisotropy — not cell number, not cell size. So the spur here is the
+// petal's own proximal sheet domain (the spur compartment is set early as a
+// distinct domain — Yant 2015 [D]) rolled closed and carried backward by an
+// anisotropy factor that ramps with dev, the phase-II handover on the same
+// dev coupling the bloom already uses. TWO things are deliberately NOT
+// stated: the tube's radius at each u is the margin-grown width of the sheet
+// at that u (the roll map has the flat sheet as its c->0 limit), so the spur
+// tapers to a point because the petal base narrows — the silhouette is the
+// margin's, not a cone's; and which petals have spurs is whorl identity, so
+// it rides the ABC bands. Stated: uS (the compartment's share of the sheet,
+// [OURS]), the anisotropy ceiling (P2012 measure ~2-10 across the genus [D]),
+// and the sagittal angle the tube leaves at (geometry, by eye).
+function flSpurOf(so, bl, dev) {
+  if (!so || !(so.aniso > 1)) return null;
+  const uS = so.uS ?? 0.30;
+  // phase II: proliferation hands over to anisotropic elongation partway
+  // through maturation; before the handover the spur is the shallow cup the
+  // divisions made (P2012 fig 2 — spurs begin as a bump, then shoot)
+  const a = 1 + (so.aniso - 1) * smoothstep(0.30, 0.90, dev);
+  const ang = so.angle ?? (Math.PI + 0.35);
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  // sqrt(a) is the tube's slenderness. P2012 bound it from both sides: cell
+  // WIDTH stays roughly constant while length multiplies (their measurement),
+  // but the compartment that elongates is the cup the divisions made, not the
+  // full sheet — so the lateral scale sits between width-conserving (1) and
+  // area-conserving (1/a). The geometric middle 1/sqrt(a) is stated [OURS];
+  // at aniso 6 it gives diameter ~10% of spur length, which is a real
+  // A. coerulea's proportion. Measured at the two ends: 1 is a sausage
+  // (lateral span 0.40 against a 0.425 mouth — the petal margin holds its
+  // width until the last 2% of the sheet), 1/a is a wire the rasteriser
+  // reduces to its own veins.
+  return { uS, uM: uS * 1.5, a: Math.sqrt(a), dx, dy, nx: -dy, ny: dx, len: uS * bl * a };
+}
+
 // -> { kx, ky, lam, amp } — curvatures in 1/world-units, ripple in world units.
 // Curvatures are L&M's dimensionless k-bar made dimensional with the blade
 // length as the shell scale.
-function flPetalForm(bl, dev, q, nv) {
+function flPetalForm(bl, dev, q, nv, spur) {
   const bg = FL_BETA_MAX * dev * dev;
   // Inner organs stay nearer the bud state: identity holds them at a smaller
   // effective load. SCIENCE.md books "enclosing growth at high q" as imposed
@@ -92,5 +131,5 @@ function flPetalForm(bl, dev, q, nv) {
   // draw as noise". `nv` is the petal lattice's own cross rows; both the
   // surface and its veins pass it, so they stay on one displaced surface.
   if (nv) amp *= smoothstep(2.5, 4.0, lam / (L / nv));
-  return { kx: kbx / L, ky: kby / L, lam, amp, eps };
+  return { kx: kbx / L, ky: kby / L, lam, amp, eps, spur: flSpurOf(spur, bl, dev) };
 }

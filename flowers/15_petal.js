@@ -31,21 +31,49 @@ function flPetalPoint(out, frame, u, v, len, wid, form, phase, tN, off) {
   const shell = 0.5 * form.kx * x * x + 0.5 * form.ky * y * y;
   const env = (0.4 + 0.6 * u) * (0.25 + 0.75 * tN * tN);
   const rip = form.amp * env * Math.sin(2 * Math.PI * y / form.lam + phase);
-  const n = shell + rip + (off || 0);
-  out[0] = frame.o[0] + frame.x[0] * x + frame.z[0] * y + frame.y[0] * n;
-  out[1] = frame.o[1] + frame.x[1] * x + frame.z[1] * y + frame.y[1] * n;
-  out[2] = frame.o[2] + frame.x[2] * x + frame.z[2] * y + frame.y[2] * n;
+  let X = x, Y = y, N = shell + rip + (off || 0);
+  const sp = form.spur;
+  if (sp && u < sp.uM) {
+    // THE ROLL MAP, with the flat sheet as its limit: lateral arc length y
+    // wraps at closure fraction w — angle th = pi*w*tN, so tN = +-1 (the two
+    // margins) meet at the seam when w = 1 and the map is the identity at
+    // w = 0. Radius never appears: it IS the local sheet width the margin
+    // grew, y/th, so the tube tapers exactly as the petal base narrows.
+    const w = 1 - smoothstep(sp.uS, sp.uM, u);
+    const th = Math.PI * w * tN;
+    const sthc = Math.abs(th) > 1e-6 ? Math.sin(th) / th : 1;
+    const cthc = Math.abs(th) > 1e-6 ? (1 - Math.cos(th)) / th : 0;
+    // conserved cell area: tissue that elongates a-fold along the tube
+    // narrows a-fold across it — the spur's slenderness IS the anisotropy.
+    // Blended through the same closure fraction, so the mouth flares from
+    // tube width back to the sheet's own width: that flare is the funnel.
+    const ys = y * (1 + (1 / sp.a - 1) * w);
+    const yr = ys * sthc;                    // lateral, rolled
+    const nr = ys * cthc;                    // bulge, one side, both margins
+    // the tube's centreline: from the mouth (on the blade line at uS)
+    // backward along the stated sagittal direction, arc length scaled by the
+    // phase-II anisotropy — the [D] mechanism, cells elongating in place
+    const s = Math.max(0, (sp.uS - u) / sp.uS);
+    const sx = sp.uS * len + sp.dx * s * sp.len + sp.nx * nr;
+    const sn = sp.dy * s * sp.len + sp.ny * nr + (off || 0);
+    X = X * (1 - w) + sx * w;
+    N = N * (1 - w) + sn * w;
+    Y = Y * (1 - w) + yr * w;
+  }
+  out[0] = frame.o[0] + frame.x[0] * X + frame.z[0] * Y + frame.y[0] * N;
+  out[1] = frame.o[1] + frame.x[1] * X + frame.z[1] * Y + frame.y[1] * N;
+  out[2] = frame.o[2] + frame.x[2] * X + frame.z[2] * Y + frame.y[2] * N;
   return out;
 }
 
-function flPetalSurface(B, leaf, frame, len, wid, pal, glow, MU, MV, dev, sen, q, phase, lib) {
+function flPetalSurface(B, leaf, frame, len, wid, pal, glow, MU, MV, dev, sen, q, phase, lib, spur) {
   if (!leaf.margin || !leaf.margin.mature) return;
   MU = MU || 22; MV = MV || 10;
   dev = dev === undefined ? 1 : dev;
   sen = sen || 0;
   const o = leaf.o;
   const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
-  const form = flPetalForm(len, dev, q, leaf.o.nv);
+  const form = flPetalForm(len, dev, q, leaf.o.nv, spur);
   const vdf = leaf.vdf, res = leaf.vdfRes || 0;
   const nearVein = (u, v) => {
     if (!vdf) return 9;
@@ -85,7 +113,14 @@ function flPetalSurface(B, leaf, frame, len, wid, pal, glow, MU, MV, dev, sen, q
       const sl = sen > 0 ? clamp((sen - hold * VEIN_LAG) / (1 - VEIN_LAG), 0, 1) : 0;
       senesceTint(_senC, r, g, b, sl);
       col[k4] = _senC[0]; col[k4 + 1] = _senC[1]; col[k4 + 2] = _senC[2];
-      col[k4 + 3] = dd * glow * 0.24 * (1 - sl);
+      // THE NECTARY: the spur tip is where the nectar is, and this engine's
+      // language for "something is being made here" has always been emission
+      // (anthers, ripe fruit, vein traffic). A soft ramp toward the tube's
+      // deepest tissue, through the same 0.24-scaled channel the veins use —
+      // held under the anther lesson's ceiling (0.5 saturates to white bokeh)
+      const nec = form.spur && u < form.spur.uS * 0.6
+        ? (1 - u / (form.spur.uS * 0.6)) * glow * 0.34 : 0;
+      col[k4 + 3] = dd * glow * 0.24 * (1 - sl) + nec * (1 - sl);
     }
   }
   const emit = (i, j) => {
@@ -116,11 +151,14 @@ function flPetalSurface(B, leaf, frame, len, wid, pal, glow, MU, MV, dev, sen, q
 // form — this piece runs with vein LOD off, so the cull, the relight and the
 // per-blade floor all reduce to identities; what remains is the dev gate, the
 // half-width guards, the width law and the emission law, kept verbatim.
-function flPetalVeins(B, leaf, frame, len, wid, pal, glow, dev, sen, q, phase, veinMul) {
+function flPetalVeins(B, leaf, frame, len, wid, pal, glow, dev, sen, q, phase, veinMul, spur) {
   const segs = leaf.veins;
   if (!segs || veinMul <= 0) return;
   const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
-  const form = flPetalForm(len, dev, q, leaf.o.nv);
+  // the SAME form, spur included: the veins wrap into the tube with the sheet
+  // they canalised on, so the spur arrives with its own vasculature spiralling
+  // to the nectary — nothing routed them there
+  const form = flPetalForm(len, dev, q, leaf.o.nv, spur);
   const lift = len * 0.010 + 0.005;
   const base = len * 0.0034;
   const sv = sen > 0 ? clamp((sen - VEIN_LAG) / (1 - VEIN_LAG), 0, 1) : 0;

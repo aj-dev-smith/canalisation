@@ -79,6 +79,64 @@ Dorsal petals enlarge and stand (the upper lip), ventral petals reflex
 (the landing lip), and a strongly dorsal stamen aborts to a staminode
 **[D]**. Applied once per organ, the first time it has a direction.
 
+## The spurred flower — a columbine, tube and all (`?form=columbine`)
+
+An Aquilegia's plan, and the two moves the other forms don't make. The
+first is the homeotic lever pointed the OTHER way: the double expands
+B-class expression inward (stamens found as petals); a columbine expands
+it **outward into whorl 1** — `sepalPetaloid` routes the sepals through
+the petal stream with their own palette, so the showy outer whorl is
+petaloid sepals wearing the species' full petal colour while the true
+blades pale toward cream. The bicolor is one palette split; the organ is
+still a leaf (ordinary library, margin, veins), which is exactly what a
+homeotic identity is — same tissue, different program reading it.
+
+The second is the **nectar spur**, and it has one lab's physics behind
+it: Puzey, Gerbode, Hodges, Kramer & **Mahadevan** (Proc. R. Soc. B
+279:1640, 2012 `[D]`) — the same Mahadevan as the pitchfork bloom and
+the edge ripples, so the whole corolla now runs on his group's papers.
+Their result: petal growth is two phases, cell proliferation then
+highly anisotropic cell elongation, and ALL spur-length diversity
+across the genus is achieved **solely by the degree of anisotropy**.
+Built here as a domain map with the flat sheet as its limit:
+
+- The petal's proximal sheet domain (`uS` = 0.30 of it) **rolls closed**
+  — lateral arc length wraps at closure fraction `w`, the two margins
+  meet at a seam, and the map is the identity at `w = 0`, so the mouth
+  flares back to the open blade through a funnel. The tube's radius is
+  the sheet's own local width; no cone is drawn.
+- The closed tube **elongates backward** by the anisotropy factor,
+  ramping with `dev` on the same coupling the bloom uses (phase II).
+  `aniso` 6 grows a tube 1.8x the blade's length.
+- **Slenderness is the anisotropy too**: P2012 bound the lateral scale
+  between width-conserving (1) and area-conserving (1/a); the geometric
+  middle `1/sqrt(a)` is stated, and at aniso 6 it gives a diameter ~10%
+  of spur length — a real A. coerulea's proportion. Measured at both
+  ends: 1 is a sausage (the petal margin holds its width until the last
+  2% of the sheet), 1/a is a wire the rasteriser reduces to its veins.
+- The spur direction `pi + petalTilt` maps every petal's tube to the
+  same world direction — anti-parallel to the flower's axis — so the
+  tubes descend behind the corolla as a parallel ring. Measured at
+  three angles: +0.35 converges under the fruit, -0.85 bundles over
+  the crown.
+- **The veins wrap in with the sheet they canalised on**, so each spur
+  arrives with its own vasculature spiralling to the tip — where the
+  NECTARY glows softly, the engine's one language for "something is
+  made here", held under the anther lesson's white-out ceiling.
+
+The rest is the round-4 machinery reused at flower scale: a SMALL
+`receptacle` (0.25) nests the whorls on the dome they were founded on
+and turns floral elongation into the PEDICEL, so each flower is carried
+out on a 4-5 unit stalk clear of the foliage (0.24 units of trunk
+clearance became 1.25, measured — the round-3 unphotographable case).
+The program is renew .70 + dome 3 + cap 32: the q-zero founding pile
+(~7) IS the sepal whorl, ~8 petals band to .28, stamens to .75, and the
+fruit itself — drawn at 0.55 scale, a columbine's pistil is slender
+follicles — is the centre. The photographer learned one new move: **a
+spurred flower is shot in three-quarter**, because its subject is depth
+and the face-on frame that flatters a disc hides every tube (measured:
+it read as a mallow).
+
 ## The capitulum — a daisy is a hundred flowers (`?form=daisy`)
 
 A composite flower head, and the round-3 machinery read at a different

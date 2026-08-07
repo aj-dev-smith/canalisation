@@ -143,6 +143,80 @@ function flBoot() {
     S.sp = { ...S.sp, ...over };
     Object.assign(S.plant.sp, over);
   }
+  if (form === 'columbine') {
+    // THE SPURRED FLOWER — Aquilegia's plan, read off the same bands. Two
+    // moves the other forms don't make: B-class expression expands OUTWARD
+    // into whorl 1 (wb.sepalPetaloid — a columbine's showy outer whorl is
+    // petaloid sepals, the same homeotic lever as the double but pointed the
+    // other way), and the petal whorl carries a NECTAR SPUR — its proximal
+    // sheet domain rolled closed and elongated backward by phase-II cell
+    // anisotropy (Puzey et al. 2012 [D], see 12_form.js; the tube's taper is
+    // the margin's own base width, not a drawn cone). The BICOLOR is the
+    // A. coerulea read: sepals wear the species' full petal colour, blades
+    // pale toward cream — one palette split, species identity kept.
+    // Program measured (col_probe, Ember 21, step 5200): renew .70 + dome 3
+    // + cap 32 founds 17-24 organs per flower; the q-zero founding pile IS
+    // the sepal whorl (~7), petals band to .28 (~8-11 spurred), stamens to
+    // .75, and the fruit itself is the pistil at the centre.
+    const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || 0.70)));
+    const over = {
+      whorlBands: {
+        sepal: +(q.get('sepal') || 0.02),
+        stamen: +(q.get('stamen') || 0.28),
+        carpel: +(q.get('carpel') || 0.75),
+        sepalLen: 0.32,          // the showy outer whorl: sepals half again a petal
+        petalLen: 0.26,          // blades shortish — the spur is the length
+        stamenLen: 0.13, filament: 1.5, style: 1.5,
+        sepalPetaloid: 1,
+        spur: {
+          uS: +(q.get('us') || 0.30),
+          aniso: +(q.get('aniso') || 6),
+          // pi + petalTilt maps every petal's spur to the SAME world
+          // direction — anti-parallel to the flower's axis — so the five
+          // tubes descend behind the corolla as a parallel ring, which is
+          // the columbine silhouette. Measured at three angles: +0.35
+          // converges under the fruit, -0.85 bundles over the crown.
+          angle: Math.PI + +(q.get('spurang') || 0.8),
+        },
+      },
+      apexRenew: rn, floralOrgans: 32, floralDome: 3.0,
+      // a SMALL receptacle: the whorls nest on the dome they were founded on
+      // (sepals at the rim, the pistil at centre), the organs ride the tip —
+      // and floral elongation below them becomes the PEDICEL, which is how a
+      // real columbine carries each flower clear of its own foliage. Without
+      // this the axillaries sat 0.24 units off the trunk (the round-3
+      // unphotographable case) and the director could only shoot the
+      // terminal, fruit-first.
+      receptacle: +(q.get('disc') || 0.25),
+      floralElong: 0.30, floralStretch: 0.08, floralNode: 0.008,
+      tropism: 0.004,
+      floralGrace: 1200, organBudget: 260, maxOrgans: 120,
+      // blades cup forward (a columbine's corolla is a crown, not a splay);
+      // sepals spread on the leaf tilt they inherited
+      petalGrade: 0.15, petalTilt: 0.8, zygomorphy: 0,
+    };
+    S.sp = { ...S.sp, ...over };
+    Object.assign(S.plant.sp, over);
+    const pp = S.petalPal;
+    const mixc = (a, b, t) => a.map((v, k) => lerp(v, b[k], t));
+    // sepals: the species' petal colour at full depth, tips held back from
+    // the pale gradient so the outer whorl reads saturated behind the blades
+    S.sepalPal = { ...pp, blade1: mixc(pp.blade1, pp.blade0, 0.55) };
+    // blades: paled toward cream — the bicolor. Held back from full white:
+    // at 0.60/0.72 the blades saturated through the velvet sheen and the
+    // bloom chain into white blotches (the anther lesson, arriving through
+    // albedo), and the nectar guides need pigment left to bite on
+    S.petalPal = { ...pp,
+      blade0: mixc(pp.blade0, [0.97, 0.95, 0.90], 0.35),
+      blade1: mixc(pp.blade1, [0.99, 0.97, 0.93], 0.48),
+      glow: pp.glow * 0.85 };
+    // a columbine's pistil is a sheaf of slender follicles, not a berry —
+    // fruitScale is a draw-time scalar (fruitShell only), so this changes
+    // what the centre weighs in the frame and nothing in the simulation
+    const fsO = { fruitScale: S.sp.fruitScale * 0.55 };
+    S.sp = { ...S.sp, ...fsO };
+    Object.assign(S.plant.sp, fsO);
+  }
   if (form === 'double') {
     const pq = Math.min(0.94, Math.max(0.05, +(q.get('homeo') || 0.62)));
     const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || 0.7)));
@@ -173,7 +247,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc=';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso=';
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
   // grains sample the same wind field the stem bends in.
@@ -267,6 +341,19 @@ function flBoot() {
           const ll = Math.hypot(lx, lz);
           const w = 0.9 * (1 - smoothstep(0.8, 2.5, ll));
           if (ll > 1e-4 && w > 1e-3) { d.x += w * lx / ll; d.z += w * lz / ll; d.normalize(); }
+        }
+        // A SPURRED FLOWER IS PHOTOGRAPHED IN THREE-QUARTER: its subject is
+        // depth — the tubes running back behind the corolla — and the face-on
+        // shot that flatters a radial disc hides them completely (measured:
+        // every face-on frame of the columbine read as a mallow). Swing the
+        // eye toward the flower's horizontal profile, keeping the trunk-away
+        // bias so the swing lands on the open side.
+        if (S.sp.whorlBands && S.sp.whorlBands.spur) {
+          const p = new THREE.Vector3(-d.z, 0, d.x);
+          if (p.lengthSq() > 1e-6) {
+            p.normalize();
+            d.multiplyScalar(0.55).addScaledVector(p, 0.85).normalize();
+          }
         }
         // keep some horizon: a terminal flower points straight up and a pure
         // overhead shot flattens it

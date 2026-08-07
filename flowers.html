@@ -10716,10 +10716,49 @@ const FL_BSTAR = (1 - FL_NU) + 0.25 * (1 - FL_NU) * (3 + FL_NU) * FL_K0 * FL_K0;
 // and the bifurcation's sign still carries the whole bud-to-bloom story.
 const FL_BETA_MAX = 1.25 * FL_BSTAR;
 
+// THE NECTAR SPUR (Aquilegia). Puzey, Gerbode, Hodges, Kramer & Mahadevan
+// (Proc. R. Soc. B 279:1640, 2012 [D] — the same Mahadevan as both mechanisms
+// above, so the whole corolla now runs on one lab's physics): petal growth is
+// two phases, cell proliferation then HIGHLY ANISOTROPIC cell elongation, and
+// all spur-length diversity across the genus is achieved SOLELY by the degree
+// of anisotropy — not cell number, not cell size. So the spur here is the
+// petal's own proximal sheet domain (the spur compartment is set early as a
+// distinct domain — Yant 2015 [D]) rolled closed and carried backward by an
+// anisotropy factor that ramps with dev, the phase-II handover on the same
+// dev coupling the bloom already uses. TWO things are deliberately NOT
+// stated: the tube's radius at each u is the margin-grown width of the sheet
+// at that u (the roll map has the flat sheet as its c->0 limit), so the spur
+// tapers to a point because the petal base narrows — the silhouette is the
+// margin's, not a cone's; and which petals have spurs is whorl identity, so
+// it rides the ABC bands. Stated: uS (the compartment's share of the sheet,
+// [OURS]), the anisotropy ceiling (P2012 measure ~2-10 across the genus [D]),
+// and the sagittal angle the tube leaves at (geometry, by eye).
+function flSpurOf(so, bl, dev) {
+  if (!so || !(so.aniso > 1)) return null;
+  const uS = so.uS ?? 0.30;
+  // phase II: proliferation hands over to anisotropic elongation partway
+  // through maturation; before the handover the spur is the shallow cup the
+  // divisions made (P2012 fig 2 — spurs begin as a bump, then shoot)
+  const a = 1 + (so.aniso - 1) * smoothstep(0.30, 0.90, dev);
+  const ang = so.angle ?? (Math.PI + 0.35);
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  // sqrt(a) is the tube's slenderness. P2012 bound it from both sides: cell
+  // WIDTH stays roughly constant while length multiplies (their measurement),
+  // but the compartment that elongates is the cup the divisions made, not the
+  // full sheet — so the lateral scale sits between width-conserving (1) and
+  // area-conserving (1/a). The geometric middle 1/sqrt(a) is stated [OURS];
+  // at aniso 6 it gives diameter ~10% of spur length, which is a real
+  // A. coerulea's proportion. Measured at the two ends: 1 is a sausage
+  // (lateral span 0.40 against a 0.425 mouth — the petal margin holds its
+  // width until the last 2% of the sheet), 1/a is a wire the rasteriser
+  // reduces to its own veins.
+  return { uS, uM: uS * 1.5, a: Math.sqrt(a), dx, dy, nx: -dy, ny: dx, len: uS * bl * a };
+}
+
 // -> { kx, ky, lam, amp } — curvatures in 1/world-units, ripple in world units.
 // Curvatures are L&M's dimensionless k-bar made dimensional with the blade
 // length as the shell scale.
-function flPetalForm(bl, dev, q, nv) {
+function flPetalForm(bl, dev, q, nv, spur) {
   const bg = FL_BETA_MAX * dev * dev;
   // Inner organs stay nearer the bud state: identity holds them at a smaller
   // effective load. SCIENCE.md books "enclosing growth at high q" as imposed
@@ -10746,7 +10785,7 @@ function flPetalForm(bl, dev, q, nv) {
   // draw as noise". `nv` is the petal lattice's own cross rows; both the
   // surface and its veins pass it, so they stay on one displaced surface.
   if (nv) amp *= smoothstep(2.5, 4.0, lam / (L / nv));
-  return { kx: kbx / L, ky: kby / L, lam, amp, eps };
+  return { kx: kbx / L, ky: kby / L, lam, amp, eps, spur: flSpurOf(spur, bl, dev) };
 }
 
 // ===================== flowers/15_petal.js =====================
@@ -10783,21 +10822,49 @@ function flPetalPoint(out, frame, u, v, len, wid, form, phase, tN, off) {
   const shell = 0.5 * form.kx * x * x + 0.5 * form.ky * y * y;
   const env = (0.4 + 0.6 * u) * (0.25 + 0.75 * tN * tN);
   const rip = form.amp * env * Math.sin(2 * Math.PI * y / form.lam + phase);
-  const n = shell + rip + (off || 0);
-  out[0] = frame.o[0] + frame.x[0] * x + frame.z[0] * y + frame.y[0] * n;
-  out[1] = frame.o[1] + frame.x[1] * x + frame.z[1] * y + frame.y[1] * n;
-  out[2] = frame.o[2] + frame.x[2] * x + frame.z[2] * y + frame.y[2] * n;
+  let X = x, Y = y, N = shell + rip + (off || 0);
+  const sp = form.spur;
+  if (sp && u < sp.uM) {
+    // THE ROLL MAP, with the flat sheet as its limit: lateral arc length y
+    // wraps at closure fraction w — angle th = pi*w*tN, so tN = +-1 (the two
+    // margins) meet at the seam when w = 1 and the map is the identity at
+    // w = 0. Radius never appears: it IS the local sheet width the margin
+    // grew, y/th, so the tube tapers exactly as the petal base narrows.
+    const w = 1 - smoothstep(sp.uS, sp.uM, u);
+    const th = Math.PI * w * tN;
+    const sthc = Math.abs(th) > 1e-6 ? Math.sin(th) / th : 1;
+    const cthc = Math.abs(th) > 1e-6 ? (1 - Math.cos(th)) / th : 0;
+    // conserved cell area: tissue that elongates a-fold along the tube
+    // narrows a-fold across it — the spur's slenderness IS the anisotropy.
+    // Blended through the same closure fraction, so the mouth flares from
+    // tube width back to the sheet's own width: that flare is the funnel.
+    const ys = y * (1 + (1 / sp.a - 1) * w);
+    const yr = ys * sthc;                    // lateral, rolled
+    const nr = ys * cthc;                    // bulge, one side, both margins
+    // the tube's centreline: from the mouth (on the blade line at uS)
+    // backward along the stated sagittal direction, arc length scaled by the
+    // phase-II anisotropy — the [D] mechanism, cells elongating in place
+    const s = Math.max(0, (sp.uS - u) / sp.uS);
+    const sx = sp.uS * len + sp.dx * s * sp.len + sp.nx * nr;
+    const sn = sp.dy * s * sp.len + sp.ny * nr + (off || 0);
+    X = X * (1 - w) + sx * w;
+    N = N * (1 - w) + sn * w;
+    Y = Y * (1 - w) + yr * w;
+  }
+  out[0] = frame.o[0] + frame.x[0] * X + frame.z[0] * Y + frame.y[0] * N;
+  out[1] = frame.o[1] + frame.x[1] * X + frame.z[1] * Y + frame.y[1] * N;
+  out[2] = frame.o[2] + frame.x[2] * X + frame.z[2] * Y + frame.y[2] * N;
   return out;
 }
 
-function flPetalSurface(B, leaf, frame, len, wid, pal, glow, MU, MV, dev, sen, q, phase, lib) {
+function flPetalSurface(B, leaf, frame, len, wid, pal, glow, MU, MV, dev, sen, q, phase, lib, spur) {
   if (!leaf.margin || !leaf.margin.mature) return;
   MU = MU || 22; MV = MV || 10;
   dev = dev === undefined ? 1 : dev;
   sen = sen || 0;
   const o = leaf.o;
   const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
-  const form = flPetalForm(len, dev, q, leaf.o.nv);
+  const form = flPetalForm(len, dev, q, leaf.o.nv, spur);
   const vdf = leaf.vdf, res = leaf.vdfRes || 0;
   const nearVein = (u, v) => {
     if (!vdf) return 9;
@@ -10837,7 +10904,14 @@ function flPetalSurface(B, leaf, frame, len, wid, pal, glow, MU, MV, dev, sen, q
       const sl = sen > 0 ? clamp((sen - hold * VEIN_LAG) / (1 - VEIN_LAG), 0, 1) : 0;
       senesceTint(_senC, r, g, b, sl);
       col[k4] = _senC[0]; col[k4 + 1] = _senC[1]; col[k4 + 2] = _senC[2];
-      col[k4 + 3] = dd * glow * 0.24 * (1 - sl);
+      // THE NECTARY: the spur tip is where the nectar is, and this engine's
+      // language for "something is being made here" has always been emission
+      // (anthers, ripe fruit, vein traffic). A soft ramp toward the tube's
+      // deepest tissue, through the same 0.24-scaled channel the veins use —
+      // held under the anther lesson's ceiling (0.5 saturates to white bokeh)
+      const nec = form.spur && u < form.spur.uS * 0.6
+        ? (1 - u / (form.spur.uS * 0.6)) * glow * 0.34 : 0;
+      col[k4 + 3] = dd * glow * 0.24 * (1 - sl) + nec * (1 - sl);
     }
   }
   const emit = (i, j) => {
@@ -10868,11 +10942,14 @@ function flPetalSurface(B, leaf, frame, len, wid, pal, glow, MU, MV, dev, sen, q
 // form — this piece runs with vein LOD off, so the cull, the relight and the
 // per-blade floor all reduce to identities; what remains is the dev gate, the
 // half-width guards, the width law and the emission law, kept verbatim.
-function flPetalVeins(B, leaf, frame, len, wid, pal, glow, dev, sen, q, phase, veinMul) {
+function flPetalVeins(B, leaf, frame, len, wid, pal, glow, dev, sen, q, phase, veinMul, spur) {
   const segs = leaf.veins;
   if (!segs || veinMul <= 0) return;
   const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
-  const form = flPetalForm(len, dev, q, leaf.o.nv);
+  // the SAME form, spur included: the veins wrap into the tube with the sheet
+  // they canalised on, so the spur arrives with its own vasculature spiralling
+  // to the nectary — nothing routed them there
+  const form = flPetalForm(len, dev, q, leaf.o.nv, spur);
   const lift = len * 0.010 + 0.005;
   const base = len * 0.0034;
   const sv = sen > 0 ? clamp((sen - VEIN_LAG) / (1 - VEIN_LAG), 0, 1) : 0;
@@ -11271,7 +11348,14 @@ function flDrawSpecimen(env, B, S, cull) {
       if (bl < 0.02) { B.endOrgan(); continue; }
       const wp = (kind === 'stamen' || kind === 'carpel')
         && (S._whorlPals || (S._whorlPals = flWhorlPals(S)));
+      // PETALOID SEPALS (wb.sepalPetaloid): B-class expression reaching whorl
+      // 1 — the homeotic move that makes a columbine's or a tulip's outer
+      // whorl showy. The organ still IS a leaf (ordinary library, margin,
+      // veins); only its stream and palette change, which is exactly what a
+      // homeotic identity is — same tissue, different program reading it.
+      const sepP = kind === 'sepal' && S.sp.whorlBands && S.sp.whorlBands.sepalPetaloid;
       const bp = org.petal ? S.petalPal
+        : sepP ? (S.sepalPal || S.petalPal)
         : kind === 'sepal' ? pal            // a sepal IS a leaf — A-class alone
           : kind === 'stamen' ? wp.anther
             : kind === 'carpel' ? wp.carpel
@@ -11290,7 +11374,7 @@ function flDrawSpecimen(env, B, S, cull) {
       // the ripple's Nyquist guard in flPetalForm assumes the grid IS the
       // lattice, and at 0.85 the two drifted apart.
       const mesh = env.bladeMesh(L, bl, org.floral ? 1.0 : 0, env._mesh);
-      if (org.petal && V.lamina > 0) {
+      if ((org.petal || sepP) && V.lamina > 0) {
         // PETALS ONLY go to the petal stream: same grid and colours, but the
         // out-of-plane form is 12_form.js's shell + ripple physics, and the
         // veins are mapped through that SAME displacement (a vein floats off
@@ -11308,9 +11392,12 @@ function flDrawSpecimen(env, B, S, cull) {
         // one-time bake per library petal: the Mimulus reaction-diffusion
         // field on this petal's own lattice (17_spots.js)
         if (L.mature && !L._flSpots) L._flSpots = flSpotsRun(L);
+        // the spur is PETAL-whorl identity: a sepal routed through this stream
+        // stays flat — in Aquilegia only the second whorl makes spurs
+        const spur = org.petal && S.sp.whorlBands ? S.sp.whorlBands.spur : null;
         flPetalSurface(B, L, fr, bl, bl, bp, bp.glow,
-          mesh[0], mesh[1], dev, sen, org.q || 0, phase, lib);
-        flPetalVeins(B, L, fr, bl, bl, bp, bp.glow, dev, sen, org.q || 0, phase, V.veins);
+          mesh[0], mesh[1], dev, sen, org.q || 0, phase, lib, spur);
+        flPetalVeins(B, L, fr, bl, bl, bp, bp.glow, dev, sen, org.q || 0, phase, V.veins, spur);
       } else {
         blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mesh[0], mesh[1], dev,
           1, sen, { surface: V.lamina > 0, veinMul: V.veins });
@@ -12149,6 +12236,80 @@ function flBoot() {
     S.sp = { ...S.sp, ...over };
     Object.assign(S.plant.sp, over);
   }
+  if (form === 'columbine') {
+    // THE SPURRED FLOWER — Aquilegia's plan, read off the same bands. Two
+    // moves the other forms don't make: B-class expression expands OUTWARD
+    // into whorl 1 (wb.sepalPetaloid — a columbine's showy outer whorl is
+    // petaloid sepals, the same homeotic lever as the double but pointed the
+    // other way), and the petal whorl carries a NECTAR SPUR — its proximal
+    // sheet domain rolled closed and elongated backward by phase-II cell
+    // anisotropy (Puzey et al. 2012 [D], see 12_form.js; the tube's taper is
+    // the margin's own base width, not a drawn cone). The BICOLOR is the
+    // A. coerulea read: sepals wear the species' full petal colour, blades
+    // pale toward cream — one palette split, species identity kept.
+    // Program measured (col_probe, Ember 21, step 5200): renew .70 + dome 3
+    // + cap 32 founds 17-24 organs per flower; the q-zero founding pile IS
+    // the sepal whorl (~7), petals band to .28 (~8-11 spurred), stamens to
+    // .75, and the fruit itself is the pistil at the centre.
+    const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || 0.70)));
+    const over = {
+      whorlBands: {
+        sepal: +(q.get('sepal') || 0.02),
+        stamen: +(q.get('stamen') || 0.28),
+        carpel: +(q.get('carpel') || 0.75),
+        sepalLen: 0.32,          // the showy outer whorl: sepals half again a petal
+        petalLen: 0.26,          // blades shortish — the spur is the length
+        stamenLen: 0.13, filament: 1.5, style: 1.5,
+        sepalPetaloid: 1,
+        spur: {
+          uS: +(q.get('us') || 0.30),
+          aniso: +(q.get('aniso') || 6),
+          // pi + petalTilt maps every petal's spur to the SAME world
+          // direction — anti-parallel to the flower's axis — so the five
+          // tubes descend behind the corolla as a parallel ring, which is
+          // the columbine silhouette. Measured at three angles: +0.35
+          // converges under the fruit, -0.85 bundles over the crown.
+          angle: Math.PI + +(q.get('spurang') || 0.8),
+        },
+      },
+      apexRenew: rn, floralOrgans: 32, floralDome: 3.0,
+      // a SMALL receptacle: the whorls nest on the dome they were founded on
+      // (sepals at the rim, the pistil at centre), the organs ride the tip —
+      // and floral elongation below them becomes the PEDICEL, which is how a
+      // real columbine carries each flower clear of its own foliage. Without
+      // this the axillaries sat 0.24 units off the trunk (the round-3
+      // unphotographable case) and the director could only shoot the
+      // terminal, fruit-first.
+      receptacle: +(q.get('disc') || 0.25),
+      floralElong: 0.30, floralStretch: 0.08, floralNode: 0.008,
+      tropism: 0.004,
+      floralGrace: 1200, organBudget: 260, maxOrgans: 120,
+      // blades cup forward (a columbine's corolla is a crown, not a splay);
+      // sepals spread on the leaf tilt they inherited
+      petalGrade: 0.15, petalTilt: 0.8, zygomorphy: 0,
+    };
+    S.sp = { ...S.sp, ...over };
+    Object.assign(S.plant.sp, over);
+    const pp = S.petalPal;
+    const mixc = (a, b, t) => a.map((v, k) => lerp(v, b[k], t));
+    // sepals: the species' petal colour at full depth, tips held back from
+    // the pale gradient so the outer whorl reads saturated behind the blades
+    S.sepalPal = { ...pp, blade1: mixc(pp.blade1, pp.blade0, 0.55) };
+    // blades: paled toward cream — the bicolor. Held back from full white:
+    // at 0.60/0.72 the blades saturated through the velvet sheen and the
+    // bloom chain into white blotches (the anther lesson, arriving through
+    // albedo), and the nectar guides need pigment left to bite on
+    S.petalPal = { ...pp,
+      blade0: mixc(pp.blade0, [0.97, 0.95, 0.90], 0.35),
+      blade1: mixc(pp.blade1, [0.99, 0.97, 0.93], 0.48),
+      glow: pp.glow * 0.85 };
+    // a columbine's pistil is a sheaf of slender follicles, not a berry —
+    // fruitScale is a draw-time scalar (fruitShell only), so this changes
+    // what the centre weighs in the frame and nothing in the simulation
+    const fsO = { fruitScale: S.sp.fruitScale * 0.55 };
+    S.sp = { ...S.sp, ...fsO };
+    Object.assign(S.plant.sp, fsO);
+  }
   if (form === 'double') {
     const pq = Math.min(0.94, Math.max(0.05, +(q.get('homeo') || 0.62)));
     const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || 0.7)));
@@ -12179,7 +12340,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc=';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso=';
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
   // grains sample the same wind field the stem bends in.
@@ -12273,6 +12434,19 @@ function flBoot() {
           const ll = Math.hypot(lx, lz);
           const w = 0.9 * (1 - smoothstep(0.8, 2.5, ll));
           if (ll > 1e-4 && w > 1e-3) { d.x += w * lx / ll; d.z += w * lz / ll; d.normalize(); }
+        }
+        // A SPURRED FLOWER IS PHOTOGRAPHED IN THREE-QUARTER: its subject is
+        // depth — the tubes running back behind the corolla — and the face-on
+        // shot that flatters a radial disc hides them completely (measured:
+        // every face-on frame of the columbine read as a mallow). Swing the
+        // eye toward the flower's horizontal profile, keeping the trunk-away
+        // bias so the swing lands on the open side.
+        if (S.sp.whorlBands && S.sp.whorlBands.spur) {
+          const p = new THREE.Vector3(-d.z, 0, d.x);
+          if (p.lengthSq() > 1e-6) {
+            p.normalize();
+            d.multiplyScalar(0.55).addScaledVector(p, 0.85).normalize();
+          }
         }
         // keep some horizon: a terminal flower points straight up and a pure
         // overhead shot flattens it
