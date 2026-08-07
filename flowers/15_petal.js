@@ -45,7 +45,7 @@ function flPetalSurface(B, leaf, frame, len, wid, pal, glow, MU, MV, dev, sen, q
   sen = sen || 0;
   const o = leaf.o;
   const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
-  const form = flPetalForm(len, dev, q);
+  const form = flPetalForm(len, dev, q, leaf.o.nv);
   const vdf = leaf.vdf, res = leaf.vdfRes || 0;
   const nearVein = (u, v) => {
     if (!vdf) return 9;
@@ -120,7 +120,7 @@ function flPetalVeins(B, leaf, frame, len, wid, pal, glow, dev, sen, q, phase, v
   const segs = leaf.veins;
   if (!segs || veinMul <= 0) return;
   const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
-  const form = flPetalForm(len, dev, q);
+  const form = flPetalForm(len, dev, q, leaf.o.nv);
   const lift = len * 0.010 + 0.005;
   const base = len * 0.0034;
   const sv = sen > 0 ? clamp((sen - VEIN_LAG) / (1 - VEIN_LAG), 0, 1) : 0;

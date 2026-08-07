@@ -9,8 +9,9 @@
 // at x1.12 with no fog, ACES -> vignette -> grain -> gamma. The palettes were
 // tuned against that pipeline for months; a renderer that improvises its own
 // lighting hands back a silhouette (measured: first boot of this file). What
-// Three.js adds on top — real orbit, per-frame camera-faced ribbons, mip-chain
-// bloom — changes where you can stand, not what the plant is wearing.
+// Three.js adds on top — real orbit, per-frame camera-faced ribbons — changes
+// where you can stand, not what the plant is wearing. The post chain below is
+// the shipped one too, defocus included, so the lens is the same lens.
 //
 // The vein ribbon is the load-bearing choice: the shipped rasteriser bakes six
 // camera-facing vertices per vein per frame on the CPU; Blender got curves; we
@@ -49,7 +50,8 @@ const FL_TRI_FS = `
     vec3 c = vC * (amb + uKeyCol * d * 0.9) + vC * uKeyCol * back * 0.55 + rim * uAmbTop * 0.7;
     c += vC * vE * 3.0;
     c = mix(c, uFog, flFog(vP, uEye) * 0.80);
-    gl_FragColor = vec4(c, 1.0);
+    // alpha carries linear depth for the defocus pass (shipped MESH_FS)
+    gl_FragColor = vec4(c, length(vP - uEye) * 0.01);
   }
 `;
 
@@ -97,26 +99,33 @@ const FL_PET_FS = `
     vec3 N = normalize(vN);
     vec3 V = normalize(uEye - vP);
     if (dot(N, V) < 0.0) N = -N;
-    float d = max(dot(N, uKey), 0.0);
-    float back = pow(max(dot(-N, uKey), 0.0), 2.0);
+    float dNK = dot(N, uKey);
     float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
     vec3 amb = mix(uAmbBot, uAmbTop, N.y * 0.5 + 0.5);
 
-    // pigment: bullseye zone + conical-cell path-length deepening + the
-    // reaction-diffusion anthocyanin foci, strongest in the guide zone
-    // (Mimulus spots live in the throat)
-    float zone = 1.0 - smoothstep(uBull - 0.07, uBull + 0.07, vU);
+    // pigment, AT A WHISPER. The full-strength stack (bullseye 0.8 in a hard
+    // +-0.07 ring, spots 0.9 across the face, dev 1.25) turned the bake's
+    // smooth pale ramp into sharp maroon blotches — isolated by drawing raw
+    // albedo, which was beautiful on its own. The zone is a wide soft
+    // gradient now, and the spots live inside it only.
+    float zone = 1.0 - smoothstep(uBull - 0.18, uBull + 0.18, vU);
     float spot = texture2D(uSpots, vec2(vU, (vV + vLib) / 3.0)).r;
-    float kPig = (1.0 + 0.8 * zone) * mix(1.0, 1.25, vDev)
-               * (1.0 + 0.9 * smoothstep(0.55, 0.9, spot) * (0.35 + 0.65 * zone));
+    float kPig = (1.0 + 0.35 * zone) * mix(1.0, 1.12, vDev)
+               * (1.0 + 0.35 * smoothstep(0.65, 1.0, spot) * zone);
     vec3 alb = pow(max(vC, vec3(0.0)), vec3(kPig));
 
-    // translucency: thin between veins, pigment filters the pass twice
-    float transW = 0.55 * (1.0 + 1.1 * (1.0 - vDD));
-    vec3 transCol = alb * alb * 2.2;
+    // THIN TISSUE IS LIT FROM BOTH SIDES. A one-sided lambert throws half of
+    // every cupped petal into hard shadow — correct for cardboard, and it
+    // read as meat (measured). van der Kooi's point is that transmission
+    // DOMINATES: so the diffuse is wrapped (a 150 um petal never goes black)
+    // and the transmission lobe is wide, tinted by the pigment twice.
+    float fwd = clamp((dNK + 0.55) / 1.55, 0.0, 1.0);
+    float bwd = max(-dNK, 0.0);
+    float transW = 0.55 * (1.0 + 0.7 * (1.0 - vDD));
+    vec3 transCol = alb * alb * 1.5;
 
-    vec3 c = alb * (amb + uKeyCol * d * 0.9)
-           + transCol * uKeyCol * back * transW
+    vec3 c = alb * (amb + uKeyCol * fwd * 0.9)
+           + transCol * uKeyCol * bwd * transW
            + rim * uAmbTop * 0.7;
 
     // velvet: ring NDF whose tilt matures 22deg -> 52deg
@@ -124,11 +133,12 @@ const FL_PET_FS = `
     float ang = acos(clamp(dot(N, H), 0.0, 1.0));
     float thn = radians(mix(22.0, 52.0, vDev));
     float sheen = exp(-pow((ang - thn) / radians(14.0), 2.0));
-    c += uKeyCol * sheen * 0.40 * (0.25 + 0.75 * d);
+    c += uKeyCol * sheen * 0.20 * (0.25 + 0.75 * fwd);
 
     c += alb * vE * 3.0;
     c = mix(c, uFog, flFog(vP, uEye) * 0.80);
-    gl_FragColor = vec4(c, 1.0);
+    // alpha carries linear depth for the defocus pass (shipped MESH_FS)
+    gl_FragColor = vec4(c, length(vP - uEye) * 0.01);
   }
 `;
 
@@ -194,48 +204,74 @@ const FL_BG_FS = `
     vec3 c = mix(uBot, uTop, pow(clamp(vUv.y, 0.0, 1.0), 0.75));
     float d = length(p * vec2(1.0, 1.25) - vec2(0.0, -0.15));
     c += uGlow * exp(-d * 2.1) * (0.85 + 0.15 * sin(uT * 0.0007));
-    gl_FragColor = vec4(c, 1.0);
+    gl_FragColor = vec4(c, 3.0);   // the void is far away, so it defocuses (shipped)
   }
 `;
 
-// The grade: shipped COMP_FS minus the defocus pass (bloom arrives already
-// summed into tDiffuse by UnrealBloomPass, so uBloomAmt folds into its
-// strength). Exposure -> ACES -> chroma at the edges -> vignette -> grain ->
-// gamma, in the shipped order.
-const FL_COMP = {
-  uniforms: {
-    tDiffuse: { value: null },
-    uExposure: { value: 1 },
-    uGrain: { value: 0 },
-    uVig: { value: 0 },
-    uT: { value: 0 },
-  },
-  vertexShader: `
-    varying vec2 vUv;
-    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
-  `,
-  fragmentShader: `
-    varying vec2 vUv;
-    uniform sampler2D tDiffuse;
-    uniform float uExposure, uGrain, uVig, uT;
-    vec3 aces(vec3 x) {
-      return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
-    }
-    float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
-    void main() {
-      vec3 c = texture2D(tDiffuse, vUv).rgb;
-      vec2 d = (vUv - 0.5);
-      float ca = 0.0016 * dot(d, d) * 4.0;
-      c.r = texture2D(tDiffuse, vUv + d * ca).r;
-      c.b = texture2D(tDiffuse, vUv - d * ca).b;
-      c *= uExposure;
-      c = aces(c);
-      c *= 1.0 - uVig * dot(d, d) * 1.6;
-      c += (hash(vUv * vec2(1024.0, 768.0) + fract(uT * 0.001)) - 0.5) * uGrain;
-      gl_FragColor = vec4(pow(max(c, vec3(0.0)), vec3(1.0 / 2.2)), 1.0);
-    }
-  `,
-};
+// The post chain: shipped 60_render.js whole, this time — an earlier revision
+// leaned on UnrealBloomPass and dropped the defocus, which left the piece
+// without the one lens effect a flower close-up is actually made of. Bloom is
+// a bright pass plus three widening gaussian passes at half res; defocus is
+// the whole scene blurred twice at half res and mixed in by a circle of
+// confusion read from the alpha channel, which every surface above writes as
+// linear depth. The comp is COMP_FS verbatim: defocus mix, bloom add, lateral
+// chroma sampled per-plane, exposure -> ACES -> vignette -> grain -> gamma.
+const FL_FS_VS = `
+  varying vec2 vUv;
+  void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
+`;
+const FL_BRIGHT_FS = `
+  varying vec2 vUv;
+  uniform sampler2D uT; uniform float uThresh;
+  void main() {
+    vec3 c = texture2D(uT, vUv).rgb;
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    gl_FragColor = vec4(c * smoothstep(uThresh, uThresh * 2.2, l), 1.0);
+  }
+`;
+const FL_BLUR_FS = `
+  varying vec2 vUv;
+  uniform sampler2D uT; uniform vec2 uDir;
+  void main() {
+    vec3 s = texture2D(uT, vUv).rgb * 0.2270270270;
+    s += texture2D(uT, vUv + uDir * 1.3846153846).rgb * 0.3162162162;
+    s += texture2D(uT, vUv - uDir * 1.3846153846).rgb * 0.3162162162;
+    s += texture2D(uT, vUv + uDir * 3.2307692308).rgb * 0.0702702703;
+    s += texture2D(uT, vUv - uDir * 3.2307692308).rgb * 0.0702702703;
+    gl_FragColor = vec4(s, 1.0);
+  }
+`;
+const FL_COMP_FS = `
+  varying vec2 vUv;
+  uniform sampler2D uScene, uBloom, uDof;
+  uniform float uBloomAmt, uExposure, uGrain, uT, uVig;
+  uniform float uFocus, uRange, uDofAmt;
+  vec3 aces(vec3 x) {
+    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+  }
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+  void main() {
+    vec4 sc = texture2D(uScene, vUv);
+    vec3 c = sc.rgb;
+    // defocus: alpha carries linear depth, so the plane the camera is looking
+    // at stays sharp and everything in front of and behind it softens
+    float zdep = sc.a * 100.0;
+    float coc = clamp(abs(zdep - uFocus) / max(0.001, uRange), 0.0, 1.0);
+    coc = coc * coc * (3.0 - 2.0 * coc) * uDofAmt;
+    c = mix(c, texture2D(uDof, vUv).rgb, coc);
+    vec3 b = texture2D(uBloom, vUv).rgb;
+    c += b * uBloomAmt;
+    vec2 d = (vUv - 0.5);
+    float ca = 0.0016 * dot(d, d) * 4.0;
+    c.r = mix(texture2D(uScene, vUv + d * ca).r, texture2D(uDof, vUv + d * ca).r, coc) + texture2D(uBloom, vUv + d * ca).r * uBloomAmt;
+    c.b = mix(texture2D(uScene, vUv - d * ca).b, texture2D(uDof, vUv - d * ca).b, coc) + texture2D(uBloom, vUv - d * ca).b * uBloomAmt;
+    c *= uExposure;
+    c = aces(c);
+    c *= 1.0 - uVig * dot(d, d) * 1.6;
+    c += (hash(vUv * vec2(1024.0, 768.0) + fract(uT * 0.001)) - 0.5) * uGrain;
+    gl_FragColor = vec4(pow(max(c, vec3(0.0)), vec3(1.0 / 2.2)), 1.0);
+  }
+`;
 
 class FlowerScene {
   constructor(container, pal) {
@@ -323,10 +359,19 @@ class FlowerScene {
     // Veins are LIGHT, not paint: the shipped line pass blends (SRC_ALPHA, ONE)
     // with the depth mask off — additive over the tissue, depth-tested against
     // it. An opaque ribbon draws the reticulum as dirt (measured: second boot).
+    // CustomBlending with (ZERO, ONE) on alpha is the Three spelling of the
+    // shipped blendFuncSeparate(SRC_ALPHA, ONE, ZERO, ONE): colour adds, alpha
+    // is left alone — it is carrying depth for the defocus (60_render.js:388).
+    const addBlend = {
+      transparent: true, depthWrite: false,
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+      blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor,
+      blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
+    };
     this.ribMat = new THREE.ShaderMaterial({
       vertexShader: FL_RIB_VS, fragmentShader: FL_RIB_FS,
       side: THREE.DoubleSide,
-      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+      ...addBlend,
       uniforms: { uEye: eyeU, ...fogU },
     });
     this.ribMesh = new THREE.Mesh(this.ribGeo, this.ribMat);
@@ -340,12 +385,22 @@ class FlowerScene {
     this._bindPt();
     this.ptMat = new THREE.ShaderMaterial({
       vertexShader: FL_PT_VS, fragmentShader: FL_PT_FS,
-      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+      ...addBlend,
       uniforms: { uPx: { value: innerHeight * devicePixelRatio * 0.9 } },
     });
     this.ptMesh = new THREE.Points(this.ptGeo, this.ptMat);
     this.ptMesh.frustumCulled = false;
     this.scene.add(this.ptMesh);
+
+    // --- pollen stream (same 7-float layout and material as points; the
+    // physics lives in 18_pollen.js and the boot owns the population) ---
+    this.polCap = 1 << 15;
+    this.polArr = new Float32Array(this.polCap);
+    this.polGeo = new THREE.BufferGeometry();
+    this._bindPol();
+    this.polMesh = new THREE.Points(this.polGeo, this.ptMat);
+    this.polMesh.frustumCulled = false;
+    this.scene.add(this.polMesh);
 
     // --- background, pinned to the far plane ---
     this.bgU = {
@@ -364,26 +419,66 @@ class FlowerScene {
     bg.renderOrder = -1;
     this.scene.add(bg);
 
-    // --- post: bloom then the shipped grade ---
-    this.composer = new THREE.EffectComposer(this.renderer);
-    this.composer.addPass(new THREE.RenderPass(this.scene, this.camera));
-    this.bloom = new THREE.UnrealBloomPass(
-      new THREE.Vector2(innerWidth, innerHeight),
-      pal.bloom, 0.4, pal.bloomThresh);
-    this.composer.addPass(this.bloom);
-    this.comp = new THREE.ShaderPass(FL_COMP);
-    this.comp.uniforms.uExposure.value = pal.exposure;
-    this.comp.uniforms.uGrain.value = pal.grain;
-    this.comp.uniforms.uVig.value = pal.vignette;
-    this.composer.addPass(this.comp);
+    // --- post: the shipped chain, manually — scene to a half-float target
+    // (alpha = depth), bright + 3x widening blur at half res for bloom, the
+    // scene blurred twice at half res for defocus, one comp to the screen ---
+    const rtO = {
+      type: THREE.HalfFloatType,
+      minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+      depthBuffer: false,
+    };
+    const pr = this.renderer.getPixelRatio();
+    const W = Math.max(2, Math.round(innerWidth * pr));
+    const H = Math.max(2, Math.round(innerHeight * pr));
+    this.rtScene = new THREE.WebGLRenderTarget(W, H, { ...rtO, depthBuffer: true, samples: 4 });
+    this.rtBright = new THREE.WebGLRenderTarget(W >> 1, H >> 1, rtO);
+    this.rtBlurA = new THREE.WebGLRenderTarget(W >> 1, H >> 1, rtO);
+    this.rtBlurB = new THREE.WebGLRenderTarget(W >> 1, H >> 1, rtO);
+    this.rtDofA = new THREE.WebGLRenderTarget(W >> 1, H >> 1, rtO);
+    this.rtDofB = new THREE.WebGLRenderTarget(W >> 1, H >> 1, rtO);
+    this._fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this._fsScene = new THREE.Scene();
+    this._fsMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), null);
+    this._fsMesh.frustumCulled = false;
+    this._fsScene.add(this._fsMesh);
+    const fsMat = (frag, uniforms) => new THREE.ShaderMaterial({
+      vertexShader: FL_FS_VS, fragmentShader: frag, uniforms,
+      depthTest: false, depthWrite: false,
+    });
+    this.brightMat = fsMat(FL_BRIGHT_FS, {
+      uT: { value: null }, uThresh: { value: pal.bloomThresh },
+    });
+    this.blurMat = fsMat(FL_BLUR_FS, {
+      uT: { value: null }, uDir: { value: new THREE.Vector2() },
+    });
+    this.compU = {
+      uScene: { value: null }, uBloom: { value: null }, uDof: { value: null },
+      uBloomAmt: { value: pal.bloom }, uExposure: { value: pal.exposure },
+      uGrain: { value: pal.grain }, uVig: { value: pal.vignette },
+      uFocus: { value: 12 }, uRange: { value: 8 },
+      uDofAmt: { value: pal.dof === undefined ? 0.8 : pal.dof },
+      uT: { value: 0 },
+    };
+    this.compMat = fsMat(FL_COMP_FS, this.compU);
 
     addEventListener('resize', () => {
       this.camera.aspect = innerWidth / innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(innerWidth, innerHeight);
-      this.composer.setSize(innerWidth, innerHeight);
+      const pr2 = this.renderer.getPixelRatio();
+      const W2 = Math.max(2, Math.round(innerWidth * pr2));
+      const H2 = Math.max(2, Math.round(innerHeight * pr2));
+      this.rtScene.setSize(W2, H2);
+      for (const rt of [this.rtBright, this.rtBlurA, this.rtBlurB, this.rtDofA, this.rtDofB])
+        rt.setSize(W2 >> 1, H2 >> 1);
       this.ptMat.uniforms.uPx.value = innerHeight * devicePixelRatio * 0.9;
     });
+  }
+
+  _fsPass(mat, target) {
+    this._fsMesh.material = mat;
+    this.renderer.setRenderTarget(target);
+    this.renderer.render(this._fsScene, this._fsCam);
   }
 
   _bindTri() {
@@ -427,6 +522,26 @@ class FlowerScene {
     this.ptGeo.setAttribute('position', new THREE.InterleavedBufferAttribute(ib, 3, 0));
     this.ptGeo.setAttribute('col', new THREE.InterleavedBufferAttribute(ib, 3, 3));
     this.ptGeo.setAttribute('psize', new THREE.InterleavedBufferAttribute(ib, 1, 6));
+  }
+  _bindPol() {
+    const ib = new THREE.InterleavedBuffer(this.polArr, 7);
+    ib.setUsage(THREE.DynamicDrawUsage);
+    this._polIB = ib;
+    this.polGeo.setAttribute('position', new THREE.InterleavedBufferAttribute(ib, 3, 0));
+    this.polGeo.setAttribute('col', new THREE.InterleavedBufferAttribute(ib, 3, 3));
+    this.polGeo.setAttribute('psize', new THREE.InterleavedBufferAttribute(ib, 1, 6));
+  }
+
+  // Push the pollen population (7 floats a grain, pt layout) for this frame.
+  uploadPollen(arr, nFloats) {
+    if (nFloats > this.polCap) {
+      while (this.polCap < nFloats) this.polCap *= 2;
+      this.polArr = new Float32Array(this.polCap);
+      this._bindPol();
+    }
+    this.polArr.set(arr.subarray(0, nFloats));
+    this._polIB.needsUpdate = true;
+    this.polGeo.setDrawRange(0, nFloats / 7);
   }
 
   // Install a baked spot field into the atlas row for one library petal.
@@ -484,7 +599,44 @@ class FlowerScene {
     this.controls.update();
     this._eyeU.value.copy(this.camera.position);
     this.bgU.uT.value = t;
-    this.comp.uniforms.uT.value = t;
-    this.composer.render();
+    this.compU.uT.value = t;
+    const r = this.renderer;
+
+    r.setRenderTarget(this.rtScene);
+    r.render(this.scene, this.camera);
+
+    // bloom: bright pass, then three two-pass blurs at widening radii (shipped
+    // 60_render.js:422 — radii 1, 2.6, 4.2, each X into A then Y into B)
+    this.brightMat.uniforms.uT.value = this.rtScene.texture;
+    this._fsPass(this.brightMat, this.rtBright);
+    let src = this.rtBright;
+    for (let i = 0; i < 3; i++) {
+      const rad = 1 + i * 1.6;
+      this.blurMat.uniforms.uT.value = src.texture;
+      this.blurMat.uniforms.uDir.value.set(rad / this.rtBlurA.width, 0);
+      this._fsPass(this.blurMat, this.rtBlurA);
+      this.blurMat.uniforms.uT.value = this.rtBlurA.texture;
+      this.blurMat.uniforms.uDir.value.set(0, rad / this.rtBlurB.height);
+      this._fsPass(this.blurMat, this.rtBlurB);
+      src = this.rtBlurB;
+    }
+
+    // defocus image: two gaussian passes over the whole scene (shipped :443)
+    let dsrc = this.rtScene;
+    for (let i = 0; i < 2; i++) {
+      const rad = 1.4 + i * 2.2;
+      this.blurMat.uniforms.uT.value = dsrc.texture;
+      this.blurMat.uniforms.uDir.value.set(rad / this.rtDofA.width, 0);
+      this._fsPass(this.blurMat, this.rtDofA);
+      this.blurMat.uniforms.uT.value = this.rtDofA.texture;
+      this.blurMat.uniforms.uDir.value.set(0, rad / this.rtDofB.height);
+      this._fsPass(this.blurMat, this.rtDofB);
+      dsrc = this.rtDofB;
+    }
+
+    this.compU.uScene.value = this.rtScene.texture;
+    this.compU.uBloom.value = src.texture;
+    this.compU.uDof.value = this.rtDofB.texture;
+    this._fsPass(this.compMat, null);
   }
 }

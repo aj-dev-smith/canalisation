@@ -53,12 +53,19 @@ const FL_T_PETAL = 0.0024;
 const FL_K0 = 1.0;
 const FL_EPS0 = 0.2, FL_EPS1 = 0.5;
 const FL_BSTAR = (1 - FL_NU) + 0.25 * (1 - FL_NU) * (3 + FL_NU) * FL_K0 * FL_K0;
-const FL_BETA_MAX = 2.0 * FL_BSTAR;
+// How hard the bloom drives past the bifurcation. 2.6, 2.0 and 1.6 all rolled
+// each petal into a taco — the lateral curvature times the half-width swept
+// 45-60 deg, and a corolla of tacos reads as a wad of spikes (AJ called the
+// first one "weird flashy things"; the measured ladder is in the PR). Shell
+// theory is a small-strain theory anyway: at 1.25 the overshoot is a SHALLOW
+// CUP — edge slope ~25 deg, length nearly flat with a slight outward arc —
+// and the bifurcation's sign still carries the whole bud-to-bloom story.
+const FL_BETA_MAX = 1.25 * FL_BSTAR;
 
 // -> { kx, ky, lam, amp } — curvatures in 1/world-units, ripple in world units.
 // Curvatures are L&M's dimensionless k-bar made dimensional with the blade
 // length as the shell scale.
-function flPetalForm(bl, dev, q) {
+function flPetalForm(bl, dev, q, nv) {
   const bg = FL_BETA_MAX * dev * dev;
   // Inner organs stay nearer the bud state: identity holds them at a smaller
   // effective load. SCIENCE.md books "enclosing growth at high q" as imposed
@@ -75,6 +82,15 @@ function flPetalForm(bl, dev, q) {
   const eps = FL_EPS0 + (FL_EPS1 - FL_EPS0) * dev;
   const L = Math.max(0.05, bl);
   const lam = Math.sqrt(2 * Math.PI * L * FL_T_PETAL) / Math.pow(3 * (1 - FL_NU * FL_NU) * eps, 0.25);
-  const amp = Math.sqrt(FL_NU * L * FL_T_PETAL) * Math.pow(16 * eps / (3 * Math.PI * Math.PI * (1 - FL_NU * FL_NU)), 0.25);
+  let amp = Math.sqrt(FL_NU * L * FL_T_PETAL) * Math.pow(16 * eps / (3 * Math.PI * Math.PI * (1 - FL_NU * FL_NU)), 0.25);
+  // A ripple the drawing lattice cannot resolve must not be drawn. lam comes
+  // out near 0.11 world units and the petal grid samples the width at ~0.04,
+  // so the sine lands 2-3 samples per wavelength and aliases into jagged
+  // offsets — which is exactly the crumpled-foil mottle measured on screen.
+  // Below ~4 samples per wavelength fade the amplitude out instead: the same
+  // law as the vein LOD, "what the instrument cannot resolve, it does not
+  // draw as noise". `nv` is the petal lattice's own cross rows; both the
+  // surface and its veins pass it, so they stay on one displaced surface.
+  if (nv) amp *= smoothstep(2.5, 4.0, lam / (L / nv));
   return { kx: kbx / L, ky: kby / L, lam, amp, eps };
 }

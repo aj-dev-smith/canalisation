@@ -20,6 +20,45 @@ function flBoot() {
   // under them does; hold it unless asked to watch the whole arc. NOTE
   // plant.sp, not S.sp — Plant copies its options at construction (PITFALLS).
   if (q.get('hold') !== 'none') S.plant.sp.senesceHold = true;
+  // HOMEOTIC FORM. `?form=double` is the ABC model's B-class expansion
+  // (Meyerowitz [D]): a real doubled rose, peony or camellia is a homeotic
+  // conversion — organs that would have been stamens founded as petals. Here
+  // that is ONE threshold moved on the floral identity field q the engine
+  // already computes: org.petal = q < petalQ (40_plant.js:611), so raising
+  // petalQ converts the stamen-analog whorls and EVERYTHING else falls out —
+  // petal library, petal length, petal tilt, and the q-lagged bloom, so the
+  // converted inner whorls stay cupped while the outer ones recurve. Nested,
+  // graded, never drawn. `?homeo=` moves the threshold (default 0.62; the
+  // engine's q tops out at 0.94, so 0.9+ is a fully sterile double, which is
+  // what real double cultivars are). Set before any step runs, so every organ
+  // is FOUNDED under the new identity, and on both copies of sp (the plant
+  // holds its own — PITFALLS).
+  // Both halves of the C-class mutant: B-expansion converts the stamen band
+  // (petalQ up), and lost determinacy keeps the meristem founding (apexRenew —
+  // the WUS shutoff failing, see consumeApex()). floralOrgans is the ceiling
+  // over the physical spend and has to rise with it, same shape as budTake
+  // needing the organ pool raised with it (TUNING's ladder).
+  // Measured (Ember Creeper, seed 21, step 3200): wild 6 petals/flower;
+  // B alone ~8; B + renewal 0.6 -> 14, 0.8 -> 23 — peony-grade — and C alone
+  // gives 11 with petalQ untouched, which is the pure ag phenotype. Fruit
+  // still sets in every case; the apex spends through floralGrace.
+  if (q.get('form') === 'double') {
+    const pq = Math.min(0.94, Math.max(0.05, +(q.get('homeo') || 0.62)));
+    const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || 0.7)));
+    // Compression, the founding gate and the grace move TOGETHER (all three
+    // measured, each alone un-doubles the flower): a compressed axis cannot
+    // clear the shipped floral minInternode between foundings, so floralNode
+    // drops with it — floral organs sharing a node is what a whorl is — and
+    // a compressed flower's early founding cadence outruns floralGrace 320,
+    // so the grace triples or the axillary flowers silently die at 9 petals.
+    // Measured result: 20-23 petals per flower, spread 0.26-0.40 units
+    // against 8.4-13.0 loose — a corolla, not a raceme.
+    const over = { petalQ: pq, apexRenew: rn, floralOrgans: 34,
+      floralElong: 0.08, floralStretch: 0.08, floralNode: 0.008,
+      floralGrace: 960 };
+    S.sp = { ...S.sp, ...over };
+    Object.assign(S.plant.sp, over);
+  }
   const B = new FlowerBuffers();
   const scene = new FlowerScene(document.getElementById('stage'), S.pal);
   // The bullseye threshold: one number per specimen, drawn from the published
@@ -35,6 +74,10 @@ function flBoot() {
   const hint = document.getElementById('hint');
   hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff=';
 
+  // The air carries pollen once the anther-analogs mature (18_pollen.js);
+  // grains sample the same wind field the stem bends in.
+  const pollen = new FlPollen(seed, S.pal.keyCol);
+
   let step = 0, acc = 0, last = performance.now();
   let fpsA = 0;
   // console access, and the screenshot harness's window into the piece
@@ -47,6 +90,7 @@ function flBoot() {
   const focus = q.get('focus') || 'plant';
   const target = new THREE.Vector3(0, 2, 0);
   let radius = 6;
+  let dofR;   // eased dofRange, the shipped director's law (70_app.js:1415)
   // The best close-up subject is the most COMPACT flower, not the most
   // petalled one: the terminal flower's organs ride the whole curling apex,
   // so its bound is a third of the plant and "focus" degenerates to a wide
@@ -81,8 +125,10 @@ function flBoot() {
   }
   function updateFraming() {
     if (focus === 'flower') {
+      // >= 0, not truthy: the best flower is often the TERMINAL one, axis 0,
+      // and a truthiness test silently fell through to the wide shot
       const ax = bestFlower();
-      if (ax && frameAxisFlower(ax)) {
+      if (ax >= 0 && frameAxisFlower(ax)) {
         scene.controls.target.copy(target);
         scene.fogU.uFogNear.value = Math.max(0, scene.camera.position.distanceTo(target) - radius * 1.1);
         const eye = scene.camera.position;
@@ -172,6 +218,8 @@ function flBoot() {
     env.t = step;
 
     if (stepped > 0 || !frame.drawn) { capture(); frame.drawn = true; }
+    if (stepped > 0) pollen.step(S, stepped, step);
+    scene.uploadPollen(pollen.buf, pollen.n * 7);
     // spot fields bake lazily in the draw loop; ship each to the GPU once
     const plib = S.plant.leaves.plib || [];
     for (let li = 0; li < plib.length; li++) {
@@ -179,13 +227,23 @@ function flBoot() {
       if (L._flSpots && !L._flSpotsUp) { scene.setSpots(li, L._flSpots); L._flSpotsUp = true; }
     }
     updateFraming();
+    // the lens: focus on the plane the camera is looking at, with the shipped
+    // director's range law — tight in a flower close-up, the subject's own
+    // scale otherwise — eased so a focus change racks rather than snaps
+    const fDist = scene.camera.position.distanceTo(target);
+    scene.compU.uFocus.value = fDist;
+    const dofT = focus === 'flower'
+      ? Math.max(0.4, fDist * 0.22)
+      : Math.max(2.0, radius * 0.62);
+    dofR = dofR === undefined ? dofT : dofR + (dofT - dofR) * 0.05;
+    scene.compU.uRange.value = dofR;
     scene.render(now);
 
     const c = countPetals();
     hud.textContent =
       `${name}  seed ${seed}\n` +
       `${S.plant.stage()}  step ${step}${ff > 0 ? '  (fast-forward ' + ff + ')' : ''}\n` +
-      `${c.fl} floral axes · ${c.p} petals · ${Math.round(fpsA)} fps`;
+      `${c.fl} floral axes · ${c.p} petals · ${pollen.n} grains · ${Math.round(fpsA)} fps`;
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

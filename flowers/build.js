@@ -20,11 +20,10 @@ import { fileURLToPath } from 'url';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 
-const VENDOR = [
-  'three.min.js', 'CopyShader.js', 'LuminosityHighPassShader.js',
-  'EffectComposer.js', 'RenderPass.js', 'ShaderPass.js', 'MaskPass.js',
-  'UnrealBloomPass.js', 'OrbitControls.js',
-];
+// The composer stack (EffectComposer, UnrealBloomPass et al.) was vendored
+// once and is gone: 30_scene.js now runs the shipped post chain manually,
+// which is both more faithful to 60_render.js and ~53kb lighter.
+const VENDOR = ['three.min.js', 'OrbitControls.js'];
 const SRC_SKIP = new Set(['60_render.js', '80_main.js']);
 
 let vend = '';

@@ -90,15 +90,23 @@ function flDrawSpecimen(env, B, S) {
       // rectangles and a petal rim is a hexagon (measured on the Parasol).
       // Floral organs get the microscope's refinement all the time — there are
       // ~9 of them per flower, so it is cheap where it matters.
-      const mesh = env.bladeMesh(L, bl, org.floral ? 0.85 : 0, env._mesh);
-      if (org.floral && V.lamina > 0) {
-        // Floral tissue goes to the petal stream: same grid and colours, but
-        // the out-of-plane form is 12_form.js's shell + ripple physics, and
-        // the veins are mapped through that SAME displacement (a vein floats
-        // off the surface otherwise). Ripple phase must be deterministic and
-        // stable across frames — hashing the organ's place in the plant is
-        // safe where calling org.rnd() here would burn the organ's own
-        // PRNG stream and change the plant.
+      // Floral organs draw at the lattice's own full resolution (detL 1.0):
+      // the ripple's Nyquist guard in flPetalForm assumes the grid IS the
+      // lattice, and at 0.85 the two drifted apart.
+      const mesh = env.bladeMesh(L, bl, org.floral ? 1.0 : 0, env._mesh);
+      if (org.petal && V.lamina > 0) {
+        // PETALS ONLY go to the petal stream: same grid and colours, but the
+        // out-of-plane form is 12_form.js's shell + ripple physics, and the
+        // veins are mapped through that SAME displacement (a vein floats off
+        // the surface otherwise). Inner organs take the shipped card below —
+        // the shell curvature scales as 1/L, so a 0.4-unit stamen-analog fed
+        // through it rolls into a crumpled tube whose flipping normals strobe
+        // the sheen (measured: AJ called it "weird flashy things" within a
+        // minute of looking; Liang & Mahadevan derived their shell for a
+        // petal's aspect ratio, not a stamen's). Ripple phase must be
+        // deterministic and stable across frames — hashing the organ's place
+        // in the plant is safe where calling org.rnd() here would burn the
+        // organ's own PRNG stream and change the plant.
         const phase = (ai * 37 + oi * 101) % 251 * 0.0793;
         const lib = Math.max(0, (S.plant.leaves.plib || []).indexOf(L));
         // one-time bake per library petal: the Mimulus reaction-diffusion
