@@ -5513,7 +5513,7 @@ class Axis {
         org.petal = org.whorl === 'petal';
         org.leaf = null;
         const frac = org.whorl === 'sepal' ? (wb.sepalLen ?? 0.20)
-          : org.whorl === 'petal' ? 0.30 * pg
+          : org.whorl === 'petal' ? (wb.petalLen ?? 0.30) * pg
             : org.whorl === 'stamen' ? (wb.stamenLen ?? 0.13)
               : (wb.carpelLen ?? 0.11);
         org.maxLen = sp.organLen * frac * (0.82 + 0.36 * org.rnd());
@@ -5613,6 +5613,14 @@ class Axis {
     this.length = newArc[n - 1];
 
     for (const org of this.organs) {
+      // A RECEPTACLE does not elongate. A capitulum is a compressed axis whose
+      // internodes never stretch — that is what makes it a head and not a
+      // spike — so under `receptacle` every floret rides the TIP: the disc
+      // stays one station while the axis elongating BELOW it becomes the
+      // peduncle, which is how a real scape bolts. Without this the subapical
+      // stretch strings 53 florets over 2.9 axis units (measured,
+      // daisy_probe): a cylinder, not a disc. Default 0 skips: shipped exact.
+      if (org.floral && (sp.receptacle || 0) > 0) { org.birthLen = this.length; continue; }
       const L = org.birthLen;
       if (L >= total) { org.birthLen = this.length; continue; }
       let lo = 0, hi = n - 1;
@@ -5849,6 +5857,18 @@ class Axis {
           org.maxLen *= 1 - 0.8 * zy;        // the dorsal staminode
         }
       }
+      // THE RECEPTACLE — the dome, un-collapsed. A floral meristem is a disc
+      // and q recorded where on it each organ was founded; placing them all on
+      // the axis line throws that away. Offsetting the base by the founding
+      // radius makes the flower the disc it grew as — rim organs at the rim,
+      // the centre filled last, a capitulum. The offset eases in with dev the
+      // way the tilt below does, so a founding is not a teleport. Default 0
+      // skips it: shipped exactly.
+      if (org.floral && (sp.receptacle || 0) > 0) {
+        const rr = sp.receptacle * (1 - clamp(org.q || 0, 0, 1))
+          * (0.25 + 0.75 * smoothstep(0.02, 0.5, org.dev || 0));
+        v3addScaled(_zp, _zp, dir, rr);
+      }
       // pitch away from the axis, then let it settle under its own weight
       // young organs are pressed against the axis and swing out as they fill
       const tl = org.tilt * (0.12 + 0.88 * smoothstep(0.04, 0.72, org.dev || 0));
@@ -6059,6 +6079,13 @@ const SPECIES_DEFAULTS = {
                      // (fractions of organLen), filament and style (stalk
                      // elongation factors read by petioleOf). null = the
                      // shipped binary path, bit for bit.
+  receptacle: 0,     // the floral dome, un-collapsed. q RECORDS the radius each
+                     // organ was founded at (1 - prim.r/floralR0); placing every
+                     // floral organ on the axis line discards it. This is the
+                     // rim radius in world units: an organ's base is offset
+                     // along its own radial direction by receptacle*(1-q), so
+                     // the flower becomes the disc the meristem actually was —
+                     // a capitulum. 0 = collapsed to the axis, shipped exactly
   petalTilt: 1.45,   // petals reflex past perpendicular as they open
   tropism: 0.02,
   wander: 0.35,

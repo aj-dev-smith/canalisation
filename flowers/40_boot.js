@@ -95,6 +95,54 @@ function flBoot() {
     S.sp = { ...S.sp, ...over };
     Object.assign(S.plant.sp, over);
   }
+  if (form === 'daisy') {
+    // THE CAPITULUM — a composite head. A daisy is not a flower; it is dozens
+    // of flowers on a disc, and this form is the round-3 machinery read at a
+    // different scale: the SAME four whorl bands land on Asteraceae anatomy
+    // exactly — sepal band = the involucre's phyllaries, petal band = the ray
+    // florets, stamen band = the disc florets (which is why the disc glows
+    // and sheds pollen: those organs were already anthers), carpel = centre.
+    // `receptacle` (40_plant.js) un-collapses the floral dome: q RECORDS the
+    // radius each organ was founded at, so the head becomes the disc the
+    // meristem actually was, rim founded first, centre last. Measured
+    // (daisy_probe, Ember seed 21, step 5200): renew .88 + dome 4 + cap 90
+    // founds 52-53 florets per axillary head — S15 P11 A26, against a real
+    // daisy's 13-21 rays — closing by the cap with a FRUIT at the disc's
+    // centre, the engine's ovary where a real capitulum packs its hundred.
+    // The terminal head stays small (the q-zero terminal trap, round 3);
+    // bestFlower prefers the big axillaries on organ count, so the camera
+    // finds the heads that work.
+    const rn = Math.min(0.95, Math.max(0, +(q.get('renew') || 0.88)));
+    const over = {
+      whorlBands: {
+        sepal: +(q.get('sepal') || 0.05),
+        stamen: +(q.get('stamen') || 0.18),
+        carpel: +(q.get('carpel') || 0.96),
+        sepalLen: 0.16,          // phyllaries: short bracts under the rim
+        petalLen: 0.45,          // a ray is a strap, half again a petal
+        stamenLen: 0.10,         // a disc floret is small...
+        filament: 0.9,           // ...and sits IN the disc, not above it
+        style: 1.5,
+      },
+      receptacle: +(q.get('disc') || 1.1),
+      apexRenew: rn, floralOrgans: 90, floralDome: 4.0,
+      // Under `receptacle` the florets ride the TIP (40_plant.js elongate),
+      // so floral elongation stops being corolla smear and becomes the
+      // PEDUNCLE — the daisy bolts. .35 grows a 9-10 unit scape. And the
+      // scape must not climb the trunk: at the herb's tropism .02 a 12-unit
+      // peduncle ends 0.4 units from the trunk (measured), at .002 it holds
+      // ~3 units clear with a gentle sun-turn, span 0.38 — a disc, held out.
+      floralElong: 0.35, floralStretch: 0.08, floralNode: 0.008,
+      tropism: 0.002,
+      // a head founds for far longer than a eudicot flower, and dozens of
+      // heads spend far past the herb's pool — both raised together
+      // (TUNING's budTake ladder: anything that multiplies organs pays)
+      floralGrace: 1600, organBudget: 400, maxOrgans: 140,
+      petalGrade: 0, petalTilt: 1.5, zygomorphy: 0,
+    };
+    S.sp = { ...S.sp, ...over };
+    Object.assign(S.plant.sp, over);
+  }
   if (form === 'double') {
     const pq = Math.min(0.94, Math.max(0.05, +(q.get('homeo') || 0.62)));
     const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || 0.7)));
@@ -125,7 +173,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|double|wild ?zygo= ?renew= ?homeo=';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc=';
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
   // grains sample the same wind field the stem bends in.
@@ -200,19 +248,25 @@ function flBoot() {
     // orbiting — a drag owns the camera for a while.
     if (performance.now() - lastOrbit > 6000) {
       const ax = S.plant.axes[ai];
-      const a = ax.pts[0], b = ax.pts[ax.pts.length - 1];
+      // the TIP tangent, not the base-to-tip chord: a bolting peduncle curves
+      // (the daisy's scape launches sideways and turns up), and the disc faces
+      // where the tip points, not where the stalk came from
+      const a = ax.pts[Math.max(0, ax.pts.length - 7)], b = ax.pts[ax.pts.length - 1];
       const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
       if (d.lengthSq() > 1e-6) {
         d.normalize();
         // blend AWAY from the trunk: an axillary flower's pedicel often points
         // nearly straight up, and the pure axis shot looks down through the
         // trunk above it. Pushing the eye to the flower's open side gives the
-        // three-quarter view a photographer would walk to.
+        // three-quarter view a photographer would walk to. Tapered by the
+        // flower's own measured clearance — a head already held out on a
+        // peduncle (the daisy) keeps its facing; only a trunk-hugger is steered.
         if (ai !== 0) {
           const tp = trunkNear(target.y);
           const lx = target.x - tp[0], lz = target.z - tp[2];
           const ll = Math.hypot(lx, lz);
-          if (ll > 1e-4) { d.x += 0.9 * lx / ll; d.z += 0.9 * lz / ll; d.normalize(); }
+          const w = 0.9 * (1 - smoothstep(0.8, 2.5, ll));
+          if (ll > 1e-4 && w > 1e-3) { d.x += w * lx / ll; d.z += w * lz / ll; d.normalize(); }
         }
         // keep some horizon: a terminal flower points straight up and a pure
         // overhead shot flattens it
