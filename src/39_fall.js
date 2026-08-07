@@ -797,8 +797,15 @@ export function bladeAreaOf(org, sen) {
 export function petioleOf(org, opt) {
   const p = opt || PETIOLE;
   const r = Math.max(1e-5, Math.sqrt(p.kappa * bladeAreaOf(org) / Math.PI));
+  // `stalkX` is a per-organ stalk elongation factor, set at founding and 1 (or
+  // absent) for every organ the shipped species make. A stamen's filament and a
+  // carpel's style are stalks that elongate far past the blade-proportional
+  // length — their own developmental program, not a drawn number. The radius
+  // still comes off the blade area: a filament is thin BECAUSE its anther is
+  // small, and everything downstream (bendOf, the stem's load) sees the same
+  // stalk the renderer draws.
   return {
-    len: Math.max(1e-4, org.len * p.ofOrganLen + org.radius * p.ofRadius),
+    len: Math.max(1e-4, (org.len * p.ofOrganLen + org.radius * p.ofRadius) * (org.stalkX || 1)),
     r0: r,
     r1: r,
   };

@@ -3893,8 +3893,15 @@ function bladeAreaOf(org, sen) {
 function petioleOf(org, opt) {
   const p = opt || PETIOLE;
   const r = Math.max(1e-5, Math.sqrt(p.kappa * bladeAreaOf(org) / Math.PI));
+  // `stalkX` is a per-organ stalk elongation factor, set at founding and 1 (or
+  // absent) for every organ the shipped species make. A stamen's filament and a
+  // carpel's style are stalks that elongate far past the blade-proportional
+  // length — their own developmental program, not a drawn number. The radius
+  // still comes off the blade area: a filament is thin BECAUSE its anther is
+  // small, and everything downstream (bendOf, the stem's load) sees the same
+  // stalk the renderer draws.
   return {
-    len: Math.max(1e-4, org.len * p.ofOrganLen + org.radius * p.ofRadius),
+    len: Math.max(1e-4, (org.len * p.ofOrganLen + org.radius * p.ofRadius) * (org.stalkX || 1)),
     r0: r,
     r1: r,
   };
@@ -5160,7 +5167,13 @@ class Axis {
     // shared by all eight species, which is why `test/conifer.mjs` found the
     // taper slope floored in (0.72, 1) with nothing able to reach below it. It
     // is a share of a partitioned flux now; see the apical-control note above.
-    const rate = sp.elongation * this.vigour * (this.floral ? 0.22 : 1);
+    // A flower is a compressed shoot: floral identity suppresses internode
+    // elongation (the same fact ROADMAP 0z1's whorls lean on). 0.22 was the
+    // hardwired suppression; `floralElong` names it so a doubled flower —
+    // which keeps founding organs far longer — can pack into a corolla
+    // instead of stretching into a raceme of petals. Default is exactly 0.22.
+    const fe = sp.floralElong === undefined ? 0.22 : sp.floralElong;
+    const rate = sp.elongation * this.vigour * (this.floral ? fe : 1);
     const tip = this.tipPos();
     // WHERE THE TIP IS TRYING TO POINT, which is not simply up. `gsa` is the
     // angle from vertical at which this axis's two statocyte fluxes cancel;
@@ -5246,8 +5259,14 @@ class Axis {
     while (m.emitted.length && !this.fruit) {
       const prim = m.emitted.shift();
       if (this.organs.length >= sp.maxOrgans) break;
-      // two organs cannot share an internode, however fast the tip patterns
-      const mi = this.floral ? sp.minInternode * 0.10 : sp.minInternode;
+      // two organs cannot share an internode, however fast the tip patterns.
+      // The floral factor was a hardwired 0.10; `floralNode` names it because
+      // a COMPRESSED flower (low floralElong/floralStretch) cannot clear even
+      // that between foundings and silently discards its primordia — the
+      // stalled-shoot trap, measured as a double flower un-doubling to 9
+      // petals. Floral organs sharing a node is what a whorl IS.
+      const fn = sp.floralNode === undefined ? 0.10 : sp.floralNode;
+      const mi = this.floral ? sp.minInternode * fn : sp.minInternode;
       if (this.length - this.lastOrganLen < mi) continue;
       this.lastOrganLen = this.length;
       this.addOrgan(prim);
@@ -5335,6 +5354,21 @@ class Axis {
     // radius it had — it has to, because everything the flower is going to make
     // has to fit in it, and from here nothing replaces what gets used.
     m.rCZ *= sp.floralCZ; m.G *= 2.3;
+    // `floralDome` caps the dome at conversion, in founder-patch radii. A real
+    // floral meristem has a CHARACTERISTIC size — determinate, a few
+    // organ-widths across — not a fraction of whatever apex it converted from,
+    // and the size matters because contraction per organ goes as organR^2 over
+    // the flank area: a huge converted TERMINAL apex barely contracts, its q
+    // never climbs, and (measured) it founds ten organs at q ~= 0 and reads as
+    // all one whorl. A cap shrinks that terminal to the size an axillary bud
+    // already converts at and leaves the axillaries untouched — a multiplier
+    // was tried first and cannot do both (it collapsed the axillaries to 1-3
+    // organs while fixing the terminal). Default 0 is off: shipped exactly.
+    const fd = sp.floralDome || 0;
+    if (fd > 0) {
+      const k = Math.min(1, (fd * m.organR) / Math.max(1e-6, m.rPZ));
+      if (k < 1) { m.R *= k; m.rPZ *= k; m.rCZ *= k; }
+    }
     // The scale the apex had at the moment it converted. Organ identity is read
     // against this fixed reference and not against the apex's current size — a
     // meristem that contracts self-similarly reports the same q forever if you
@@ -5354,7 +5388,18 @@ class Axis {
     const m = this.meristem.o;
     const comp = Math.PI * (m.rPZ * m.rPZ - m.rCZ * m.rCZ);
     const lost = Math.PI * m.organR * m.organR;
-    const k = Math.sqrt(clamp(1 - lost / Math.max(1e-3, comp), 0.35, 1));
+    let k = Math.sqrt(clamp(1 - lost / Math.max(1e-3, comp), 0.35, 1));
+    // C-class determinacy. AGAMOUS terminates the real floral meristem by
+    // shutting off WUS stem-cell renewal (Lohmann 2001, Lenhard 2001), and a
+    // double flower is that shutoff failing: the pool replaces part of what
+    // each organ recruits, the flank contracts more slowly, and identity —
+    // which IS the contraction here — climbs so slowly the carpel band may
+    // never be reached. Petal after petal after petal, the ag-1 phenotype,
+    // with nothing anywhere counting petals. `apexRenew` is the fraction
+    // replaced; at the default 0 this line is exactly the old one and every
+    // shipped species is untouched.
+    const rn = this.plant.sp.apexRenew || 0;
+    if (rn > 0) k = lerp(k, 1, rn);
     m.R *= k; m.rPZ *= k; m.rCZ *= k;
   }
 
@@ -5448,13 +5493,61 @@ class Axis {
       // in, and that gradient is the only thing distinguishing them
       org.q = clamp(1 - (prim.r / Math.max(1e-3, this.floralR0 || this.meristem.o.rPZ)), 0, 1);
       org.floral = true;
-      // the outer ones are petals — leaves whose margin was told to grow broad
-      // and smooth instead of long and toothed
-      org.petal = org.q < sp.petalQ;
-      org.leaf = null;
-      org.maxLen = sp.organLen * (org.petal ? 0.30 : 0.13) * (0.82 + 0.36 * org.rnd());
-      org.tilt = org.petal ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
-        : sp.organTilt * 0.30;
+      // `petalGrade` scales a petal down with its identity q: a homeotically
+      // converted stamen is a petaloid stamen, smaller than a true petal, so
+      // a doubled corolla grades outer-large to inner-small the way a rose
+      // does. Default 0 is exactly the old line for every shipped species.
+      const pg = 1 - (sp.petalGrade || 0) * clamp(org.q, 0, 1);
+      const wb = sp.whorlBands;
+      if (wb) {
+        // THE FULL ABC MODEL, as bands on the one coordinate the flower already
+        // has. A/B/C domains are concentric and their boundaries are sharp
+        // (AP3/AG mutual antagonism), so identity is a banding of q, outermost
+        // to innermost: sepal, petal, stamen, carpel. A sepal is A-class alone
+        // — a leaf-like organ — and it literally takes a leaf here, because
+        // the non-petal branch of the leaf-request already hands one out.
+        // `whorlBands` is null for every shipped species: this block never runs.
+        org.whorl = org.q < wb.sepal ? 'sepal'
+          : org.q < wb.stamen ? 'petal'
+            : org.q < wb.carpel ? 'stamen' : 'carpel';
+        org.petal = org.whorl === 'petal';
+        org.leaf = null;
+        const frac = org.whorl === 'sepal' ? (wb.sepalLen ?? 0.20)
+          : org.whorl === 'petal' ? (wb.petalLen ?? 0.30) * pg
+            : org.whorl === 'stamen' ? (wb.stamenLen ?? 0.13)
+              : (wb.carpelLen ?? 0.11);
+        org.maxLen = sp.organLen * frac * (0.82 + 0.36 * org.rnd());
+        // A stamen is an anther on a FILAMENT — a stalk that elongates far past
+        // what the pipe model's length term gives a blade this small. Filament
+        // elongation is its own late developmental program in real flowers
+        // (auxin-driven, rapid at anthesis), so it is a per-organ stalk factor
+        // set at founding, not a drawn length. petioleOf() reads it; radius
+        // still comes off the blade area, so a filament is thin because its
+        // anther is small, which is the right dependency.
+        org.stalkX = org.whorl === 'stamen' ? (wb.filament ?? 3.0)
+          : org.whorl === 'carpel' ? (wb.style ?? 2.2) : 1;
+        // sepals spread beneath the corolla like the leaves they are; stamens
+        // and the carpel stand nearly axial
+        org.tilt = org.whorl === 'sepal' ? sp.organTilt * (0.9 + 0.2 * org.rnd())
+          : org.whorl === 'petal' ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
+            : org.whorl === 'stamen' ? sp.organTilt * 0.22
+              : sp.organTilt * 0.10;
+        // a corolla's insertion is far more regular than a shoot's — floral
+        // symmetry genes canalise organ position, and with five petals the
+        // leaf's full pitch scatter reads as a jumble where the same scatter
+        // vanished inside a 23-petal double (measured, by looking). Sepals
+        // keep the leaf's scatter: they are leaves.
+        if (org.whorl !== 'sepal') org.lift *= 0.3;
+      } else {
+        // the outer ones are petals — leaves whose margin was told to grow broad
+        // and smooth instead of long and toothed
+        org.petal = org.q < sp.petalQ;
+        org.whorl = org.petal ? 'petal' : 'inner';
+        org.leaf = null;
+        org.maxLen = sp.organLen * (org.petal ? 0.30 * pg : 0.13) * (0.82 + 0.36 * org.rnd());
+        org.tilt = org.petal ? sp.petalTilt * (0.9 + 0.2 * org.rnd())
+          : sp.organTilt * 0.30;
+      }
       org.roll *= 0.25;
       // `droopScale` was here — 0.12 for a petal and 0.05 for anything inside it,
       // holding floral organs up because the leaf's droop was far too much for them.
@@ -5501,7 +5594,15 @@ class Axis {
     // taper slope came out 0.94 where the 0.72 above was supposed to put it.
     // A suppressed shoot has short internodes as well as a slow tip; both are
     // the same shoot growing less.
-    const stretch = sp.internode * this.vigour;
+    // A floral axis's stretch has its own factor: the tip's extension was
+    // always taxed 0.22 on conversion while this line ran untaxed — that
+    // asymmetry is the shipped look (a flower riding a curling apex) and
+    // `floralStretch: 1` keeps it exactly. A doubled flower founds organs
+    // for far longer, so at full stretch its corolla strings out into a
+    // raceme — measured: 22 petals spread over 8.6 units of axis. Packing
+    // it is the "a bud is a compressed shoot" fact applied to a flower.
+    const fst = sp.floralStretch === undefined ? 1 : sp.floralStretch;
+    const stretch = sp.internode * this.vigour * (this.floral ? fst : 1);
     for (let i = 0; i < n - 1; i++) {
       const belowTip = total - oldArc[i];
       const e = stretch * Math.exp(-belowTip / sp.internodeSpan);
@@ -5512,6 +5613,14 @@ class Axis {
     this.length = newArc[n - 1];
 
     for (const org of this.organs) {
+      // A RECEPTACLE does not elongate. A capitulum is a compressed axis whose
+      // internodes never stretch — that is what makes it a head and not a
+      // spike — so under `receptacle` every floret rides the TIP: the disc
+      // stays one station while the axis elongating BELOW it becomes the
+      // peduncle, which is how a real scape bolts. Without this the subapical
+      // stretch strings 53 florets over 2.9 axis units (measured,
+      // daisy_probe): a cylinder, not a disc. Default 0 skips: shipped exact.
+      if (org.floral && (sp.receptacle || 0) > 0) { org.birthLen = this.length; continue; }
       const L = org.birthLen;
       if (L >= total) { org.birthLen = this.length; continue; }
       let lo = 0, hi = n - 1;
@@ -5720,6 +5829,46 @@ class Axis {
       v3addScaled(_zu, _zu, _zax, -v3dot(_zu, _zax)); v3norm(_zu, _zu);
 
       const dir = v3rotAxis(_zdir, _zu, _zax, org.angle);
+      // ZYGOMORPHY — CYC/DICH, applied once per organ the first time it has a
+      // direction. CYCLOIDEA and DICHOTOMA are expressed in the DORSAL
+      // (adaxial) domain of the floral meristem (Luo 1996 Nature, 1999 Cell
+      // [D]); the cyc/dich double mutant is fully radial. Adaxial = toward
+      // the parent shoot, and the axis's own first segment records the
+      // direction the bud grew OUT of it, so the reference is the horizontal
+      // negation of that — nothing is stated. A TERMINAL flower has no
+      // subtending axis and stays radial, which is real peloria [D], free.
+      // Effects, adult-phenotype signs: dorsal petals are the large erect
+      // upper lip, the ventral petal reflexes into the landing lip, and the
+      // dorsal stamen aborts to a staminode [D]. Default 0 skips everything.
+      if ((sp.zygomorphy || 0) > 0 && org.floral && this.gen > 0
+        && org.cyc === undefined) {
+        const p1 = this.pts[Math.min(1, n - 1)];
+        const bx = p1[0] - this.pts[0][0], bz = p1[2] - this.pts[0][2];
+        const bl = Math.hypot(bx, bz), ol = Math.hypot(dir[0], dir[2]);
+        let dd2 = 0.5;
+        if (bl > 1e-6 && ol > 1e-6)
+          dd2 = 0.5 * (1 - (dir[0] * bx + dir[2] * bz) / (bl * ol));
+        org.cyc = dd2;                       // 0 ventral .. 1 dorsal
+        const zy = sp.zygomorphy;
+        if (org.petal) {
+          org.maxLen *= 1 + 0.45 * zy * (dd2 - 0.35);
+          org.tilt *= 1 + zy * (0.35 * (1 - dd2) - 0.45 * dd2);
+        } else if (org.whorl === 'stamen' && dd2 > 0.72) {
+          org.maxLen *= 1 - 0.8 * zy;        // the dorsal staminode
+        }
+      }
+      // THE RECEPTACLE — the dome, un-collapsed. A floral meristem is a disc
+      // and q recorded where on it each organ was founded; placing them all on
+      // the axis line throws that away. Offsetting the base by the founding
+      // radius makes the flower the disc it grew as — rim organs at the rim,
+      // the centre filled last, a capitulum. The offset eases in with dev the
+      // way the tilt below does, so a founding is not a teleport. Default 0
+      // skips it: shipped exactly.
+      if (org.floral && (sp.receptacle || 0) > 0) {
+        const rr = sp.receptacle * (1 - clamp(org.q || 0, 0, 1))
+          * (0.25 + 0.75 * smoothstep(0.02, 0.5, org.dev || 0));
+        v3addScaled(_zp, _zp, dir, rr);
+      }
       // pitch away from the axis, then let it settle under its own weight
       // young organs are pressed against the axis and swing out as they fill
       const tl = org.tilt * (0.12 + 0.88 * smoothstep(0.04, 0.72, org.dev || 0));
@@ -5877,12 +6026,36 @@ const SPECIES_DEFAULTS = {
   florigenThresh: 12,    // how much has to reach the tip before it converts
   floralOrgans: 9,      // ceiling on floral organs; the apex usually stops first
   floralGrace: 320,     // idle steps before a floral apex counts as spent
+  apexRenew: 0,         // C-class determinacy: fraction of each recruited patch
+                        // the stem-cell pool replaces. 0 = AG intact (all
+                        // shipped species); toward 1 the floral meristem keeps
+                        // renewing and the flower doubles. See consumeApex()
+  floralElong: 0.22,    // internode elongation retained after floral
+                        // conversion — a flower is a compressed shoot. 0.22
+                        // is the number that was hardwired at the elongation
+                        // site; lower packs a many-organ flower into a corolla
+  floralStretch: 1,     // same factor for the SUBAPICAL stretch, which was
+                        // never taxed on floral axes (that asymmetry is the
+                        // shipped look; 1 preserves it exactly). A doubled
+                        // flower needs both low or it grows as a raceme
+  floralNode: 0.10,     // the floral minInternode factor (was hardwired).
+                        // A compressed flower needs it near zero or the
+                        // founding gate discards its primordia
+  petalGrade: 0,        // how much a petal shrinks with its identity q —
+                        // a converted stamen is a petaloid stamen, smaller
+                        // than a true petal. 0 = the old line exactly
   // Idle steps before a VEGETATIVE apex counts as stalled. Chosen from measured
   // gaps, not guessed: across all eight species the longest a healthy shoot ever
   // went between founding organs is 500 steps, and the longest any new lateral
   // took to found its first is 320. 1600 is 3.2x the worst real gap.
   vegGrace: 1600,
   floralCZ: 0.42,       // how much of the central zone survives conversion
+  floralDome: 0,        // cap on the converted dome, in founder-patch radii
+                        // (organR). A floral meristem has a characteristic
+                        // size; capping makes a converted TERMINAL apex
+                        // contract per organ like an axillary bud does, so its
+                        // q climbs and it makes all four whorls instead of one.
+                        // 0 = no cap, the shipped behaviour exactly
   fruitFlow: 0.0060,     // a swelling fruit is a huge sink; the stem answers
   fruitScale: 0.55,
   fruitOpts: {},
@@ -5893,6 +6066,26 @@ const SPECIES_DEFAULTS = {
   // measured q distribution is skewed (p50 0.06, p90 0.53), so 0.62 left 24 of 42
   // flowers with no inner organs at all. See TUNING.md for the threshold sweep.
   petalQ: 0.28,      // organs founded outside this are petals
+  zygomorphy: 0,     // CYC/DICH dorsoventral asymmetry, 0..1. Dorsal petals
+                     // enlarge and stand (the upper lip), ventral ones reflex,
+                     // the dorsal stamen aborts. Terminal flowers stay radial
+                     // (peloria) because they have no adaxial reference.
+                     // 0 = radial, the shipped behaviour exactly
+  whorlBands: null,  // the FULL ABC model, off by default. When set — e.g.
+                     // { sepal: 0.08, stamen: 0.62, carpel: 0.90 } — floral
+                     // identity is banded outermost-to-innermost into sepal /
+                     // petal / stamen / carpel instead of the binary petalQ.
+                     // Optional per-whorl terms: sepalLen, stamenLen, carpelLen
+                     // (fractions of organLen), filament and style (stalk
+                     // elongation factors read by petioleOf). null = the
+                     // shipped binary path, bit for bit.
+  receptacle: 0,     // the floral dome, un-collapsed. q RECORDS the radius each
+                     // organ was founded at (1 - prim.r/floralR0); placing every
+                     // floral organ on the axis line discards it. This is the
+                     // rim radius in world units: an organ's base is offset
+                     // along its own radial direction by receptacle*(1-q), so
+                     // the flower becomes the disc the meristem actually was —
+                     // a capitulum. 0 = collapsed to the axis, shipped exactly
   petalTilt: 1.45,   // petals reflex past perpendicular as they open
   tropism: 0.02,
   wander: 0.35,
@@ -8849,6 +9042,17 @@ class App {
       gExp: lerp(1.3, 2.6, fr2()), gAux: lerp(0.00035, 0.00075, fr2()),
       seedThresh: lerp(1.25, 1.7, fr2()),
     };
+    // A STERILE CORNER lived in that draw for as long as it existed: ovule
+    // patterning on the 642-cell shell fails outright when T/D < ~5.3 (the
+    // spot wavelength misfits the shell — measured on a 6x5 T-D grid, 6 fruit
+    // seeds each, the boundary is sharp: 12-20 ovules on one side, ZERO on
+    // the other, nothing between). The ranges above include that corner, and
+    // 5 of 40 specimen seeds landed in it — barren for life, no ripening, a
+    // seed head with nothing in it. Clamping D after the draws keeps every
+    // fertile specimen bit-identical (their values pass through) and the
+    // PRNG call order untouched; only the sterile 12.5% change, from nothing
+    // to a finer-lobed fruit. T/6 leaves ~15% margin over the measured cliff.
+    sp.fruitOpts.D = Math.min(sp.fruitOpts.D, sp.fruitOpts.T / 6);
     if (origin) sp.origin = origin;
     if (wind) sp.wind = wind;
     // a specimen planted while the last act is held joins it held
