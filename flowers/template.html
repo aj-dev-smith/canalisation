@@ -20,12 +20,25 @@
     color: rgba(235, 238, 245, 0.28); letter-spacing: 0.04em;
     user-select: none; pointer-events: none; text-align: right; white-space: pre;
   }
+  #forms {
+    position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 2;
+    font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.06em; user-select: none; display: flex; gap: 2px;
+  }
+  #forms button {
+    all: unset; cursor: pointer; padding: 4px 10px;
+    color: rgba(235, 238, 245, 0.38);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  }
+  #forms button:hover { color: rgba(235, 238, 245, 0.8); }
+  #forms button.on { color: rgba(235, 238, 245, 0.92); border-bottom: 1px solid rgba(235,238,245,0.5); }
 </style>
 </head>
 <body>
 <div id="stage"></div>
 <div id="hud"></div>
 <div id="hint"></div>
+<div id="forms"></div>
 <script>
 /* __BUNDLE__ */
 </script>

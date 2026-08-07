@@ -20,12 +20,25 @@
     color: rgba(235, 238, 245, 0.28); letter-spacing: 0.04em;
     user-select: none; pointer-events: none; text-align: right; white-space: pre;
   }
+  #forms {
+    position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 2;
+    font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.06em; user-select: none; display: flex; gap: 2px;
+  }
+  #forms button {
+    all: unset; cursor: pointer; padding: 4px 10px;
+    color: rgba(235, 238, 245, 0.38);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  }
+  #forms button:hover { color: rgba(235, 238, 245, 0.8); }
+  #forms button.on { color: rgba(235, 238, 245, 0.92); border-bottom: 1px solid rgba(235,238,245,0.5); }
 </style>
 </head>
 <body>
 <div id="stage"></div>
 <div id="hud"></div>
 <div id="hint"></div>
+<div id="forms"></div>
 <script>
 
 // ===== vendor/three.min.js =====
@@ -12150,7 +12163,14 @@ function flBoot() {
   // already convert (R0/organR = 3.0); without it a terminal apex founds ten
   // organs at q ~= 0 and reads as one whorl (the Parasol's only flower is
   // terminal, so this is not optional). Compression knobs as the double's.
-  const form = q.get('form') || 'abc';
+  // No ?form= rotates the default PER SEED, so a bare open shows a different
+  // body plan each visit and every form is reachable by reseeding — a piece
+  // titled flowers should not always open on the same one. Deterministic
+  // (seed % 4), same discipline as everything else here: the URL fully
+  // decides the plant. 'wild' stays URL-only — it is the control, not a card
+  // in the deck. (Order puts the default seed, 21, on the columbine.)
+  const FL_FORMS = ['abc', 'columbine', 'daisy', 'double'];
+  const form = q.get('form') || FL_FORMS[seed % FL_FORMS.length];
   if (form === 'abc') {
     // TWO FLORAL PROGRAMS, assigned per species from the measured whorl
     // balance (scratchpad abc_sweep, 8 species x both, step 5200): program A
@@ -12341,6 +12361,24 @@ function flBoot() {
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
   hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso=';
+  // The form rail. A form is decided at founding — every organ's identity is
+  // read off sp the step it is founded — so switching means regrowing, and
+  // the honest way to regrow deterministically is a reload with the form in
+  // the URL, same as everything else on this page.
+  {
+    const rail = document.getElementById('forms');
+    for (const f of FL_FORMS) {
+      const b = document.createElement('button');
+      b.textContent = f;
+      if (f === form) b.classList.add('on');
+      b.onclick = () => {
+        const p = new URLSearchParams(location.search);
+        p.set('form', f);
+        location.search = p.toString();
+      };
+      rail.appendChild(b);
+    }
+  }
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
   // grains sample the same wind field the stem bends in.
