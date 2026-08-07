@@ -17,13 +17,71 @@ node flowers/parity.test.mjs # the gate: captured streams == shipped drawSpecime
 URL parameters: `?species=Nightglass%20Parasol` `?seed=7` `?speed=2`
 `?ff=1100` (fast-forward, deterministic) `?focus=flower` (frame the most
 compact flower from its *drawn* bounds) `?hold=none` (let senescence run)
-`?form=wild|double` (**double is the default** — see below) `?homeo=0.62`
-(where the petal identity threshold sits) `?renew=0.7` (how much
-determinacy the floral meristem loses).
+`?form=abc|double|wild` (**abc is the default** — see below) `?zygo=0.85`
+(CYC/DICH bilateral symmetry, 0 = radial) `?sepal= ?stamen= ?carpel=`
+(where the whorl boundaries sit on q) `?homeo=0.62` (double form: the
+petal identity threshold) `?renew=` (how much determinacy the floral
+meristem loses).
 
-## The double flower — the C-class mutant, grown
+## The full ABC flower — four whorls off one coordinate
 
-The default form is a **doubled flower**: 20-23 petals per corolla in
+The default form is now a **complete flower**: a calyx of sepals, a
+corolla of petals, a ring of stamens — thin filaments carrying warm
+anthers, which are what sheds the pollen — and a central carpel, a pale
+green style at the flower's crown. None of it is drawn, and nothing
+counts a whorl; it is the ABC model read off the one coordinate the
+engine always computed. `whorlBands` (40_plant.js) cuts the floral
+identity q into four bands, outermost to innermost — boundaries sharp
+because AP3/AG mutual antagonism makes real whorl boundaries sharp
+**[D]** — and every organ property follows from the band: a sepal takes
+a LEAF from the ordinary library (A-class alone is a leaf-like organ,
+and the engine's non-petal leaf request already handed one out), a
+stamen is a small blade whose stalk elongates (`org.stalkX`, read by
+`petioleOf`, so the bending physics and the stem's load see the same
+filament the renderer draws; its radius still comes off the anther's
+area, so a filament is thin *because* its anther is small), and the
+carpel stands at the top of the spiral where the meristem consumed
+itself to nothing.
+
+Two supporting engine knobs, both defaulting to the shipped behaviour
+exactly (smoke 73/73, parity 20/20):
+
+- `floralDome` — a cap on the converted dome, in founder-patch radii. A
+  floral meristem has a *characteristic* size, not a fraction of
+  whatever apex converted. Measured: Ember's working axillary flowers
+  convert at exactly 3.0 organR, while its terminal converts at 3.7 and
+  the Parasol's at 4.1 — and an uncapped terminal founds ten organs at
+  q ≈ 0 and reads as one whorl. A *multiplier* was tried first and
+  cannot work: it fixed the terminal and collapsed the axillaries to
+  1-3 organs, because the dome must still FIT its organs.
+- Whorl-banded organs drop most of the leaf's pitch scatter — floral
+  insertion is canalised, and with five petals the scatter that
+  vanished inside a 23-petal double reads as a jumble (measured, by
+  looking). Sepals keep it: they are leaves.
+
+**Two floral programs**, assigned per species from a measured sweep of
+all eight (`abc_sweep`): program A (dome 3.0, renew 0.55, bands
+0.08/0.38/0.65) where q climbs steadily, program B (dome 2.2, renew
+0.75, bands 0.06/0.24/0.60) for species whose q sits at zero and then
+jumps — a Cathedral Fern is S8 P1 A0 C1 under A and S3 P5 A4 C1 under
+B. Spiral Ossuary founds only 3 floral organs even wild; its flowers
+were always inconspicuous and no program can conjure organs its
+meristem does not make.
+
+**Zygomorphy** (`?zygo=`): CYCLOIDEA/DICHOTOMA are expressed in the
+dorsal — adaxial — domain of the floral meristem (Luo 1996 Nature,
+1999 Cell **[D]**), and the cyc/dich double mutant is fully radial. The
+adaxial reference is the horizontal negation of the axis's own first
+segment — the direction the bud grew out of its parent — so nothing is
+stated, and a TERMINAL flower, which has no subtending axis, stays
+radial at any setting: that is real peloria **[D]**, arriving free.
+Dorsal petals enlarge and stand (the upper lip), ventral petals reflex
+(the landing lip), and a strongly dorsal stamen aborts to a staminode
+**[D]**. Applied once per organ, the first time it has a direction.
+
+## The double flower — the C-class mutant, grown (`?form=double`)
+
+`?form=double` is a **doubled flower**: 20-23 petals per corolla in
 nested whorls, outer-large to inner-small, the inner whorls still cupped
 while the outer ones recurve. None of it is drawn; it is the ABC model's
 C-class failure expressed through four engine parameters that all default
@@ -159,10 +217,28 @@ petal's aspect ratio, not a stamen's) and take the shipped card now; and
 the shell was being driven to a ~60 deg edge roll, where 1.25x the
 bifurcation threshold gives the shallow cup that reads as a petal.
 
-**Known gap**: `?focus=flower` on a dense canopy (Cathedral Fern) shoots
-through foliage — the shipped page's sight-line occlusion cull was
-deliberately dropped here as "no director, no subject", and the flower
-focus is precisely a subject. Port it next.
+**The flower shot is a photographer now, not a tripod.** Three things
+landed together, each measured against a frame that was mostly foliage:
+the camera eases to the flower's own *facing* (down its axis, blended
+away from the trunk — the three-quarter view a person would walk to;
+only while the viewer is not orbiting); `bestFlower` scores down a
+corolla pressed against the trunk, because the trunk above it crosses
+every facing shot (measured: a flower 0.36 units off a trunk, corolla
+radius 2.13, framed with the trunk through its face); and the shipped
+sight-line occlusion cull is ported — the round-2 "known gap" — with
+one extension the shipped director never needed: the cleared window
+reaches one organ-length PAST the subject, because a face-on shot sits
+*inside* the canopy and a blade rooted just behind the flower reaches
+forward across its face. The cull is view-dependent, so `capture()`
+re-runs on camera motion, not only on sim steps — at `speed=0` the
+clearance used to be computed once from wherever the camera began.
+
+**Nectar guides**: in Antirrhinum, Venosa is an MYB active only in
+epidermal cells overlying veins **[D]** — the pigment pattern IS the
+vein network. The petal stream already carries `dd` (distance-to-vein,
+computed for translucency); read as pigment it draws the guides a
+pollinator would follow, deepening inside the bullseye zone and fading
+distally. One `smoothstep` and one multiply on `kPig`.
 
 **Not built, deliberately**: the diffraction-grating blue halo (needs
 spectral rendering an RGB pipeline can only fake); nyctinasty (needs a

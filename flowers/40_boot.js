@@ -85,6 +85,12 @@ function flBoot() {
       apexRenew: rn, floralOrgans: P.organs, floralDome: P.dome,
       floralElong: 0.08, floralStretch: 0.08, floralNode: 0.008,
       floralGrace: 960, petalGrade: 0.35,
+      // ?zygo=0.8 breaks radial symmetry the way a snapdragon does (CYC/DICH,
+      // see 40_plant.js). Off by default: the radial corolla is the classical
+      // flower, and the bilateral form is a variation to visit. Terminal
+      // flowers stay radial either way (peloria), so the Parasol's moon shot
+      // is untouched at any setting.
+      zygomorphy: Math.min(1, Math.max(0, +(q.get('zygo') || 0))),
     };
     S.sp = { ...S.sp, ...over };
     Object.assign(S.plant.sp, over);
@@ -119,7 +125,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|double|wild ?renew= ?homeo=';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|double|wild ?zygo= ?renew= ?homeo=';
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
   // grains sample the same wind field the stem bends in.

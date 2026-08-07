@@ -972,6 +972,34 @@ class Axis {
       v3addScaled(_zu, _zu, _zax, -v3dot(_zu, _zax)); v3norm(_zu, _zu);
 
       const dir = v3rotAxis(_zdir, _zu, _zax, org.angle);
+      // ZYGOMORPHY — CYC/DICH, applied once per organ the first time it has a
+      // direction. CYCLOIDEA and DICHOTOMA are expressed in the DORSAL
+      // (adaxial) domain of the floral meristem (Luo 1996 Nature, 1999 Cell
+      // [D]); the cyc/dich double mutant is fully radial. Adaxial = toward
+      // the parent shoot, and the axis's own first segment records the
+      // direction the bud grew OUT of it, so the reference is the horizontal
+      // negation of that — nothing is stated. A TERMINAL flower has no
+      // subtending axis and stays radial, which is real peloria [D], free.
+      // Effects, adult-phenotype signs: dorsal petals are the large erect
+      // upper lip, the ventral petal reflexes into the landing lip, and the
+      // dorsal stamen aborts to a staminode [D]. Default 0 skips everything.
+      if ((sp.zygomorphy || 0) > 0 && org.floral && this.gen > 0
+        && org.cyc === undefined) {
+        const p1 = this.pts[Math.min(1, n - 1)];
+        const bx = p1[0] - this.pts[0][0], bz = p1[2] - this.pts[0][2];
+        const bl = Math.hypot(bx, bz), ol = Math.hypot(dir[0], dir[2]);
+        let dd2 = 0.5;
+        if (bl > 1e-6 && ol > 1e-6)
+          dd2 = 0.5 * (1 - (dir[0] * bx + dir[2] * bz) / (bl * ol));
+        org.cyc = dd2;                       // 0 ventral .. 1 dorsal
+        const zy = sp.zygomorphy;
+        if (org.petal) {
+          org.maxLen *= 1 + 0.45 * zy * (dd2 - 0.35);
+          org.tilt *= 1 + zy * (0.35 * (1 - dd2) - 0.45 * dd2);
+        } else if (org.whorl === 'stamen' && dd2 > 0.72) {
+          org.maxLen *= 1 - 0.8 * zy;        // the dorsal staminode
+        }
+      }
       // pitch away from the axis, then let it settle under its own weight
       // young organs are pressed against the axis and swing out as they fill
       const tl = org.tilt * (0.12 + 0.88 * smoothstep(0.04, 0.72, org.dev || 0));
@@ -1169,6 +1197,11 @@ export const SPECIES_DEFAULTS = {
   // measured q distribution is skewed (p50 0.06, p90 0.53), so 0.62 left 24 of 42
   // flowers with no inner organs at all. See TUNING.md for the threshold sweep.
   petalQ: 0.28,      // organs founded outside this are petals
+  zygomorphy: 0,     // CYC/DICH dorsoventral asymmetry, 0..1. Dorsal petals
+                     // enlarge and stand (the upper lip), ventral ones reflex,
+                     // the dorsal stamen aborts. Terminal flowers stay radial
+                     // (peloria) because they have no adaxial reference.
+                     // 0 = radial, the shipped behaviour exactly
   whorlBands: null,  // the FULL ABC model, off by default. When set — e.g.
                      // { sepal: 0.08, stamen: 0.62, carpel: 0.90 } — floral
                      // identity is banded outermost-to-innermost into sepal /
