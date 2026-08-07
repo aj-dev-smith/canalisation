@@ -11352,12 +11352,15 @@ class FlowerBuffers extends Buffers {
     super();
     this.seg = new Float32Array(1 << 18);   // 12 floats per vein segment
     this.segN = 0;
+    this.petb = new Float32Array(1 << 18);  // 14 floats per petal vertex
+    this.petbN = 0;
     this.organs = [];                        // [{ meta, tri0,tri1, seg0,seg1, pt0,pt1 }]
     this._open = null;
   }
   reset() {
     super.reset();
     this.segN = 0;
+    this.petbN = 0;
     this.organs.length = 0;
     this._open = null;
   }
@@ -11385,6 +11388,19 @@ class FlowerBuffers extends Buffers {
     if (this.ptN + 7 > this.pt.length) this._grow('pt');
     super.point(p, c, s);
   }
+  // The petal stream: pos3 nrm3 col3 emis dd q u v. Written from grid arrays
+  // by index so flPetalSurface pays one call, not four copies.
+  petal(pos, nrm, k3, col, k4, dd, q, u, v) {
+    if (this.petbN + 14 > this.petb.length) this._grow('petb');
+    const s = this.petb;
+    let n = this.petbN;
+    s[n++] = pos[k3]; s[n++] = pos[k3 + 1]; s[n++] = pos[k3 + 2];
+    s[n++] = nrm[k3]; s[n++] = nrm[k3 + 1]; s[n++] = nrm[k3 + 2];
+    s[n++] = col[k4]; s[n++] = col[k4 + 1]; s[n++] = col[k4 + 2];
+    s[n++] = col[k4 + 3];
+    s[n++] = dd; s[n++] = q; s[n++] = u; s[n++] = v;
+    this.petbN = n;
+  }
   // seg2() in the parent funnels through here, so PIN needles arrive free.
   ribbon(a, b, side, w0, w1, c, e) {
     if (this.segN + 12 > this.seg.length) this._grow('seg');
@@ -11396,6 +11412,101 @@ class FlowerBuffers extends Buffers {
     s[n++] = c[0]; s[n++] = c[1]; s[n++] = c[2];
     s[n++] = e;
     this.segN = n;
+  }
+}
+
+// ===================== flowers/15_petal.js =====================
+// The petal surface, as a stream of its own.
+//
+// This is blade()'s surface half (50_geom.js:351-455) with the SAME
+// parametrisation — bladeMap, the asymmetric half-widths, the furl, the
+// fenestration cut — emitting to a fourth stream that carries, per vertex,
+// what the shipped 10-float layout has no room for:
+//
+//   pos3 nrm3 col3 emis · dd · q · u · v        (14 floats)
+//
+// col/emis are baked EXACTLY as shipped (same veinTint, same 0.24 glow), so
+// with a shader that ignores the last four floats this stream is
+// pixel-identical to the shipped lamina. That is deliberate: parity first,
+// then mechanisms — dd is the distance field of a vein network that canalised
+// itself, q is how far in from the rim the organ was founded, and both are
+// channels the project computes and has never drawn. What the petal shader
+// does with them is argued in 35_shade.js, not here.
+//
+// The vasculature half is not copied: the draw loop still calls the shipped
+// blade() with { surface: false } and the veins arrive through the ribbon
+// stream like everyone else's.
+
+const _fpP = v3(), _fpPu = v3(), _fpPv = v3(), _fpE1 = v3(), _fpE2 = v3(), _fpN = v3();
+const _fpQp = [v3(), v3(), v3(), v3()];
+const _fpQn = [v3(), v3(), v3(), v3()];
+let _fpPos = new Float32Array(0), _fpNrm = new Float32Array(0), _fpCol = new Float32Array(0), _fpDD = new Float32Array(0);
+
+function flPetalSurface(B, leaf, frame, len, wid, pal, curl, ripple, glow, MU, MV, dev, sen, q) {
+  if (!leaf.margin || !leaf.margin.mature) return;
+  MU = MU || 22; MV = MV || 10;
+  dev = dev === undefined ? 1 : dev;
+  sen = sen || 0;
+  const o = leaf.o;
+  const { wAt, wMat, furlAt } = bladeMap(leaf, len, dev);
+  const vdf = leaf.vdf, res = leaf.vdfRes || 0;
+  const nearVein = (u, v) => {
+    if (!vdf) return 9;
+    const a = clamp(Math.round(u * (res - 1)), 0, res - 1);
+    const b = clamp(Math.round((v / o.aspect * 0.5 + 0.5) * (res - 1)), 0, res - 1);
+    return vdf[a * res + b];
+  };
+
+  const NU = MU + 1, NV = MV + 1;
+  const pos = _fpPos.length >= NU * NV * 3 ? _fpPos : (_fpPos = new Float32Array(NU * NV * 3));
+  const nrm = _fpNrm.length >= NU * NV * 3 ? _fpNrm : (_fpNrm = new Float32Array(NU * NV * 3));
+  const col = _fpCol.length >= NU * NV * 4 ? _fpCol : (_fpCol = new Float32Array(NU * NV * 4));
+  const ddb = _fpDD.length >= NU * NV ? _fpDD : (_fpDD = new Float32Array(NU * NV));
+  const h = 0.004;
+  const at = (u, t) => t * wAt(u, t);
+  const matAtUV = (u, t) => t * wMat(u, t);
+  for (let i = 0; i < NU; i++) {
+    const u = i / MU;
+    for (let j = 0; j < NV; j++) {
+      const t = (j / MV) * 2 - 1;
+      const k3 = (i * NV + j) * 3, k4 = (i * NV + j) * 4, k1 = i * NV + j;
+      bladePoint(_fpP, frame, u, at(u, t), len, wid, curl, ripple, furlAt(u));
+      bladePoint(_fpPu, frame, u + h, at(u + h, t), len, wid, curl, ripple, furlAt(u + h));
+      bladePoint(_fpPv, frame, u, at(u, t + h), len, wid, curl, ripple, furlAt(u));
+      v3sub(_fpE1, _fpPu, _fpP); v3sub(_fpE2, _fpPv, _fpP);
+      v3norm(_fpN, v3cross(_fpN, _fpE1, _fpE2));
+      pos[k3] = _fpP[0]; pos[k3 + 1] = _fpP[1]; pos[k3 + 2] = _fpP[2];
+      nrm[k3] = _fpN[0]; nrm[k3 + 1] = _fpN[1]; nrm[k3 + 2] = _fpN[2];
+      const vv = matAtUV(u, t);
+      const dd = vdf ? clamp(1 - nearVein(u, vv) * 11, 0, 1) : 0;
+      ddb[k1] = dd;
+      const tt = clamp(u * 0.9 + 0.1, 0, 1);
+      const r = lerp(pal.blade0[0], pal.blade1[0], tt) + dd * pal.veinTint[0];
+      const g = lerp(pal.blade0[1], pal.blade1[1], tt) + dd * pal.veinTint[1];
+      const b = lerp(pal.blade0[2], pal.blade1[2], tt) + dd * pal.veinTint[2];
+      const hold = dd * dd;
+      const sl = sen > 0 ? clamp((sen - hold * VEIN_LAG) / (1 - VEIN_LAG), 0, 1) : 0;
+      senesceTint(_senC, r, g, b, sl);
+      col[k4] = _senC[0]; col[k4 + 1] = _senC[1]; col[k4 + 2] = _senC[2];
+      col[k4 + 3] = dd * glow * 0.24 * (1 - sl);
+    }
+  }
+  const emit = (i, j) => {
+    const k3 = (i * NV + j) * 3, k4 = (i * NV + j) * 4, k1 = i * NV + j;
+    const u = i / MU, t = (j / MV) * 2 - 1;
+    B.petal(pos, nrm, k3, col, k4, ddb[k1], q, u, t);
+  };
+  for (let i = 0; i < MU; i++) {
+    const u0 = i / MU, u1 = (i + 1) / MU;
+    for (let j = 0; j < MV; j++) {
+      if (o.fenestrate > 0 && vdf) {
+        const mu = (u0 + u1) * 0.5;
+        const mt = ((j + 0.5) / MV) * 2 - 1;
+        if (nearVein(mu, matAtUV(mu, mt)) > o.fenestrate && mu > 0.16 && mu < 0.93) continue;
+      }
+      emit(i, j); emit(i, j + 1); emit(i + 1, j + 1);
+      emit(i, j); emit(i + 1, j + 1); emit(i + 1, j);
+    }
   }
 }
 
@@ -11488,8 +11599,17 @@ function flDrawSpecimen(env, B, S) {
       const curl = -bl * (org.petal ? 0.05 : 0.16) * (1 + sen * 2.2);
       const ripple = bl * 0.014;
       const mesh = env.bladeMesh(L, bl, 0, env._mesh);
-      blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mesh[0], mesh[1], dev,
-        1, sen, { surface: V.lamina > 0, veinMul: V.veins });
+      if (org.floral && V.lamina > 0) {
+        // Floral tissue goes to the petal stream — same grid, same colours,
+        // plus dd/q/u/v — and its veins ride the shipped path below.
+        flPetalSurface(B, L, fr, bl, bl, bp, curl, ripple, bp.glow,
+          mesh[0], mesh[1], dev, sen, org.q || 0);
+        blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mesh[0], mesh[1], dev,
+          1, sen, { surface: false, veinMul: V.veins });
+      } else {
+        blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mesh[0], mesh[1], dev,
+          1, sen, { surface: V.lamina > 0, veinMul: V.veins });
+      }
       if (V.cells > 0 || V.needles > 0.004) {
         laminaCells(B, L, fr, bl, bl, cpal, curl, ripple, env.t, V.needles, dev,
           sen, { cells: V.cells > 0 ? 1 : 0 });
@@ -11565,6 +11685,42 @@ const FL_TRI_VS = `
 `;
 const FL_TRI_FS = `
   varying vec3 vP; varying vec3 vN; varying vec3 vC; varying float vE;
+  uniform vec3 uEye, uKey, uKeyCol, uAmbTop, uAmbBot;
+  ${FL_FOG}
+  void main() {
+    vec3 N = normalize(vN);
+    vec3 V = normalize(uEye - vP);
+    if (dot(N, V) < 0.0) N = -N;
+    float d = max(dot(N, uKey), 0.0);
+    float back = pow(max(dot(-N, uKey), 0.0), 2.0);
+    float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+    vec3 amb = mix(uAmbBot, uAmbTop, N.y * 0.5 + 0.5);
+    vec3 c = vC * (amb + uKeyCol * d * 0.9) + vC * uKeyCol * back * 0.55 + rim * uAmbTop * 0.7;
+    c += vC * vE * 3.0;
+    c = mix(c, uFog, flFog(vP, uEye) * 0.80);
+    gl_FragColor = vec4(c, 1.0);
+  }
+`;
+
+// The petal stream: shipped lighting, with the chemistry channels along for
+// the ride. vDD is the distance-to-vein field, vQ the floral identity, vU the
+// proximodistal coordinate — 35_shade.js (the mechanism layer) is what reads
+// them; until it lands this is the tri shader with more varyings.
+const FL_PET_VS = `
+  attribute vec3 col;
+  attribute float emis;
+  attribute float aDD; attribute float aQ; attribute float aU; attribute float aV;
+  varying vec3 vP; varying vec3 vN; varying vec3 vC; varying float vE;
+  varying float vDD; varying float vQ; varying float vU; varying float vV;
+  void main() {
+    vP = position; vN = normal; vC = col; vE = emis;
+    vDD = aDD; vQ = aQ; vU = aU; vV = aV;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const FL_PET_FS = `
+  varying vec3 vP; varying vec3 vN; varying vec3 vC; varying float vE;
+  varying float vDD; varying float vQ; varying float vU; varying float vV;
   uniform vec3 uEye, uKey, uKeyCol, uAmbTop, uAmbBot;
   ${FL_FOG}
   void main() {
@@ -11740,6 +11896,20 @@ class FlowerScene {
     this.triMesh.frustumCulled = false;
     this.scene.add(this.triMesh);
 
+    // --- petal stream ---
+    this.petCap = 1 << 18;
+    this.petArr = new Float32Array(this.petCap);
+    this.petGeo = new THREE.BufferGeometry();
+    this._bindPet();
+    this.petMat = new THREE.ShaderMaterial({
+      vertexShader: FL_PET_VS, fragmentShader: FL_PET_FS,
+      side: THREE.DoubleSide,
+      uniforms: this.triMat.uniforms,
+    });
+    this.petMesh = new THREE.Mesh(this.petGeo, this.petMat);
+    this.petMesh.frustumCulled = false;
+    this.scene.add(this.petMesh);
+
     // --- ribbon stream (instanced quads) ---
     this.segCap = 1 << 17;
     this.segArr = new Float32Array(this.segCap);
@@ -11822,6 +11992,19 @@ class FlowerScene {
     this.triGeo.setAttribute('col', new THREE.InterleavedBufferAttribute(ib, 3, 6));
     this.triGeo.setAttribute('emis', new THREE.InterleavedBufferAttribute(ib, 1, 9));
   }
+  _bindPet() {
+    const ib = new THREE.InterleavedBuffer(this.petArr, 14);
+    ib.setUsage(THREE.DynamicDrawUsage);
+    this._petIB = ib;
+    this.petGeo.setAttribute('position', new THREE.InterleavedBufferAttribute(ib, 3, 0));
+    this.petGeo.setAttribute('normal', new THREE.InterleavedBufferAttribute(ib, 3, 3));
+    this.petGeo.setAttribute('col', new THREE.InterleavedBufferAttribute(ib, 3, 6));
+    this.petGeo.setAttribute('emis', new THREE.InterleavedBufferAttribute(ib, 1, 9));
+    this.petGeo.setAttribute('aDD', new THREE.InterleavedBufferAttribute(ib, 1, 10));
+    this.petGeo.setAttribute('aQ', new THREE.InterleavedBufferAttribute(ib, 1, 11));
+    this.petGeo.setAttribute('aU', new THREE.InterleavedBufferAttribute(ib, 1, 12));
+    this.petGeo.setAttribute('aV', new THREE.InterleavedBufferAttribute(ib, 1, 13));
+  }
   _bindSeg() {
     const ib = new THREE.InstancedInterleavedBuffer(this.segArr, 12);
     ib.setUsage(THREE.DynamicDrawUsage);
@@ -11851,6 +12034,15 @@ class FlowerScene {
     this.triArr.set(B.tri.subarray(0, B.triN));
     this._triIB.needsUpdate = true;
     this.triGeo.setDrawRange(0, B.triN / 10);
+
+    if (B.petbN > this.petCap) {
+      while (this.petCap < B.petbN) this.petCap *= 2;
+      this.petArr = new Float32Array(this.petCap);
+      this._bindPet();
+    }
+    this.petArr.set(B.petb.subarray(0, B.petbN));
+    this._petIB.needsUpdate = true;
+    this.petGeo.setDrawRange(0, B.petbN / 14);
 
     if (B.segN > this.segCap) {
       while (this.segCap < B.segN) this.segCap *= 2;

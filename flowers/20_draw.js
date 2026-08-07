@@ -86,8 +86,17 @@ function flDrawSpecimen(env, B, S) {
       const curl = -bl * (org.petal ? 0.05 : 0.16) * (1 + sen * 2.2);
       const ripple = bl * 0.014;
       const mesh = env.bladeMesh(L, bl, 0, env._mesh);
-      blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mesh[0], mesh[1], dev,
-        1, sen, { surface: V.lamina > 0, veinMul: V.veins });
+      if (org.floral && V.lamina > 0) {
+        // Floral tissue goes to the petal stream — same grid, same colours,
+        // plus dd/q/u/v — and its veins ride the shipped path below.
+        flPetalSurface(B, L, fr, bl, bl, bp, curl, ripple, bp.glow,
+          mesh[0], mesh[1], dev, sen, org.q || 0);
+        blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mesh[0], mesh[1], dev,
+          1, sen, { surface: false, veinMul: V.veins });
+      } else {
+        blade(B, L, fr, bl, bl, bp, curl, ripple, bp.glow, mesh[0], mesh[1], dev,
+          1, sen, { surface: V.lamina > 0, veinMul: V.veins });
+      }
       if (V.cells > 0 || V.needles > 0.004) {
         laminaCells(B, L, fr, bl, bl, cpal, curl, ripple, env.t, V.needles, dev,
           sen, { cells: V.cells > 0 ? 1 : 0 });

@@ -53,6 +53,42 @@ const FL_TRI_FS = `
   }
 `;
 
+// The petal stream: shipped lighting, with the chemistry channels along for
+// the ride. vDD is the distance-to-vein field, vQ the floral identity, vU the
+// proximodistal coordinate — 35_shade.js (the mechanism layer) is what reads
+// them; until it lands this is the tri shader with more varyings.
+const FL_PET_VS = `
+  attribute vec3 col;
+  attribute float emis;
+  attribute float aDD; attribute float aQ; attribute float aU; attribute float aV;
+  varying vec3 vP; varying vec3 vN; varying vec3 vC; varying float vE;
+  varying float vDD; varying float vQ; varying float vU; varying float vV;
+  void main() {
+    vP = position; vN = normal; vC = col; vE = emis;
+    vDD = aDD; vQ = aQ; vU = aU; vV = aV;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const FL_PET_FS = `
+  varying vec3 vP; varying vec3 vN; varying vec3 vC; varying float vE;
+  varying float vDD; varying float vQ; varying float vU; varying float vV;
+  uniform vec3 uEye, uKey, uKeyCol, uAmbTop, uAmbBot;
+  ${FL_FOG}
+  void main() {
+    vec3 N = normalize(vN);
+    vec3 V = normalize(uEye - vP);
+    if (dot(N, V) < 0.0) N = -N;
+    float d = max(dot(N, uKey), 0.0);
+    float back = pow(max(dot(-N, uKey), 0.0), 2.0);
+    float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+    vec3 amb = mix(uAmbBot, uAmbTop, N.y * 0.5 + 0.5);
+    vec3 c = vC * (amb + uKeyCol * d * 0.9) + vC * uKeyCol * back * 0.55 + rim * uAmbTop * 0.7;
+    c += vC * vE * 3.0;
+    c = mix(c, uFog, flFog(vP, uEye) * 0.80);
+    gl_FragColor = vec4(c, 1.0);
+  }
+`;
+
 const FL_RIB_VS = `
   attribute vec3 iA; attribute vec3 iB; attribute vec2 iW; attribute vec3 iC; attribute float iE;
   varying vec3 vC; varying float vE; varying vec3 vP;
@@ -211,6 +247,20 @@ class FlowerScene {
     this.triMesh.frustumCulled = false;
     this.scene.add(this.triMesh);
 
+    // --- petal stream ---
+    this.petCap = 1 << 18;
+    this.petArr = new Float32Array(this.petCap);
+    this.petGeo = new THREE.BufferGeometry();
+    this._bindPet();
+    this.petMat = new THREE.ShaderMaterial({
+      vertexShader: FL_PET_VS, fragmentShader: FL_PET_FS,
+      side: THREE.DoubleSide,
+      uniforms: this.triMat.uniforms,
+    });
+    this.petMesh = new THREE.Mesh(this.petGeo, this.petMat);
+    this.petMesh.frustumCulled = false;
+    this.scene.add(this.petMesh);
+
     // --- ribbon stream (instanced quads) ---
     this.segCap = 1 << 17;
     this.segArr = new Float32Array(this.segCap);
@@ -293,6 +343,19 @@ class FlowerScene {
     this.triGeo.setAttribute('col', new THREE.InterleavedBufferAttribute(ib, 3, 6));
     this.triGeo.setAttribute('emis', new THREE.InterleavedBufferAttribute(ib, 1, 9));
   }
+  _bindPet() {
+    const ib = new THREE.InterleavedBuffer(this.petArr, 14);
+    ib.setUsage(THREE.DynamicDrawUsage);
+    this._petIB = ib;
+    this.petGeo.setAttribute('position', new THREE.InterleavedBufferAttribute(ib, 3, 0));
+    this.petGeo.setAttribute('normal', new THREE.InterleavedBufferAttribute(ib, 3, 3));
+    this.petGeo.setAttribute('col', new THREE.InterleavedBufferAttribute(ib, 3, 6));
+    this.petGeo.setAttribute('emis', new THREE.InterleavedBufferAttribute(ib, 1, 9));
+    this.petGeo.setAttribute('aDD', new THREE.InterleavedBufferAttribute(ib, 1, 10));
+    this.petGeo.setAttribute('aQ', new THREE.InterleavedBufferAttribute(ib, 1, 11));
+    this.petGeo.setAttribute('aU', new THREE.InterleavedBufferAttribute(ib, 1, 12));
+    this.petGeo.setAttribute('aV', new THREE.InterleavedBufferAttribute(ib, 1, 13));
+  }
   _bindSeg() {
     const ib = new THREE.InstancedInterleavedBuffer(this.segArr, 12);
     ib.setUsage(THREE.DynamicDrawUsage);
@@ -322,6 +385,15 @@ class FlowerScene {
     this.triArr.set(B.tri.subarray(0, B.triN));
     this._triIB.needsUpdate = true;
     this.triGeo.setDrawRange(0, B.triN / 10);
+
+    if (B.petbN > this.petCap) {
+      while (this.petCap < B.petbN) this.petCap *= 2;
+      this.petArr = new Float32Array(this.petCap);
+      this._bindPet();
+    }
+    this.petArr.set(B.petb.subarray(0, B.petbN));
+    this._petIB.needsUpdate = true;
+    this.petGeo.setDrawRange(0, B.petbN / 14);
 
     if (B.segN > this.segCap) {
       while (this.segCap < B.segN) this.segCap *= 2;

@@ -20,12 +20,15 @@ class FlowerBuffers extends Buffers {
     super();
     this.seg = new Float32Array(1 << 18);   // 12 floats per vein segment
     this.segN = 0;
+    this.petb = new Float32Array(1 << 18);  // 14 floats per petal vertex
+    this.petbN = 0;
     this.organs = [];                        // [{ meta, tri0,tri1, seg0,seg1, pt0,pt1 }]
     this._open = null;
   }
   reset() {
     super.reset();
     this.segN = 0;
+    this.petbN = 0;
     this.organs.length = 0;
     this._open = null;
   }
@@ -52,6 +55,19 @@ class FlowerBuffers extends Buffers {
   point(p, c, s) {
     if (this.ptN + 7 > this.pt.length) this._grow('pt');
     super.point(p, c, s);
+  }
+  // The petal stream: pos3 nrm3 col3 emis dd q u v. Written from grid arrays
+  // by index so flPetalSurface pays one call, not four copies.
+  petal(pos, nrm, k3, col, k4, dd, q, u, v) {
+    if (this.petbN + 14 > this.petb.length) this._grow('petb');
+    const s = this.petb;
+    let n = this.petbN;
+    s[n++] = pos[k3]; s[n++] = pos[k3 + 1]; s[n++] = pos[k3 + 2];
+    s[n++] = nrm[k3]; s[n++] = nrm[k3 + 1]; s[n++] = nrm[k3 + 2];
+    s[n++] = col[k4]; s[n++] = col[k4 + 1]; s[n++] = col[k4 + 2];
+    s[n++] = col[k4 + 3];
+    s[n++] = dd; s[n++] = q; s[n++] = u; s[n++] = v;
+    this.petbN = n;
   }
   // seg2() in the parent funnels through here, so PIN needles arrive free.
   ribbon(a, b, side, w0, w1, c, e) {
