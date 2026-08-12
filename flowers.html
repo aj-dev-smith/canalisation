@@ -11181,14 +11181,25 @@ function flSpotsRun(leaf) {
 //     population owned by a plant would be a lie about where its grains are.
 //
 // What it costs, stated: seven plants' anthers draw on one 4096-grain budget,
-// so a field's per-plant plume is thinner than a solo page's. Measured
-// (test/flowers_pollen.mjs, garden=7 seed=21): the field's anther count climbs
-// 12 -> 59 -> 96 over steps 1500-4500 against the hero's own 16, and the
-// population runs 5-31% of the cap over that whole range. The cap does not
-// bind at seven, so nothing is being traded away yet; at the 12 the URL allows
-// it would begin to, and the honest fix then is the cap and not the rate,
-// because the rate is a per-anther statement about a flower and the cap is a
-// statement about the frame. 7 floats a grain: 4096 grains is 114 kB.
+// so in principle a field's per-plant plume is thinner than a solo page's.
+//
+// ⚠ IT IS NOT, AND THE REASON IS THAT NEITHER `max` NOR `life` HAS EVER BOUND
+// THIS POPULATION. Measured (test/flowers_pollen.mjs, garden=7 seed=21): the
+// field's anther count climbs 11 -> 41 -> 59 over steps 1500-3000 and settles
+// near 60, against the hero's own 16, and the population sits at 1-8% of the
+// cap over that whole range with ZERO refusals. Nor does a grain ever grow
+// old: 0% of deaths are `life`, at every setting swept.
+//
+// THE POPULATION IS ADVECTION-LIMITED. A grain drifts ~0.32 world units per
+// plant-time unit in the shipped 2.5 m/s air (velToWorld x uRef), so it
+// crosses the whole 26-unit clearing in ~80 plant-time units — a ninth of
+// `life` — and the steady state is `anthers * rate * (time in the story)`,
+// where the last term is set by the wind and by `beyond` below. Two constants
+// that look like they govern this population and neither of them does; if the
+// cap ever DOES bind (a field of twelve of a heavy-anthered species), the
+// honest lever is the cap and not the rate, because the rate is a per-anther
+// statement about a flower and the cap is a statement about the frame. 7
+// floats a grain: 4096 grains is 114 kB.
 //
 // ------------------------------------------------------------- TWO CLOCKS
 //
@@ -11239,22 +11250,40 @@ const FL_POLLEN = {
   rate: 0.05,        // grains per dehiscing organ per plant-time unit [legibility]
   qBand: 0.72,       // stamen-analog band: qn below this sheds [OURS]
   devGate: 0.85,     // dehiscence gate: the organ is essentially mature
-  life: 900,         // plant-time units before a grain leaves the story (7.2 s)
+  life: 900,         // pt units before a grain leaves the story (7.2 s). ⚠ NO
+                     // GRAIN HAS EVER REACHED IT: 0% of deaths, every sweep.
+                     // Kept as the backstop it is, not read as a lever
   size: 0.022,       // drawn mote size, world units [legibility]
   bright: 1.1,       // key-colour multiplier on a mote [grade-category]
   fadeIn: 40,        // pt units to full brightness — a grain POPPING to full
   fadeOut: 150,      // white at the anther reads as a glitch, not a mote
-  // HOW FAR PAST THE OUTERMOST PLANT A GRAIN IS STILL PART OF THE PICTURE,
-  // in world units beyond the clearing's rim. This is a LEGIBILITY number and
-  // not physics — a real grain keeps going — and it is needed because the
-  // point pass has no fog and floors gl_PointSize at 1 px (30_scene.js), so a
-  // grain does not fade or shrink out of the frame at any distance: at 90
-  // units it is still a full-brightness one-pixel dot on the sky. Measured on
-  // the shipped 90: the mean grain sat 30-46 units from the clearing's centre
-  // and 60-85% of the whole population was outside the field the plants stand
-  // in, so most of the cap was spent on sky. One plant's room (the measured
-  // FL_GARDEN_SPACING) past the last plant keeps the plume in among the
-  // flowers where the light is. ?pol=rate,beyond sweeps both.
+  // HOW FAR PAST THE OUTERMOST PLANT A GRAIN IS STILL PART OF THE PICTURE, in
+  // world units beyond the clearing's rim — replacing a bare |x| > 90 box that
+  // predates both the field and the ground. It is a LEGIBILITY number, not
+  // physics (a real grain keeps going), and it is needed because the point
+  // pass has NO FOG and floors gl_PointSize at 1 px (30_scene.js): a grain
+  // neither dims nor shrinks out of the frame at any distance, so at 90 units
+  // it is still a full-brightness one-pixel dot on the sky.
+  //
+  // Measured on the shipped 90 (garden=7 seed=21, step 3000): 348 grains alive
+  // of which 67 were within one plant's room of any specimen — 81% of the
+  // population, and of the cost, was sky — at a mean radius of 44.3 in a
+  // clearing of radius 26.4.
+  //
+  // AND THE PART OF THE POPULATION A VIEWER SEES DOES NOT MOVE WITH IT. Swept
+  // solo at step 3000, `beyond` 12 / 30 / 90 gives 38 / 82 / 228 grains alive
+  // and 38 / 38 / 38 of them within one plant's room. The whole difference is
+  // grains nobody can see, so one plant's room past the last plant (the
+  // measured FL_GARDEN_SPACING) keeps the plume among the flowers where the
+  // light is and spends nothing. ?pol=rate,beyond sweeps both.
+  //
+  // It also settles the ground: at 90, 48% of grains ended by touching y=0 —
+  // all of them far downwind, drawn at the 1-px floor, invisible — and at 12
+  // none do. Stokes settling is 3.25 cm/s against a wind that moves a grain
+  // 100x faster, so nothing in this piece ever watches pollen land, and the
+  // y < 0 test below is a floor rather than an event. A landing behaviour
+  // (the shed blade's "lie still, then fade") was considered and is not built:
+  // it would be machinery for a case the measurement says does not occur.
   beyond: 12,
 };
 
@@ -11278,10 +11307,17 @@ class FlPollen {
     // sheds the same total as one paid a step at a time
     this._acc = [];
     this._cand = [];
+    // ?pol=rate,beyond,size sweeps the three legibility numbers together, for
+    // the reason ?lod=0 and ?haze= exist: a look decision has to be shootable
+    // as a before/after FROM ONE BUILD, at one seed and one step.
     let rate = P.rate, beyond = P.beyond;
+    this.size = P.size;
     if (typeof location !== 'undefined') {
       const s = (new URLSearchParams(location.search).get('pol') || '').split(',').map(Number);
-      if (s.length === 2 && s.every(isFinite)) { rate = s[0]; beyond = s[1]; }
+      if (s.length >= 2 && s.every(isFinite)) {
+        rate = s[0]; beyond = s[1];
+        if (s.length > 2) this.size = s[2];
+      }
     }
     this.rate = rate;
     // the clearing's rim: where the outermost plant stands. Solo pages have no
@@ -11301,7 +11337,7 @@ class FlPollen {
     b[i + 1] = y + (this.rnd() - 0.5) * r;
     b[i + 2] = z + (this.rnd() - 0.5) * r;
     b[i + 3] = this.col[0]; b[i + 4] = this.col[1]; b[i + 5] = this.col[2];
-    b[i + 6] = FL_POLLEN.size * (0.7 + 0.6 * this.rnd());
+    b[i + 6] = this.size * (0.7 + 0.6 * this.rnd());
     this.age[this.n] = 0;
     this.n++;
     this.stat.emit++;
@@ -11335,6 +11371,35 @@ class FlPollen {
     return c;
   }
 
+  // THE LONGEST DRIFT STEP THE AIR ALLOWS, derived from the shipped field
+  // rather than chosen. A grain is integrated forward-Euler through a gust
+  // ladder, so the step has to resolve the fastest thing in that ladder both
+  // in space and in time — the same Nyquist argument 15_petal.js makes about
+  // its ripple and 35_garden.js makes about its recapture rate, with the same
+  // four-samples margin:
+  //   space: the shortest mode's wavelength is 2pi/max|k| (8 world units on
+  //          the shipped 7-octave ladder), and a grain travels
+  //          uMeanMag + sigmaW per plant-time unit;
+  //   time:  the fastest mode's period is 2pi/max|om|.
+  // Both land near 6 plant-time units, which is exactly the real-time page's
+  // per-frame cap — so THE WATCHED PAGE WAS ALWAYS FINE AND ?ff= WAS NOT: at
+  // its 40-step chunk a grain jumps 12.8 units per call, further than the
+  // shortest gust is long, and can be emitted and killed inside one call. A
+  // fast-forwarded screenshot was showing a population that never existed.
+  _substep(wf) {
+    if (this._dtMax) return this._dtMax;
+    let kmax = 0, ommax = 0;
+    for (const m of wf.modes) {
+      if (m.kmag > kmax) kmax = m.kmag;
+      const om = Math.abs(m.om);
+      if (om > ommax) ommax = om;
+    }
+    const spd = wf.uMeanMag + wf.sigmaW;
+    const hx = kmax > 0 && spd > 1e-9 ? (TAU / kmax) / 4 / spd : Infinity;
+    const ht = ommax > 1e-9 ? (TAU / ommax) / 4 : Infinity;
+    return (this._dtMax = Math.max(0.5, Math.min(hx, ht)));
+  }
+
   // Advance the population. `specs` is the boot's specimen list — each entry
   // { S, stepped } — `dt` is the WORLD clock's advance this frame and `t` the
   // world time the air is sampled at. Every specimen sheds on its own
@@ -11366,31 +11431,37 @@ class FlPollen {
     // later specimen (40_boot.js).
     const wf = specs[0].S.plant.wind, b = this.buf, w = this._w, st = this.stat;
     const rE = this.rEdge, rE2 = rE * rE;
-    for (let i = 0; i < this.n;) {
-      const o = i * 7;
-      windAt(w, wf, b[o], b[o + 1], b[o + 2], t);
-      b[o] += w[0] * dt;
-      b[o + 1] += (w[1] - this.vs) * dt;
-      b[o + 2] += w[2] * dt;
-      this.age[i] += dt;
-      // brightness envelope: ease in at the anther, out at the end of life
-      const env = Math.max(0, Math.min(
-        this.age[i] / C.fadeIn, 1, (C.life - this.age[i]) / C.fadeOut));
-      b[o + 3] = this.col[0] * env;
-      b[o + 4] = this.col[1] * env;
-      b[o + 5] = this.col[2] * env;
-      let dead = 0;
-      if (b[o + 1] < 0) { st.ground++; dead = 1; }
-      else if (this.age[i] > C.life) { st.age++; dead = 1; }
-      else if (b[o] * b[o] + b[o + 2] * b[o + 2] > rE2) { st.edge++; dead = 1; }
-      if (dead) {
-        const l = --this.n;
-        if (i !== l) {
-          b.copyWithin(o, l * 7, l * 7 + 7);
-          this.age[i] = this.age[l];
-          continue;   // re-examine the swapped-in grain
-        }
-      } else i++;
+    // substep, so a fast-forward integrates the same trajectory the watched
+    // page does (_substep, above). nSub is 1 in real time.
+    const h = this._substep(wf), nSub = Math.max(1, Math.ceil(dt / h));
+    for (let k = 0; k < nSub; k++) {
+      const dts = dt / nSub, ts = t - dt + dts * (k + 1);
+      for (let i = 0; i < this.n;) {
+        const o = i * 7;
+        windAt(w, wf, b[o], b[o + 1], b[o + 2], ts);
+        b[o] += w[0] * dts;
+        b[o + 1] += (w[1] - this.vs) * dts;
+        b[o + 2] += w[2] * dts;
+        this.age[i] += dts;
+        // brightness envelope: ease in at the anther, out at the end of life
+        const env = Math.max(0, Math.min(
+          this.age[i] / C.fadeIn, 1, (C.life - this.age[i]) / C.fadeOut));
+        b[o + 3] = this.col[0] * env;
+        b[o + 4] = this.col[1] * env;
+        b[o + 5] = this.col[2] * env;
+        let dead = 0;
+        if (b[o + 1] < 0) { st.ground++; dead = 1; }
+        else if (this.age[i] > C.life) { st.age++; dead = 1; }
+        else if (b[o] * b[o] + b[o + 2] * b[o + 2] > rE2) { st.edge++; dead = 1; }
+        if (dead) {
+          const l = --this.n;
+          if (i !== l) {
+            b.copyWithin(o, l * 7, l * 7 + 7);
+            this.age[i] = this.age[l];
+            continue;   // re-examine the swapped-in grain
+          }
+        } else i++;
+      }
     }
   }
 }
