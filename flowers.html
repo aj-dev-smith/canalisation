@@ -12344,35 +12344,41 @@ const FL_STEP_BUDGET = 8;
 const FL_STEP_BUDGET_FF = 40;
 // HOW MUCH ROOM A SPECIMEN TAKES, MEASURED RATHER THAN CHOSEN. The shipped
 // 2.5 was set by eye against a single flower's corolla, and it was wrong by
-// nearly 4x in the direction that shows: at garden=7 seed=21 two specimens had
-// grown THROUGH each other. Grown headlessly, all 8 flowering species x all 4
-// forms at 3000 steps, taking horizontal reach hypot(x,z) off the DRAWN
-// streams (the same argument as floralBounds: measure what is on screen, not a
-// guess reconstructed from organ lengths). Units; WORLD.unitM = 0.0625 m/unit.
+// nearly 5x in the direction that shows: at garden=7 seed=21 two specimens had
+// grown THROUGH each other. Grown headlessly at 3000 steps, taking horizontal
+// reach hypot(x,z) off the DRAWN streams — the same argument as floralBounds,
+// measure what is on screen rather than a guess reconstructed from organ
+// lengths. `maxR` is the outermost vertex, `r90` the radius nine tenths of the
+// drawn geometry lives inside: the BODY, as against one flopping arm.
+// Units; WORLD.unitM = 0.0625 m/unit.
 //
-//   species              maxR (worst form)   r90 (worst form)   height
-//   Abyssal Frond            22.13  daisy        9.24  double    48.5
-//   Cathedral Fern           21.56  daisy        6.16  daisy     43.8
-//   Spiral Ossuary           20.60  daisy       16.77  daisy     42.6
-//   Sun Coral                12.86  daisy        6.03  daisy     46.6
-//   Nightglass Parasol       10.62  double       5.85  double    10.8
-//   Ember Creeper            10.44  abc          7.54  abc       23.1
-//   Hoarfrost Thicket         9.75  daisy        6.53  daisy     18.2
-//   Sulphur Rosette           3.38  abc          1.89  abc        4.5
-//   over 32 cells: maxR min 3.37 / med 9.49 / max 22.13
-//                  r90  min 1.22 / med 5.76 / max 16.77
+// 8 flowering species x 4 forms x 5 seeds (the seeds a garden actually deals,
+// baseSeed + i*7919), 160 cells:
+//   maxR   p10  3.6   med  9.7   p75 14.4   p90 23.2   max 70.9
+//   r90    p10  2.2   med  5.0   p75  7.5   p90 12.1   max 20.4
 //
-// maxR is one flopping arm — a daisy bolts a 9-10 unit peduncle and throws it
-// sideways at tropism 0.002 — so FULL clearance for two median neighbours is
-// 19.0 units and for the two worst 44.3. That field is too sparse to read as a
-// field: at 44 units apart plants 20-48 units tall stop being a stand and
-// become a row of isolated specimens.
+// ⚠ TWO THINGS THAT SWEEP FOUND AND THE FIRST, ONE-SEED VERSION OF IT DID NOT.
+// The one-seed table (med maxR 9.49, med r90 5.76) got the MIDDLE right and the
+// TAIL completely wrong, and the tail is what collides:
+//   - reach is a statement about a SEED as much as a species. Ember Creeper
+//     columbine reads maxR 7.4 at seed 21 and 65.9 at seed 31697 — the same
+//     species and the same form, 9x apart.
+//   - reach is not bounded in TIME for that species. Sampled every 200 steps,
+//     seed 31697 goes 11.9 (step 1000) -> 28.8 -> 44.4 -> 70.9 (step 3200) and
+//     is still climbing linearly: a creeper whose axes never arrest. NO fixed
+//     spacing keeps a creeper off its neighbours, and none should be expected
+//     to — that is the organism's business (organBudget / apical control), not
+//     placement's, and it is why the numbers below are quoted as medians.
 //
-// ⚠ SO THIS IS A STATED FRACTION AND IT SHOULD BE READ AS ONE. 12 units is
-// FULL clearance of two median BODIES (r90, 11.5) and 63% of full clearance of
-// two median ARMS. Two neighbours' outermost peduncles may cross; their bodies
-// do not, which is what a meadow looks like and what the interpenetration
-// defect actually was. It is 4.8x the shipped value.
+// ⚠ SO 12 IS A STATED FRACTION AND IT SHOULD BE READ AS ONE. It is full
+// clearance of two median BODIES (2 x 5.0 = 10.0) with margin, ~80% of a p75
+// pair (15.0), and 62% of full clearance of two median ARMS (2 x 9.7 = 19.4).
+// Full arm clearance was measured and rejected by looking: at 19-44 units apart
+// plants 20-48 units tall stop being a stand and read as a row of isolated
+// specimens. Two neighbours' outermost peduncles may cross; their bodies do
+// not, which is what a meadow looks like and what the defect actually was.
+// Grown and checked end to end (garden=7 seed=21 at step 3600): 3 of 21 pairs
+// overlap at r90 and all three involve the runaway creeper or the hero.
 const FL_GARDEN_SPACING = 12;
 // Field radius per specimen, from constant areal density. N discs of radius
 // s/2 saturate a dart-thrown (random sequential adsorption) disc at ~0.547
