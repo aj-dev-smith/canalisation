@@ -38,10 +38,11 @@
 // WHY IT NEEDS NO HERO EXEMPTION, and what measuring that turned up. The
 // subject of a shot is large on screen by construction, so at the flower
 // close-up's own framing a petal is ~180 px against a ~75-cell lattice and the
-// cap lands above it: 96.6% of the petal stream survives (browser, ?focus=
-// flower, near face 4.51 units — the sweep and the gate are in
-// test/flowers_capture.mjs). The exemption is the law itself, which is the
-// property the vein cull's anchor was built for too.
+// cap lands above it: the LARGEST petal in the close-up is drawn float for
+// float as it was, which is the gate in test/flowers_capture.mjs (the sweep
+// beside it prints the whole stream against distance, and 96.6% of it survives
+// the browser's own measured close-up). The exemption is the law itself, which
+// is the property the vein cull's anchor was built for too.
 //
 // The 3.4% that does not survive, and the 18% of the TRI stream that goes with
 // it, is worth knowing about because it is not the leaves: it is STAMENS and

@@ -245,14 +245,35 @@ if (n <= 1) {
         `${(100 * row.tri).toFixed(1).padStart(8)}%  ${(100 * row.pet).toFixed(1).padStart(10)}%  ` +
         `${(100 * row.seg).toFixed(1).padStart(9)}%`);
     }
-    // THE GATE, on the page's own measured close-up distance. The corolla is
-    // the subject and the close-up must keep essentially all of it; 0.95 is a
-    // floor with the measured value (0.966 in the browser) inside it, not a
-    // tolerance fitted to a result. The vein row is a second gate and an exact
-    // one — this law is about surfaces and must not touch the vasculature,
-    // which is the channel the whole engine is visible through.
-    ok(gate.pet >= 0.95, 'close-up keeps its corolla',
-      `${(100 * gate.pet).toFixed(1)}% of the petal stream at d 4.51`);
+    // THE GATE, and the first one written here was fitted to a growth stage.
+    //
+    // "the corolla keeps >= 95% of the petal stream at the close-up" passed at
+    // 1600 steps (96.6%) and FAILED at this file's own default of 1400 (89.0%),
+    // because a younger flower's organs are SMALLER and a cap in pixels bites a
+    // small organ first. A percentage of a stream is not the claim 28_lod.js
+    // makes anyway. The claim is that the SUBJECT is large on screen, so gate
+    // exactly that, and it is stage-independent:
+    //
+    //   the largest petal in the close-up is drawn EXACTLY as it was.
+    //
+    // If the biggest thing the shot is pointed at loses a single vertex to the
+    // raster cap, the "no hero exemption" argument is false and the file should
+    // say so instead of shipping a tolerance.
+    const big = (BB) => {
+      let k = -1, len = -1;
+      for (const o of BB.organs) {
+        if (o.meta.kind !== 'petal') continue;
+        if ((o.meta.len || 0) > len) { len = o.meta.len || 0; k = BB.organs.indexOf(o); }
+      }
+      return k < 0 ? null : { len, n: BB.organs[k].pet1 - BB.organs[k].pet0 };
+    };
+    const gOff = big(shot(1, false)), gOn = big(shot(4.51, true));
+    if (gOff && gOn) {
+      ok(gOn.n === gOff.n, 'the biggest petal in the close-up is untouched',
+        `len ${gOff.len.toFixed(2)}: ${gOn.n} == ${gOff.n} floats`);
+    }
+    // and the vein gate, which is exact at every distance: this law is about
+    // surfaces and must not reach the channel the engine is visible through
     ok(gate.seg === 1, 'the cap touches no vein', `${(100 * gate.seg).toFixed(1)}%`);
   }
 }

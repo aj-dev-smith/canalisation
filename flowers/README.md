@@ -396,7 +396,12 @@ measure the fog is taken from, and the conservative end of the approximation.
 **No hero exemption**, because the law exempts the subject by itself: at the
 close-up's own framing a petal is ~180 px against a ~75-cell lattice. That
 claim is a sweep and a gate in `flowers_capture.mjs`, and measuring it
-corrected it twice. The solo page is **not** byte-identical any more: at the
+corrected it three times — the last being the gate itself. "The corolla keeps
+>= 95% of the petal stream" passed at 1600 steps (96.6%) and **failed at 1400
+(89.0%)**, because a younger flower's organs are smaller and a cap in pixels
+bites a small organ first: a percentage of a stream is a statement about a
+growth stage. The gate is now the claim itself and is stage-independent — *the
+largest petal in the close-up is drawn exactly as it was*, float for float. The solo page is **not** byte-identical any more: at the
 measured close-up distance it keeps 96.6% of the petal stream and 81% of the
 tri stream, and **none of the difference is leaves** — it is stamens and
 carpels, because `detL = 1.0` is applied by organ *identity*, so a 0.1-unit
