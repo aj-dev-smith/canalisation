@@ -240,7 +240,29 @@ equals the old literal, `test/smoke.mjs` 73/73 before and after.
   (30 um, 1200 kg/m^3, published pine-pollen range 2-4 **[D]**). The
   drawn size and shed rate are legibility choices, same category as the
   vein width floor; a mote's colour is the key light's, because that is
-  what a backlit mote shows you.
+  what a backlit mote shows you — the FIELD's key light in a garden
+  (`flFieldPal`), so a grain matches the air it is in.
+
+  **A field sheds, not a plant.** One population walks every germinated
+  specimen: a grain is not part of a plant, since once shed its only
+  inputs are the wind and gravity, and the cap and the upload are
+  scene-wide. Each specimen sheds on the plant time *it* was paid this
+  frame; every grain drifts on the *world* clock, because the air is one
+  field and `windAt`'s `t` is a wall clock. `test/flowers_pollen.mjs` is
+  the census — anthers, grains, where they go, what a step costs — and
+  it found that neither `max` nor `life` has ever bound this population:
+  it is **advection-limited** (a grain crosses the whole clearing in
+  0.65 s), 0 cap refusals at 59 anthers and 0% of deaths by age.
+
+  ⚠ **And it barely reaches the screen.** Measured over a full director
+  cycle at `?garden=7`: ~330-390 grains alive, of which the number drawn
+  larger than 2 px is **0 (wide) / 5 (dolly) / 7 (close) / 23 (low)** and
+  never more than 4 px, because the camera is never within 10 units of a
+  grain. The mechanism is right and what a viewer gets is a scatter of
+  one-pixel dots; it reads as motes only in the close-up. The lever is the
+  drawn size — a constant *angular* size, the vein width floor's argument
+  applied to a mote — and it is a look decision, so it is swept by
+  `?pol=rate,beyond,size` and not taken here.
 - **`flowers/parity.test.mjs`** reconciles the captured streams against the
   shipped `drawSpecimen` float for float (petal stream accounted, exact
   ribbon-count parity) and checks the organ bracketing. 20 checks, 2 species.

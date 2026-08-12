@@ -133,15 +133,27 @@ function flBoot() {
   }
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
-  // grains sample the same wind field the stem bends in. Hero-only for now —
-  // the population, like the close-up, follows the subject.
-  const pollen = new FlPollen(seed, S.pal.keyCol);
+  // grains sample the same wind field the stem bends in. ONE population over
+  // the whole FIELD — it walks `specs`, so every germinated specimen sheds,
+  // where phase 2's hero-only population left six of seven flowering plants
+  // shedding nothing. A mote's colour is the KEY LIGHT'S, so in a field it is
+  // scene.pal's (flFieldPal's blend) and not the hero's: a grain matches the
+  // air it is in. On a solo page flFieldPal returns the hero's palette
+  // unchanged, so this is the same colour it always was. The plan goes in for
+  // the clearing's rim alone.
+  const pollen = new FlPollen(seed, scene.pal.keyCol, plan);
+  // The pollen's own clock: the WORLD's, read as a delta off `step`. The air
+  // is one field over the clearing and its `t` is a wall clock, not any
+  // plant's age (18_pollen.js has the argument). Equal to specs[0].age on
+  // every path today — the hero is exempt from the step pool and paid first
+  // out of it — which is why the shipped call got the right number.
+  let polStep = 0;
 
   let step = 0, acc = 0, last = performance.now();
   let fpsA = 0, capMs = 0, rrCursor = 0, heroHadCull = false;
   let stepN = 0, capN = 0;   // plants stepped / recaptured this frame, for the HUD
   // console access, and the screenshot harness's window into the piece
-  window.__fl = { S, env, scene, B, garden: specs, plan,
+  window.__fl = { S, env, scene, B, garden: specs, plan, pollen,
     // stepN/capN are how many specimens the step pool paid and how many were
     // rebuilt this frame — the batching's own numbers, so a harness can read
     // the thing that is being traded rather than infer it from fps. The
@@ -752,7 +764,7 @@ function flBoot() {
     }
     capN = dirty.reduce((a2, d) => a2 + (d ? 1 : 0), 0);
     if (anyDirty) captureDirty(dirty);
-    if (specs[0].stepped > 0) pollen.step(S, specs[0].stepped, specs[0].age);
+    if (step > polStep) { pollen.step(specs, step - polStep, step); polStep = step; }
     scene.uploadPollen(pollen.buf, pollen.n * 7);
     // spot fields bake lazily in the draw loop; ship each to the GPU once.
     // HERO's library only: the 3-row atlas is scene-wide (see uBull note).
