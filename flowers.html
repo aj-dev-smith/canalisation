@@ -11382,10 +11382,17 @@ class FlPollen {
   //          uMeanMag + sigmaW per plant-time unit;
   //   time:  the fastest mode's period is 2pi/max|om|.
   // Both land near 6 plant-time units, which is exactly the real-time page's
-  // per-frame cap — so THE WATCHED PAGE WAS ALWAYS FINE AND ?ff= WAS NOT: at
-  // its 40-step chunk a grain jumps 12.8 units per call, further than the
-  // shortest gust is long, and can be emitted and killed inside one call. A
-  // fast-forwarded screenshot was showing a population that never existed.
+  // per-frame cap — so nSub is 1 in real time and this reaches ?ff= alone,
+  // where a 40-step chunk moved a grain 12.8 units in one forward-Euler step,
+  // further than the shortest gust is long.
+  //
+  // ⚠ WHAT IT BUYS IS THE TRAJECTORY, NOT THE CENSUS, and the first version of
+  // this note said otherwise off a measurement with a bug in it. Measured
+  // properly (garden=7 seed 21, step 3000): the ff chunk goes 302 -> 276
+  // grains alive against the watched page's 326, i.e. the fast-forwarded
+  // population was already within ~15% of the one you watch. It is kept
+  // because an under-resolved integration through a gust ladder is wrong in a
+  // way a count cannot show, and because it is free where it does not bite.
   _substep(wf) {
     if (this._dtMax) return this._dtMax;
     let kmax = 0, ommax = 0;
