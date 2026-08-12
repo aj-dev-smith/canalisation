@@ -427,6 +427,10 @@ class FlowerScene {
     bg.renderOrder = -1;
     this.scene.add(bg);
 
+    // --- the ground (25_ground.js): one disc, the same eye and the same fog
+    // uniforms as the tissue, alpha carrying depth like everything else ---
+    this.ground = new FlGround(this.scene, pal, { eyeU, fogU });
+
     // --- post: the shipped chain, manually — scene to a half-float target
     // (alpha = depth), bright + 3x widening blur at half res for bloom, the
     // scene blurred twice at half res for defocus, one comp to the screen ---
