@@ -10,10 +10,14 @@
 // ?garden=N (2..12) grows a whole flowering FIELD: N specimens planned by
 // flGardenPlan (35_garden.js) — species dealt without replacement, a jittered
 // ring with minimum spacing, germination staggered — all in ONE wind, each
-// with its own FlowerBuffers, recaptured only when it changed. Specimen 0 is
-// the hero: ?focus=flower, the sight-line cull, the bullseye and the pollen
-// all stay pointed at it. Without ?garden the page is the single-specimen
-// piece exactly (held to byte identity by the formref harness + parity).
+// with its own FlowerBuffers, recaptured only when it changed. The sight-line
+// cull, the bullseye and the pollen all stay pointed at specimen 0, the hero;
+// the CAMERA no longer does — ?focus=flower and the garden director both score
+// every flower in the field (45_director.js). Without ?garden the page is the
+// single-specimen piece exactly (held to byte identity by the formref harness
+// + parity).
+//
+// ?shot=wide|dolly|close|low pins the garden director to one shot, for stills.
 
 function flBoot() {
   const q = new URLSearchParams(location.search);
@@ -98,7 +102,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso= ?garden=2..12 ?radius=';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso= ?garden=2..12 ?radius= ?shot=wide|dolly|close|low';
   // The form rail. A form is decided at founding — every organ's identity is
   // read off sp the step it is founded — so switching means regrowing, and
   // the honest way to regrow deterministically is a reload with the form in
@@ -140,9 +144,16 @@ function flBoot() {
   window.__fl = { S, env, scene, B, garden: specs, plan,
     // stepN/capN are how many specimens the step pool paid and how many were
     // rebuilt this frame — the batching's own numbers, so a harness can read
-    // the thing that is being traded rather than infer it from fps
+    // the thing that is being traded rather than infer it from fps. The
+    // director's own state (shot, elapsed, subject) rides along beside them:
+    // one handle, so a harness never has to guess which half it is reading.
     state: () => ({ step, radius, capMs, stepN, capN,
-      target: target.toArray(), dist: scene.camera.position.distanceTo(target) }) };
+      target: target.toArray(),
+      dist: scene.camera.position.distanceTo(target),
+      eye: scene.camera.position.toArray(),
+      shot: framedShot, el: director ? director.el : 0,
+      subj: director && director.subj
+        ? { i: director.subj.i, ax: director.subj.ai } : null }) };
 
   // Frame the flowers once there are flowers; the whole plant until then.
   // Petal REACH, not axis length — a flower framed from `ax.length` reads as
@@ -156,35 +167,43 @@ function flBoot() {
   // petalled one: the terminal flower's organs ride the whole curling apex,
   // so its bound is a third of the plant and "focus" degenerates to a wide
   // shot. Score petals against drawn reach.
-  // the main trunk's point nearest a height — the thing a close-up must clear
-  function trunkNear(y) {
+  // the main trunk's point nearest a height — the thing a close-up must clear.
+  // Takes the plant rather than closing over the hero's: in a garden the best
+  // flower may be on any specimen, and it must clear ITS OWN trunk.
+  function trunkNear(y, P) {
     let tp = null, bd = 1e9;
-    for (const p of S.plant.axes[0].pts) {
+    for (const p of P.axes[0].pts) {
       const d = Math.abs(p[1] - y);
       if (d < bd) { bd = d; tp = p; }
     }
     return tp;
   }
-  function bestFlower() {
+  // The shipped close-up score for one floral axis, lifted out of bestFlower
+  // unchanged so the garden director (45_director.js) can run it over every
+  // specimen instead of only the hero. Returns 0 for "not a subject".
+  function flowerScore(sp, ai) {
+    const ax = sp.S.plant.axes[ai];
+    if (!ax.floral) return 0;
+    let n = 0;
+    for (const org of ax.organs) if (org.petal && org.len > 0.05) n++;
+    if (n < 3) return 0;
+    const bb = sp.B.floralBounds(ai);
+    if (!bb) return 0;
+    // a corolla pressed against the trunk cannot be photographed — the
+    // trunk above it crosses every facing shot (measured: a flower 0.36
+    // units off a trunk, corolla radius 2.13, framed with the trunk through
+    // its face). Prefer clearance, in units of the corolla's own radius.
+    const tp = ai === 0 ? null : trunkNear(bb.c[1], sp.S.plant);
+    const clear = tp
+      ? smoothstep(0.25, 1.0,
+        Math.hypot(bb.c[0] - tp[0], bb.c[2] - tp[2]) / Math.max(0.3, bb.r))
+      : 1;
+    return n / (0.6 + bb.r) * (0.15 + 0.85 * clear);
+  }
+  function bestFlower(sp) {
     let best = -1, bestScore = 0;
-    for (let ai = 0; ai < S.plant.axes.length; ai++) {
-      const ax = S.plant.axes[ai];
-      if (!ax.floral) continue;
-      let n = 0;
-      for (const org of ax.organs) if (org.petal && org.len > 0.05) n++;
-      if (n < 3) continue;
-      const bb = B.floralBounds(ai);
-      if (!bb) continue;
-      // a corolla pressed against the trunk cannot be photographed — the
-      // trunk above it crosses every facing shot (measured: a flower 0.36
-      // units off a trunk, corolla radius 2.13, framed with the trunk through
-      // its face). Prefer clearance, in units of the corolla's own radius.
-      const tp = ai === 0 ? null : trunkNear(bb.c[1]);
-      const clear = tp
-        ? smoothstep(0.25, 1.0,
-          Math.hypot(bb.c[0] - tp[0], bb.c[2] - tp[2]) / Math.max(0.3, bb.r))
-        : 1;
-      const score = n / (0.6 + bb.r) * (0.15 + 0.85 * clear);
+    for (let ai = 0; ai < sp.S.plant.axes.length; ai++) {
+      const score = flowerScore(sp, ai);
       if (score > bestScore) { bestScore = score; best = ai; }
     }
     return best;
@@ -194,7 +213,19 @@ function flBoot() {
   // from organ bases and organ lengths, and both put the camera inside the
   // corolla: a petal rides a petiole and is as wide as it is long, so nothing
   // short of the geometry knows where the flower ends.
-  function frameAxisFlower(ai) {
+  // `sp` is the specimen the flower belongs to — the hero on the solo page and
+  // in every shipped path, any member of the field when the garden director
+  // picks a subject. Everything below reads sp.S / sp.B where it used to close
+  // over the hero's S and B; with sp = specs[0] it is the shipped framer.
+  // `out` (garden only, null everywhere else) is a unit horizontal direction
+  // pointing from the middle of the field OUT through this flower. A close-up
+  // taken from inside a stand is taken through somebody else's leaf — measured
+  // on ?garden=7: the subject 10.7 units away and a neighbour's blade filling
+  // the frame, which no cull here can fix (the sight-line clearance is the
+  // HERO's, and the blade belongs to another specimen). Standing outside the
+  // crowd and shooting inward is what a photographer in a real border does.
+  function frameAxisFlower(ai, sp, out) {
+    const S = sp.S, B = sp.B;
     const bb = B.floralBounds(ai);
     if (!bb) return false;
     target.lerp(new THREE.Vector3(bb.c[0], bb.c[1], bb.c[2]), 0.03);
@@ -206,7 +237,7 @@ function flBoot() {
     // target and dolly but never azimuth, so the camera routinely looked at a
     // flower bisected by the stem it grew from). Only while the viewer is not
     // orbiting — a drag owns the camera for a while.
-    if (performance.now() - lastOrbit > 6000) {
+    if (performance.now() - lastOrbit > orbitHold()) {
       const ax = S.plant.axes[ai];
       // the TIP tangent, not the base-to-tip chord: a bolting peduncle curves
       // (the daisy's scape launches sideways and turns up), and the disc faces
@@ -222,12 +253,14 @@ function flBoot() {
         // flower's own measured clearance — a head already held out on a
         // peduncle (the daisy) keeps its facing; only a trunk-hugger is steered.
         if (ai !== 0) {
-          const tp = trunkNear(target.y);
+          const tp = trunkNear(target.y, S.plant);
           const lx = target.x - tp[0], lz = target.z - tp[2];
           const ll = Math.hypot(lx, lz);
           const w = 0.9 * (1 - smoothstep(0.8, 2.5, ll));
           if (ll > 1e-4 && w > 1e-3) { d.x += w * lx / ll; d.z += w * lz / ll; d.normalize(); }
         }
+        // ...and then away from the FIELD, if there is one
+        if (out) { d.x += 0.85 * out.x; d.z += 0.85 * out.z; d.normalize(); }
         // A SPURRED FLOWER IS PHOTOGRAPHED IN THREE-QUARTER: its subject is
         // depth — the tubes running back behind the corolla — and the face-on
         // shot that flatters a radial disc hides them completely (measured:
@@ -252,17 +285,86 @@ function flBoot() {
     return true;
   }
   const _desiredEye = new THREE.Vector3();
+  const _poseE = new THREE.Vector3(), _poseT = new THREE.Vector3();
   let lastOrbit = -1e9;
+  // How long a drag owns the camera. 6 s on the solo page, unchanged — one
+  // subject in the middle of the frame, you turn it, you look, it resumes. A
+  // FIELD is a place, and a viewer who drags is walking around in it, so the
+  // garden holds far longer (FL_DIR_ORBIT_HOLD, 45_director.js).
+  // A FUNCTION, not a value: 45_director.js's consts are in their temporal
+  // dead zone while flBoot() runs (see below), and reading one at boot throws
+  // — which it duly did on the first run of this file.
+  const orbitHold = () => (gardenN ? FL_DIR_ORBIT_HOLD * 1000 : 6000);
   scene.controls.addEventListener('start', () => { lastOrbit = performance.now(); });
   let framedAx = -1;   // which axis the flower shot is on; -1 = no clearance
+  let framedShot = '';   // the shot the garden director is playing (HUD, tools)
+  // The garden director, built LAZILY on the first updateFraming — every const
+  // in 45_director.js is in its temporal dead zone while flBoot() runs, since
+  // that file sorts after this one in the one-scope bundle. updateFraming is
+  // only ever called from inside requestAnimationFrame, which is after the
+  // whole bundle has executed. See the load-order note in 45_director.js.
+  let director = null;
+  // The garden's per-shot lens plan { k, min }: uRange = max(min, k * focal
+  // distance). null on the solo page, where the shipped law below still runs
+  // untouched.
+  let dofPlan = null;
+  // ?shot=wide|dolly|close|low pins the director to one shot — a capture
+  // affordance, the same category as ?ff=, so a still of a named shot is
+  // reproducible. Unpinned (the page as watched) it cycles.
+  let pinIdx = -2;   // resolved on first use — FL_DIR_SHOTS is in its TDZ at boot
+  // ?focus=flower's subject, held between re-picks: a subject that changes
+  // every frame is a cut nobody asked for.
+  let focusPick = null, focusPickT = -1e9;
+
   function updateFraming() {
     framedAx = -1;
+    const now = performance.now();
+    // The director is built here and not at boot: every const in
+    // 45_director.js is in its temporal dead zone while flBoot() runs, and
+    // updateFraming only ever runs inside requestAnimationFrame. Its field
+    // measurement is hoisted above the focus branch because ?focus=flower
+    // needs it too — a close-up wants to know which way is OUT of the field.
+    if (gardenN) {
+      if (!director) {
+        director = flDirMake();
+        director.t0 = now; director._last = now; director.pickT = now;
+        director.fromEye.copy(scene.camera.position);
+        director.fromTgt.copy(target);
+        director.fromR = radius;
+        director.cut = true; director.el = 0;
+      }
+      if (!director.field || now - director.scan > 500) {
+        director.field = flDirField(specs);
+        director.scan = now;
+      }
+    }
     if (focus === 'flower') {
-      // >= 0, not truthy: the best flower is often the TERMINAL one, axis 0,
-      // and a truthiness test silently fell through to the wide shot
-      const ax = bestFlower();
-      if (ax >= 0 && frameAxisFlower(ax)) {
-        framedAx = ax;
+      // In a garden the override means the best flower IN THE FIELD, not on
+      // the hero. Re-picked every 3 s and only when the challenger is clearly
+      // better (1.25x), so the shot does not hop between two equal corollas.
+      let sp = specs[0], ax;
+      if (gardenN) {
+        if (!focusPick || now - focusPickT > 3000) {
+          const p = flDirPick(specs, scene.camera.position, flowerScore, director.field);
+          focusPickT = now;
+          if (p && (!focusPick || !specs[focusPick.i].S ||
+            !specs[focusPick.i].B.floralBounds(focusPick.ai) ||
+            p.score > focusPick.score * 1.25)) focusPick = p;
+        }
+        if (focusPick) { sp = specs[focusPick.i]; ax = focusPick.ai; }
+        else ax = -1;
+      } else {
+        // >= 0, not truthy: the best flower is often the TERMINAL one, axis 0,
+        // and a truthiness test silently fell through to the wide shot
+        ax = bestFlower(sp);
+      }
+      const outF = gardenN && director.field && ax >= 0
+        ? flDirOutward(director, director.field, sp.B.floralBounds(ax) || { c: [0, 0, 0] })
+        : null;
+      if (ax >= 0 && frameAxisFlower(ax, sp, outF)) {
+        // the sight-line cull is the HERO's alone (it is captured with a cull;
+        // the members are not), so a close-up on a member gets no clearance
+        framedAx = sp === specs[0] ? ax : -1;
         scene.controls.target.copy(target);
         scene.fogU.uFogNear.value = Math.max(0, scene.camera.position.distanceTo(target) - radius * 1.1);
         const eye = scene.camera.position;
@@ -271,37 +373,140 @@ function flBoot() {
         if (Math.abs(d - want) > 0.01) {
           eye.sub(target).multiplyScalar(1 + (want / Math.max(1e-3, d) - 1) * 0.03).add(target);
         }
+        if (gardenN) { dofPlan = { k: 0.22, min: 0.4 }; framedShot = 'focus'; }
         return;
       }
     }
     if (gardenN) {
-      // THE FIELD: the bound of every specimen that exists, the same lerp and
-      // dolly law as the solo wide shot. Phase-1 deliberately — a proper
-      // garden director (walking the field, visiting flowers) comes later.
-      let n = 0, x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
-      for (const s of specs) {
-        if (!s.S) continue;
-        for (const ax of s.S.plant.axes) for (const p of ax.pts) {
-          if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0];
-          if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1];
-          if (p[2] < z0) z0 = p[2]; if (p[2] > z1) z1 = p[2];
-          n++;
+      // THE GARDEN DIRECTOR (45_director.js): a shot list for a field, in
+      // place of phase 1's single framing of the bound of everything — which
+      // is how six plants ended up bunched in a column 84 units away.
+      const dtms = now - director._last;
+      director._last = now;
+
+      // THE VIEWER OWNS THE CAMERA. While a drag is recent the director does
+      // not touch the eye at all, and its shot clock STOPS (rather than
+      // running on invisibly and cutting the instant control comes back).
+      // autoRotate is handed back at the same time — the solo page's idle
+      // drift, which is the right feel for a view somebody chose, and exactly
+      // the wrong one under a director that owns its own azimuth.
+      if (now - lastOrbit < orbitHold()) {
+        director.t0 += dtms;
+        director.resume = true;
+        scene.controls.autoRotate = true;
+        target.copy(scene.controls.target);
+        scene.fogU.uFogNear.value = Math.max(0,
+          scene.camera.position.distanceTo(target) - radius * 1.1);
+        dofPlan = { k: 0.40, min: 2.0 };
+        return;
+      }
+      scene.controls.autoRotate = false;
+
+      if (pinIdx === -2) pinIdx = FL_DIR_SHOTS.findIndex(sh => sh.name === q.get('shot'));
+      let name;
+      if (pinIdx >= 0) {
+        director.cut = director.shot !== pinIdx;
+        if (director.cut) { director.shot = pinIdx; director.t0 = now; }
+        director.el = (now - director.t0) / 1000;
+        name = FL_DIR_SHOTS[pinIdx].name;
+      } else {
+        name = flDirClock(director, now);
+      }
+      // coming back from a drag re-enters on a full eased transition from
+      // wherever the viewer left the camera, so control is handed back rather
+      // than snatched
+      if (director.resume) { director.resume = false; director.t0 = now; director.cut = true; director.el = 0; }
+
+      const F = director.field;
+      if (!F) return;
+      // The subject is chosen ON THE CUT and held for the whole shot: a subject
+      // that changes mid-shot is a cut nobody asked for. The one exception is
+      // a subject that has stopped being one — the field goes on growing, and
+      // a flower chosen when it was the only one open can be left behind by a
+      // corolla ten times its size. Re-checked every 6 s, and it takes a 1.6x
+      // better challenger to actually move (measured: with no hysteresis the
+      // top two trade places continuously).
+      if (director.cut || !director.subj || !specs[director.subj.i].S) {
+        director.subj = flDirPick(specs, scene.camera.position, flowerScore, F);
+        director.pickT = now;
+      } else if (now - director.pickT > 6000) {
+        director.pickT = now;
+        const cur = flDirScoreOf(specs, director.subj.i, director.subj.ai, flowerScore, F);
+        const p = flDirPick(specs, scene.camera.position, flowerScore, F);
+        if (p && p.score > cur * 1.6) director.subj = p;
+      }
+      const sj = director.subj;
+      const bb = sj ? specs[sj.i].B.floralBounds(sj.ai) : null;
+      // nothing flowering yet: the two shots that need a subject fall back to
+      // the field itself. The low shot does not need one.
+      if (!bb && (name === 'close' || name === 'dolly')) name = 'wide';
+
+      if (name === 'close') {
+        if (director.cut) {
+          director.fromEye.copy(scene.camera.position);
+          director.fromTgt.copy(target);
+          director.fromR = radius;
         }
+        frameAxisFlower(sj.ai, specs[sj.i], flDirOutward(director, F, bb));
+        framedAx = sj.i === 0 ? sj.ai : -1;
+        scene.controls.target.copy(target);
+        scene.fogU.uFogNear.value = Math.max(0,
+          scene.camera.position.distanceTo(target) - radius * 1.1);
+        const eye = scene.camera.position;
+        const d = eye.distanceTo(target);
+        const want = radius * 2.35;
+        if (Math.abs(d - want) > 0.01) {
+          eye.sub(target).multiplyScalar(1 + (want / Math.max(1e-3, d) - 1) * 0.03).add(target);
+        }
+        // THE ARRIVAL GATE. The close-up is the shipped framer, and the shipped
+        // framer is three exponential lerps (target 0.03, eye 0.012, dolly
+        // 0.03) — which is an ease-OUT, and an ease-out STARTS at its fastest.
+        // Measured over a full cycle with the sampler: entering the close-up
+        // from the dolly peaked at 59-62 units/s, against 19 for every other
+        // transition (WORLD.unitM makes that 3.9 m/s against 1.2 — a whip
+        // against a walk). Holding the camera back toward the pose it cut from,
+        // by the same smoothstep the other shots use, turns those three lerps
+        // into an ease-in-out without touching the framer the solo page shares.
+        {
+          const w = smoothstep(0, 1, Math.min(1, director.el / FL_DIR_TRANS));
+          if (w < 0.999) {
+            scene.camera.position.lerp(director.fromEye, 1 - w);
+            target.lerp(director.fromTgt, 1 - w);
+            radius = lerp(radius, director.fromR, 1 - w);
+            scene.controls.target.copy(target);
+          }
+        }
+        dofPlan = { k: 0.22, min: 0.4 };
+        framedShot = name;
+        return;
       }
-      if (n) {
-        const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
-        const r = Math.max(2, Math.hypot(x1 - cx, y1 - cy, z1 - cz));
-        target.lerp(new THREE.Vector3(cx, Math.max(1.2, cy), cz), 0.02);
-        radius += (Math.max(5, r * 1.15) - radius) * 0.02;
+      if (director.cut) {
+        director.fromEye.copy(scene.camera.position);
+        director.fromTgt.copy(target);
+        director.fromR = radius;
       }
+      const sh = FL_DIR_SHOTS[director.shot];
+      const u = Math.min(1, director.el / (FL_DIR_TRANS + sh.hold));
+      let rWant;
+      if (name === 'dolly') { rWant = flDirPoseDolly(director, F, bb, u); dofPlan = { k: 0.35, min: 1.5 }; }
+      else if (name === 'low') { rWant = flDirPoseLow(director, F); dofPlan = { k: 0.45, min: 3.0 }; }
+      else { rWant = flDirPoseWide(director, F); dofPlan = { k: 0.42, min: 3.0 }; }
+      // THE TRANSITION: an eased blend from the pose the camera held at the
+      // cut to the pose this shot wants, over FL_DIR_TRANS seconds, with a
+      // little damping on top so a want that moves (the dolly, a growing
+      // subject) never reads as a step. Ease-in-out, not the exponential lerp
+      // the solo framer uses: a cut across a field is a MOVE, and an
+      // exponential move starts at its fastest.
+      const w = smoothstep(0, 1, Math.min(1, director.el / FL_DIR_TRANS));
+      _poseE.copy(director.fromEye).lerp(director.wantEye, w);
+      _poseT.copy(director.fromTgt).lerp(director.wantTgt, w);
+      scene.camera.position.lerp(_poseE, 0.12);
+      target.lerp(_poseT, 0.12);
+      radius += (lerp(director.fromR, rWant, w) - radius) * 0.12;
       scene.controls.target.copy(target);
-      scene.fogU.uFogNear.value = Math.max(0, scene.camera.position.distanceTo(target) - radius * 1.1);
-      const eye = scene.camera.position;
-      const d = eye.distanceTo(target);
-      const want = radius * 2.35;
-      if (Math.abs(d - want) > 0.01) {
-        eye.sub(target).multiplyScalar(1 + (want / Math.max(1e-3, d) - 1) * 0.02).add(target);
-      }
+      scene.fogU.uFogNear.value = Math.max(0,
+        scene.camera.position.distanceTo(target) - radius * 1.1);
+      framedShot = name;
       return;
     }
     let n = 0, cx = 0, cy = 0, cz = 0, r = 0;
@@ -555,9 +760,17 @@ function flBoot() {
     // scale otherwise — eased so a focus change racks rather than snaps
     const fDist = scene.camera.position.distanceTo(target);
     scene.compU.uFocus.value = fDist;
-    const dofT = focus === 'flower'
-      ? Math.max(0.4, fDist * 0.22)
-      : Math.max(2.0, radius * 0.62);
+    // In a field the subject is the thing being FRAMED and everything nearer
+    // is foreground: the range is scheduled off the focal distance per shot
+    // (45_director.js sets dofPlan), so the plants the dolly passes blur
+    // instead of pulling focus. uFocus is the camera-to-target distance and
+    // alpha is linear depth, so this is only a scheduling question. dofPlan is
+    // null on the solo page and the shipped law below is what runs there.
+    const dofT = dofPlan
+      ? Math.max(dofPlan.min, fDist * dofPlan.k)
+      : (focus === 'flower'
+        ? Math.max(0.4, fDist * 0.22)
+        : Math.max(2.0, radius * 0.62));
     dofR = dofR === undefined ? dofT : dofR + (dofT - dofR) * 0.05;
     scene.compU.uRange.value = dofR;
     // THE GROUND EXISTS NOW (25_ground.js), and the framing laws predate it:
@@ -585,7 +798,8 @@ function flBoot() {
         tp += cc.p;
       }
       text = `${S.name}  garden of ${specs.length}  seed ${seed}\n` +
-        `${germ} germinated · ${flow} flowering · ${tp} petals\n` +
+        `${germ} germinated · ${flow} flowering · ${tp} petals` +
+        (framedShot ? `  ·  shot: ${framedShot}` : '') + '\n' +
         `step ${step}${ff > 0 ? '  (fast-forward ' + ff + ')' : ''} · capture ${capMs.toFixed(1)}ms ` +
         `(${capN}/${specs.length}) · ${Math.round(fpsA)} fps`;
     }
