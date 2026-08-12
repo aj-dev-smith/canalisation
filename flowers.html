@@ -12089,42 +12089,55 @@ class FlowerScene {
   }
 
   // Push one captured frame into the GPU-side buffers.
-  upload(B) {
-    if (B.triN > this.triCap) {
-      while (this.triCap < B.triN) this.triCap *= 2;
+  upload(B) { this.uploadMany([B]); }
+
+  // Concatenate N specimens' FlowerBuffers into the four stream arrays — the
+  // garden path. One list of copies per stream, caps grown by doubling as
+  // ever; with a single B this is `upload` exactly, byte for byte, which is
+  // what keeps the solo page the same page.
+  uploadMany(list) {
+    let tn = 0, pn = 0, sn = 0, qn = 0;
+    for (const B of list) { tn += B.triN; pn += B.petbN; sn += B.segN; qn += B.ptN; }
+
+    if (tn > this.triCap) {
+      while (this.triCap < tn) this.triCap *= 2;
       this.triArr = new Float32Array(this.triCap);
       this._bindTri();
     }
-    this.triArr.set(B.tri.subarray(0, B.triN));
+    let o = 0;
+    for (const B of list) { this.triArr.set(B.tri.subarray(0, B.triN), o); o += B.triN; }
     this._triIB.needsUpdate = true;
-    this.triGeo.setDrawRange(0, B.triN / 10);
+    this.triGeo.setDrawRange(0, tn / 10);
 
-    if (B.petbN > this.petCap) {
-      while (this.petCap < B.petbN) this.petCap *= 2;
+    if (pn > this.petCap) {
+      while (this.petCap < pn) this.petCap *= 2;
       this.petArr = new Float32Array(this.petCap);
       this._bindPet();
     }
-    this.petArr.set(B.petb.subarray(0, B.petbN));
+    o = 0;
+    for (const B of list) { this.petArr.set(B.petb.subarray(0, B.petbN), o); o += B.petbN; }
     this._petIB.needsUpdate = true;
-    this.petGeo.setDrawRange(0, B.petbN / 16);
+    this.petGeo.setDrawRange(0, pn / 16);
 
-    if (B.segN > this.segCap) {
-      while (this.segCap < B.segN) this.segCap *= 2;
+    if (sn > this.segCap) {
+      while (this.segCap < sn) this.segCap *= 2;
       this.segArr = new Float32Array(this.segCap);
       this._bindSeg();
     }
-    this.segArr.set(B.seg.subarray(0, B.segN));
+    o = 0;
+    for (const B of list) { this.segArr.set(B.seg.subarray(0, B.segN), o); o += B.segN; }
     this._segIB.needsUpdate = true;
-    this.ribGeo.instanceCount = B.segN / 12;
+    this.ribGeo.instanceCount = sn / 12;
 
-    if (B.ptN > this.ptCap) {
-      while (this.ptCap < B.ptN) this.ptCap *= 2;
+    if (qn > this.ptCap) {
+      while (this.ptCap < qn) this.ptCap *= 2;
       this.ptArr = new Float32Array(this.ptCap);
       this._bindPt();
     }
-    this.ptArr.set(B.pt.subarray(0, B.ptN));
+    o = 0;
+    for (const B of list) { this.ptArr.set(B.pt.subarray(0, B.ptN), o); o += B.ptN; }
     this._ptIB.needsUpdate = true;
-    this.ptGeo.setDrawRange(0, B.ptN / 7);
+    this.ptGeo.setDrawRange(0, qn / 7);
   }
 
   render(t) {
@@ -12173,73 +12186,45 @@ class FlowerScene {
   }
 }
 
-// ===================== flowers/40_boot.js =====================
-// Boot: grow a real specimen with the shipped factory, at the solver's own
-// clock, and keep the camera on the flowers.
+// ===================== flowers/35_garden.js =====================
+// The garden: a PLAN for N specimens, and the floral-form config shared by the
+// hero and every garden member.
 //
-// ?species=Ember%20Creeper  ?seed=21  ?speed=2  ?ff=900
-//
-// `ff` fast-forwards in chunks before settling into real time — for arriving
-// at bloom in a screenshot harness. Growth is deterministic from (species,
-// seed, steps), so a fast-forwarded plant IS the plant you'd have watched.
+// flGardenPlan is flowers' answer to App.plantGarden (70_app.js:843), with the
+// two defects ROADMAP 10b names fixed at the planning stage:
+//   - species are dealt WITHOUT replacement — a shuffled deck, reshuffled when
+//     exhausted — because the shipped picker sampling with replacement turned
+//     a stand of seven from a catalogue of eight into four species;
+//   - 'Ashfall Spire' is skipped: the conifer never flowers (florigenRate 0)
+//     and this piece is titled flowers.
+// Placement is plantGarden's jittered ring with one addition: a minimum
+// spacing, rejection-sampled deterministically, so corollas don't
+// interpenetrate. startAt staggers germination over ~0..FL_GARDEN_STAGGER
+// world steps — the piece is "growing a garden", so the growth IS the show.
+// Everything is drawn from one mulberry32 stream off the base seed: the URL
+// fully decides the field, same discipline as everything else here.
 
-function flBoot() {
-  const q = new URLSearchParams(location.search);
-  const name = q.get('species') || 'Ember Creeper';
-  const seed = +(q.get('seed') || 21);
-  let speed = +(q.get('speed') || 1);
-  let ff = Math.max(0, +(q.get('ff') || 0));
+// Total plant.step() calls per frame across the whole garden, in real time.
+// The budget is a POOL (plantGarden's warm-budget discipline): when the field
+// wants more steps than the pool holds, the world clock itself slows — a heavy
+// frame slows garden time instead of killing fps. 8 covers a solo specimen's
+// per-frame maximum (6) with headroom, so the single-specimen page never feels
+// the cap; a field of 12 in canalisation runs at ~2/3 step per plant per frame.
+const FL_STEP_BUDGET = 8;
+// During ?ff= the budget is the solo fast-forward chunk (40): ff is a harness
+// affordance, not a watched scene, and it must still pay every step honestly.
+const FL_STEP_BUDGET_FF = 40;
+const FL_GARDEN_STAGGER = 2400;   // world steps over which germination spreads
+const FL_GARDEN_SPACING = 2.5;    // min distance between origins (corolla reach)
 
-  const env = flEnv();
-  const S = App.prototype.makeSpecimen.call(env, name, seed);
-  // Flowers are the subject and floral organs never senesce, but the canopy
-  // under them does; hold it unless asked to watch the whole arc. NOTE
-  // plant.sp, not S.sp — Plant copies its options at construction (PITFALLS).
-  if (q.get('hold') !== 'none') S.plant.sp.senesceHold = true;
-  // HOMEOTIC FORM. `?form=double` is the ABC model's B-class expansion
-  // (Meyerowitz [D]): a real doubled rose, peony or camellia is a homeotic
-  // conversion — organs that would have been stamens founded as petals. Here
-  // that is ONE threshold moved on the floral identity field q the engine
-  // already computes: org.petal = q < petalQ (40_plant.js:611), so raising
-  // petalQ converts the stamen-analog whorls and EVERYTHING else falls out —
-  // petal library, petal length, petal tilt, and the q-lagged bloom, so the
-  // converted inner whorls stay cupped while the outer ones recurve. Nested,
-  // graded, never drawn. `?homeo=` moves the threshold (default 0.62; the
-  // engine's q tops out at 0.94, so 0.9+ is a fully sterile double, which is
-  // what real double cultivars are). Set before any step runs, so every organ
-  // is FOUNDED under the new identity, and on both copies of sp (the plant
-  // holds its own — PITFALLS).
-  // Both halves of the C-class mutant: B-expansion converts the stamen band
-  // (petalQ up), and lost determinacy keeps the meristem founding (apexRenew —
-  // the WUS shutoff failing, see consumeApex()). floralOrgans is the ceiling
-  // over the physical spend and has to rise with it, same shape as budTake
-  // needing the organ pool raised with it (TUNING's ladder).
-  // Measured (Ember Creeper, seed 21, step 3200): wild 6 petals/flower;
-  // B alone ~8; B + renewal 0.6 -> 14, 0.8 -> 23 — peony-grade — and C alone
-  // gives 11 with petalQ untouched, which is the pure ag phenotype. Fruit
-  // still sets in every case; the apex spends through floralGrace.
-  // The double ships as the DEFAULT form — the piece is titled flowers, and a
-  // 20-petal graded corolla is the strongest image it makes. `?form=wild` is
-  // the shipped configuration, untouched.
-  // `?form=abc` — now the DEFAULT — is the FULL ABC model: whorlBands cuts q
-  // into sepal / petal / stamen / carpel (sharp boundaries — AP3/AG mutual
-  // antagonism), so a flower is a green calyx, a corolla, a ring of filaments
-  // carrying glowing anthers, and a central pistil, in that order, off the one
-  // coordinate the meristem's self-consumption already produces. The bands are
-  // set against the MEASURED q founding sequence (abc_probe: renewal 0.45 +
-  // floralDome 3 spans q 0 -> 0.85 over ~13 organs), not an idealised one:
-  // {0.08, 0.30, 0.65} gives S4-6 P4-6 A3-5 C0-2, which is a eudicot plan.
-  // floralDome 3 is the measured size at which Ember's WORKING axillaries
-  // already convert (R0/organR = 3.0); without it a terminal apex founds ten
-  // organs at q ~= 0 and reads as one whorl (the Parasol's only flower is
-  // terminal, so this is not optional). Compression knobs as the double's.
-  // No ?form= rotates the default PER SEED, so a bare open shows a different
-  // body plan each visit and every form is reachable by reseeding — a piece
-  // titled flowers should not always open on the same one. Deterministic
-  // (seed % 4), same discipline as everything else here: the URL fully
-  // decides the plant. 'wild' stays URL-only — it is the control, not a card
-  // in the deck. (Order puts the default seed, 21, on the columbine.)
-  const FL_FORMS = ['abc', 'columbine', 'daisy', 'double'];
+const FL_FORMS = ['abc', 'columbine', 'daisy', 'double'];
+
+// The homeotic form config, extracted verbatim from flBoot so each garden
+// member gets its own form off its own seed. Same reads of `q`, same order,
+// same defaults as the single-specimen path always had — the reference
+// harness (formref) holds this to byte identity against HEAD's inline block.
+// Returns the form name it applied.
+function flApplyForm(S, name, seed, q) {
   const form = q.get('form') || FL_FORMS[seed % FL_FORMS.length];
   if (form === 'abc') {
     // TWO FLORAL PROGRAMS, assigned per species from the measured whorl
@@ -12417,12 +12402,148 @@ function flBoot() {
     S.sp = { ...S.sp, ...over };
     Object.assign(S.plant.sp, over);
   }
-  const B = new FlowerBuffers();
+  return form;
+}
+
+// flGardenPlan(baseSeed, n, { radius, heroName }) -> [{ name, seed, origin,
+// startAt }]. Entry 0 is the hero: the URL's seed, startAt 0, standing at the
+// clearing's centre — every close-up affordance (?focus=flower, the cull, the
+// bullseye draw, the pollen) stays pointed at specimen 0. heroName pins its
+// species (an explicit ?species=); null lets the deck deal it, and either way
+// the hero's species counts against the first deal so a default field of 8 is
+// 8 distinct species.
+function flGardenPlan(baseSeed, n, opts = {}) {
+  const rad = isFinite(opts.radius) ? Math.max(FL_GARDEN_SPACING, opts.radius) : 7;
+  const r = mulberry32((baseSeed ^ 0x517cc1b7) >>> 0);
+  const pool = Object.keys(SPECIES).filter(nm => nm !== 'Ashfall Spire');
+  let deck = [], firstDeal = true;
+  const draw = () => {
+    if (!deck.length) {
+      deck = pool.slice();
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = (r() * (i + 1)) | 0;
+        const t = deck[i]; deck[i] = deck[j]; deck[j] = t;
+      }
+      if (firstDeal && opts.heroName) {
+        const k = deck.indexOf(opts.heroName);
+        if (k >= 0) deck.splice(k, 1);
+      }
+      firstDeal = false;
+    }
+    return deck.pop();
+  };
+  const plan = [];
+  for (let i = 0; i < n; i++) {
+    let origin = [0, 0, 0];
+    if (i > 0) {
+      // plantGarden's jittered ring, with the hero's slot (the centre) left
+      // out and a minimum spacing enforced by deterministic rejection: 24
+      // tries against every already-placed origin, keeping the last try if
+      // the clearing is genuinely too crowded (n=12 at radius 7 never is —
+      // measured: 0 rejections exhausted over seeds 1..64).
+      for (let t = 0; t < 24; t++) {
+        const a = (i - 0.5) / Math.max(1, n - 1) * TAU + (r() - 0.5) * 0.9;
+        const d = rad * (0.55 + 0.75 * r());
+        origin = [Math.cos(a) * d, 0, Math.sin(a) * d];
+        let clear = true;
+        for (const p of plan) {
+          if (Math.hypot(origin[0] - p.origin[0], origin[2] - p.origin[2]) < FL_GARDEN_SPACING) {
+            clear = false; break;
+          }
+        }
+        if (clear) break;
+      }
+    }
+    plan.push({
+      name: i === 0 && opts.heroName ? opts.heroName : draw(),
+      seed: i === 0 ? baseSeed : (baseSeed + i * 7919) >>> 0,   // plantGarden's stride
+      origin,
+      startAt: i === 0 ? 0 : Math.floor(r() * FL_GARDEN_STAGGER),
+    });
+  }
+  return plan;
+}
+
+// ===================== flowers/40_boot.js =====================
+// Boot: grow a real specimen with the shipped factory, at the solver's own
+// clock, and keep the camera on the flowers.
+//
+// ?species=Ember%20Creeper  ?seed=21  ?speed=2  ?ff=900
+//
+// `ff` fast-forwards in chunks before settling into real time — for arriving
+// at bloom in a screenshot harness. Growth is deterministic from (species,
+// seed, steps), so a fast-forwarded plant IS the plant you'd have watched.
+//
+// ?garden=N (2..12) grows a whole flowering FIELD: N specimens planned by
+// flGardenPlan (35_garden.js) — species dealt without replacement, a jittered
+// ring with minimum spacing, germination staggered — all in ONE wind, each
+// with its own FlowerBuffers, recaptured only when it changed. Specimen 0 is
+// the hero: ?focus=flower, the sight-line cull, the bullseye and the pollen
+// all stay pointed at it. Without ?garden the page is the single-specimen
+// piece exactly (held to byte identity by the formref harness + parity).
+
+function flBoot() {
+  const q = new URLSearchParams(location.search);
+  const name = q.get('species') || 'Ember Creeper';
+  const seed = +(q.get('seed') || 21);
+  let speed = +(q.get('speed') || 1);
+  let ff = Math.max(0, +(q.get('ff') || 0));
+  // ?garden=N, clamped to 2..12. Absent (or unparseable) means the
+  // single-specimen page, bit for bit.
+  const gN = Math.round(+(q.get('garden')));
+  const gardenN = q.get('garden') !== null && isFinite(gN) ? Math.max(2, Math.min(12, gN)) : 0;
+
+  // THE PLAN comes first in garden mode, because entry 0 decides the hero's
+  // species when the URL didn't: the deck deals without replacement and the
+  // hero's card counts against the first deal.
+  const plan = gardenN
+    ? flGardenPlan(seed, gardenN, {
+        radius: q.get('radius') !== null ? +q.get('radius') : undefined,
+        heroName: q.get('species') !== null ? name : null,
+      })
+    : null;
+
+  const env = flEnv();
+  const S = App.prototype.makeSpecimen.call(env, gardenN ? plan[0].name : name, seed);
+  // Flowers are the subject and floral organs never senesce, but the canopy
+  // under them does; hold it unless asked to watch the whole arc. NOTE
+  // plant.sp, not S.sp — Plant copies its options at construction (PITFALLS).
+  // ?hold=none applies to every specimen in the field.
+  if (q.get('hold') !== 'none') S.plant.sp.senesceHold = true;
+  // HOMEOTIC FORM — flApplyForm (35_garden.js) carries what used to be inline
+  // here, verbatim: `?form=` pins it, a bare open rotates the default per
+  // seed, and in a garden every member rotates off its OWN seed, so a default
+  // field shows every body plan. 'wild' stays URL-only — the control, not a
+  // card in the deck. (Order puts the default seed, 21, on the columbine.)
+  const form = flApplyForm(S, gardenN ? plan[0].name : name, seed, q);
+
+  // ONE AIR over the whole clearing (70_app.js makeSpecimen's own argument):
+  // the hero's field is THE field, handed to every later specimen.
+  const wind = S.plant.wind;
+
+  // The garden: specs[0] is the hero. Members are constructed LAZILY, at most
+  // one per frame as the world clock reaches their startAt — a Plant costs
+  // ~70ms to construct (every Axis settles its meristem 220 steps), and seven
+  // back to back was plantGarden's measured 501ms hitch.
+  const specs = [{ S, B: new FlowerBuffers(), plan: plan ? plan[0] : null,
+    startAt: 0, age: 0, stepped: 0, form, _drawn: false }];
+  if (plan) {
+    for (let i = 1; i < plan.length; i++) {
+      specs.push({ S: null, B: null, plan: plan[i], startAt: plan[i].startAt,
+        age: 0, stepped: 0, form: null, _drawn: false });
+    }
+  }
+  const B = specs[0].B;   // the hero's buffers — bestFlower, the cull, tools
+
   const scene = new FlowerScene(document.getElementById('stage'), S.pal);
   // The bullseye threshold: one number per specimen, drawn from the published
   // trimodal distribution (Todesco 2022 [D]: 0.33 / 0.59 / 0.78, sd ~0.16 —
   // we jitter by a modest fraction of that). Same PRNG discipline as the
   // fruit's chemistry: a derived stream off the specimen seed.
+  // LIMITATION (garden): uBull and the spots atlas are scene-wide and stay
+  // the HERO's — every member's petals sample the hero's bullseye threshold
+  // and the hero's baked spot rows. Whisper-level pigment, wrong per species;
+  // a per-specimen uniform + a wider atlas is the fix when it earns a look.
   {
     const r = mulberry32((seed ^ 0xb0117e) >>> 0);
     const modes = [0.33, 0.59, 0.78];
@@ -12430,7 +12551,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso=';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso= ?garden=2..12 ?radius=';
   // The form rail. A form is decided at founding — every organ's identity is
   // read off sp the step it is founded — so switching means regrowing, and
   // the honest way to regrow deterministically is a reload with the form in
@@ -12440,7 +12561,7 @@ function flBoot() {
     for (const f of FL_FORMS) {
       const b = document.createElement('button');
       b.textContent = f;
-      if (f === form) b.classList.add('on');
+      if (f === form && !gardenN) b.classList.add('on');
       b.onclick = () => {
         const p = new URLSearchParams(location.search);
         p.set('form', f);
@@ -12448,16 +12569,28 @@ function flBoot() {
       };
       rail.appendChild(b);
     }
+    // the garden is a reload too — a field is grown, not toggled
+    const g = document.createElement('button');
+    g.textContent = gardenN ? 'solo' : 'garden';
+    if (gardenN) g.classList.add('on');
+    g.onclick = () => {
+      const p = new URLSearchParams(location.search);
+      if (gardenN) p.delete('garden'); else { p.set('garden', '7'); p.delete('form'); }
+      location.search = p.toString();
+    };
+    rail.appendChild(g);
   }
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
-  // grains sample the same wind field the stem bends in.
+  // grains sample the same wind field the stem bends in. Hero-only for now —
+  // the population, like the close-up, follows the subject.
   const pollen = new FlPollen(seed, S.pal.keyCol);
 
   let step = 0, acc = 0, last = performance.now();
-  let fpsA = 0;
+  let fpsA = 0, capMs = 0, rrCursor = 0, heroHadCull = false;
   // console access, and the screenshot harness's window into the piece
-  window.__fl = { S, env, scene, B, state: () => ({ step, radius, target: target.toArray(), dist: scene.camera.position.distanceTo(target) }) };
+  window.__fl = { S, env, scene, B, garden: specs, plan,
+    state: () => ({ step, radius, capMs, target: target.toArray(), dist: scene.camera.position.distanceTo(target) }) };
 
   // Frame the flowers once there are flowers; the whole plant until then.
   // Petal REACH, not axis length — a flower framed from `ax.length` reads as
@@ -12589,6 +12722,36 @@ function flBoot() {
         return;
       }
     }
+    if (gardenN) {
+      // THE FIELD: the bound of every specimen that exists, the same lerp and
+      // dolly law as the solo wide shot. Phase-1 deliberately — a proper
+      // garden director (walking the field, visiting flowers) comes later.
+      let n = 0, x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+      for (const s of specs) {
+        if (!s.S) continue;
+        for (const ax of s.S.plant.axes) for (const p of ax.pts) {
+          if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0];
+          if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1];
+          if (p[2] < z0) z0 = p[2]; if (p[2] > z1) z1 = p[2];
+          n++;
+        }
+      }
+      if (n) {
+        const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
+        const r = Math.max(2, Math.hypot(x1 - cx, y1 - cy, z1 - cz));
+        target.lerp(new THREE.Vector3(cx, Math.max(1.2, cy), cz), 0.02);
+        radius += (Math.max(5, r * 1.15) - radius) * 0.02;
+      }
+      scene.controls.target.copy(target);
+      scene.fogU.uFogNear.value = Math.max(0, scene.camera.position.distanceTo(target) - radius * 1.1);
+      const eye = scene.camera.position;
+      const d = eye.distanceTo(target);
+      const want = radius * 2.35;
+      if (Math.abs(d - want) > 0.01) {
+        eye.sub(target).multiplyScalar(1 + (want / Math.max(1e-3, d) - 1) * 0.02).add(target);
+      }
+      return;
+    }
     let n = 0, cx = 0, cy = 0, cz = 0, r = 0;
     for (const ax of S.plant.axes) {
       if (!ax.floral) continue;
@@ -12627,40 +12790,57 @@ function flBoot() {
     }
   }
 
-  function capture() {
+  // the sight-line clearance, sized off the subject flower's DRAWN bounds
+  // FROM THE LAST FRAME (they must be read before reset() empties the
+  // streams; one frame stale is invisible) and opened only as the camera
+  // arrives (the shipped ramp — engaging at full width from the wide shot
+  // made half the plant vanish in one frame). Hero-only: garden members are
+  // captured cull-less, so a close-up through a crowded field may still catch
+  // a NEIGHBOUR's blade across the frame — noted, phase 2's problem.
+  function heroCull() {
+    if (framedAx < 0) return null;
+    const e = scene.camera.position;
+    const bb = B.floralBounds(framedAx);
+    if (!bb) return null;
+    let rad = Math.max(S.sp.fruitScale * 2.2, bb.r * 1.25);
+    const dx0 = bb.c[0] - e.x, dy0 = bb.c[1] - e.y, dz0 = bb.c[2] - e.z;
+    const de = Math.hypot(dx0, dy0, dz0) || 1;
+    const near = smoothstep(0.20, 0.38, 2 * rad / de);
+    if (near < 0.01) return null;
+    rad *= near;
+    return { keep: S.plant.axes[framedAx], rad, dist: de, r: de - rad,
+      dx: dx0 / de, dy: dy0 / de, dz: dz0 / de };
+  }
+
+  // Recapture every specimen whose streams are stale, then upload the lot as
+  // one concatenation. A specimen that did not step keeps last frame's
+  // streams — the ribbons face the eye in the vertex shader, so they are
+  // valid from any camera; only the PIXEL width floor and the meristem's
+  // detail ramp go stale, which a stepping plant refreshes anyway.
+  function captureDirty(dirty) {
+    const t0 = performance.now();
     const e = scene.camera.position;
     env.cam.eye[0] = e.x; env.cam.eye[1] = e.y; env.cam.eye[2] = e.z;
     env.cam.dist = e.distanceTo(target);
     // width floor as shipped, LOD off: every vein the chemistry grew.
     setView(env.cam.eye, 0.004, 0);
-    // the sight-line clearance, sized off the subject flower's DRAWN bounds
-    // FROM THE LAST FRAME (they must be read before reset() empties the
-    // streams; one frame stale is invisible) and opened only as the camera
-    // arrives (the shipped ramp — engaging at full width from the wide shot
-    // made half the plant vanish in one frame)
-    let cull = null;
-    if (framedAx >= 0) {
-      const bb = B.floralBounds(framedAx);
-      if (bb) {
-        let rad = Math.max(S.sp.fruitScale * 2.2, bb.r * 1.25);
-        const dx0 = bb.c[0] - e.x, dy0 = bb.c[1] - e.y, dz0 = bb.c[2] - e.z;
-        const de = Math.hypot(dx0, dy0, dz0) || 1;
-        const near = smoothstep(0.20, 0.38, 2 * rad / de);
-        if (near >= 0.01) {
-          rad *= near;
-          cull = { keep: S.plant.axes[framedAx], rad, dist: de, r: de - rad,
-            dx: dx0 / de, dy: dy0 / de, dz: dz0 / de };
-        }
-      }
+    const cull = heroCull();
+    heroHadCull = cull !== null;
+    for (let i = 0; i < specs.length; i++) {
+      const s = specs[i];
+      if (!s.S || !dirty[i]) continue;
+      env.t = s.age;
+      s.B.reset();
+      flDrawSpecimen(env, s.B, s.S, i === 0 ? cull : null);
+      s._drawn = true;
     }
-    B.reset();
-    flDrawSpecimen(env, B, S, cull);
-    scene.upload(B);
+    scene.uploadMany(specs.filter(s => s.S).map(s => s.B));
+    capMs = capMs * 0.9 + (performance.now() - t0) * 0.1;
   }
 
-  function countPetals() {
+  function countPetals(P) {
     let p = 0, fl = 0;
-    for (const ax of S.plant.axes) {
+    for (const ax of P.axes) {
       if (ax.floral) fl++;
       for (const org of ax.organs) if (org.petal) p++;
     }
@@ -12672,31 +12852,84 @@ function flBoot() {
     last = now;
     fpsA = fpsA * 0.95 + (1 / Math.max(1e-3, dt)) * 0.05;
 
-    let stepped = 0;
-    if (ff > 0) {
-      const n = Math.min(ff, 40);
-      for (let i = 0; i < n; i++) S.plant.step(1);
-      step += n; ff -= n; stepped = n;
-    } else {
-      acc += dt * 125 * speed;
-      const n = Math.min(6, Math.floor(acc));
-      acc -= n;
-      for (let i = 0; i < n; i++) S.plant.step(1);
-      step += n; stepped = n;
+    for (const s of specs) s.stepped = 0;
+    // Plant at most ONE pending member per frame, and hold the world clock
+    // while doing so: construction is the sharp cost (plantGarden's lesson),
+    // and pausing one world step keeps every specimen exactly at
+    // age == world - startAt, so nobody accrues silent debt.
+    let planting = false;
+    if (gardenN) {
+      for (const s of specs) {
+        if (s.S || s.startAt > step) continue;
+        const p = s.plan;
+        const M = App.prototype.makeSpecimen.call(env, p.name, p.seed, p.origin, wind);
+        if (q.get('hold') !== 'none') M.plant.sp.senesceHold = true;
+        s.form = flApplyForm(M, p.name, p.seed, q);
+        s.S = M; s.B = new FlowerBuffers();
+        planting = true;
+        break;
+      }
     }
-    env.t = step;
+
+    // THE WORLD CLOCK, gated by the step pool. The pool is total plant.step()
+    // calls the frame may spend (FL_STEP_BUDGET, 35_garden.js); the world only
+    // advances as many steps as every active specimen can be paid for, so a
+    // heavy field slows garden time instead of killing fps — and a solo page
+    // (1 active, pool 8 >= the 6-step frame cap) never feels it.
+    if (!planting) {
+      let nAct = 0;
+      for (const s of specs) if (s.S && s.startAt <= step) nAct++;
+      const pool = ff > 0 ? FL_STEP_BUDGET_FF : Math.max(FL_STEP_BUDGET, nAct);
+      const afford = Math.max(1, Math.floor(pool / Math.max(1, nAct)));
+      let n;
+      if (ff > 0) {
+        n = Math.min(ff, 40, afford);
+        ff -= n;
+      } else {
+        acc += dt * 125 * speed;
+        n = Math.min(6, Math.floor(acc), afford);
+        acc -= n;
+      }
+      step += n;
+      // pay every specimen up to its own age target, round-robin from a
+      // persistent cursor so a capped frame's shortfall is debt paid fairly
+      let left = pool;
+      for (let sweep = 0; left > 0 && sweep < 128; sweep++) {
+        let any = false;
+        for (let k = 0; k < specs.length && left > 0; k++) {
+          const s = specs[(rrCursor + k) % specs.length];
+          if (!s.S || s.age >= step - s.startAt) continue;
+          s.S.plant.step(1); s.age++; s.stepped++; left--; any = true;
+        }
+        if (!any) break;
+      }
+      rrCursor = (rrCursor + 1) % specs.length;
+    }
+    env.t = specs[0].age;
 
     // recapture on camera motion too, not just sim steps: the sight-line
     // clearance is computed at capture time from the capture eye, so a frozen
     // plant with a moving camera (speed=0, or orbiting) kept the clearance —
-    // and the whole cull — from wherever the camera was steps ago
+    // and the whole cull — from wherever the camera was steps ago. In garden
+    // mode camera motion only redraws the HERO, and only while a cull is (or
+    // just was) engaged — the members' streams are camera-valid as captured.
     const _e = scene.camera.position;
     const camMoved = Math.hypot(_e.x - env.cam.eye[0], _e.y - env.cam.eye[1],
       _e.z - env.cam.eye[2]) > 0.02;
-    if (stepped > 0 || camMoved || !frame.drawn) { capture(); frame.drawn = true; }
-    if (stepped > 0) pollen.step(S, stepped, step);
+    const dirty = [];
+    let anyDirty = false;
+    for (let i = 0; i < specs.length; i++) {
+      const s = specs[i];
+      let d = !!s.S && (s.stepped > 0 || !s._drawn);
+      if (i === 0 && camMoved && (!gardenN || framedAx >= 0 || heroHadCull)) d = !!s.S;
+      dirty[i] = d;
+      if (d) anyDirty = true;
+    }
+    if (anyDirty) captureDirty(dirty);
+    if (specs[0].stepped > 0) pollen.step(S, specs[0].stepped, specs[0].age);
     scene.uploadPollen(pollen.buf, pollen.n * 7);
-    // spot fields bake lazily in the draw loop; ship each to the GPU once
+    // spot fields bake lazily in the draw loop; ship each to the GPU once.
+    // HERO's library only: the 3-row atlas is scene-wide (see uBull note).
     const plib = S.plant.leaves.plib || [];
     for (let li = 0; li < plib.length; li++) {
       const L = plib[li];
@@ -12715,11 +12948,25 @@ function flBoot() {
     scene.compU.uRange.value = dofR;
     scene.render(now);
 
-    const c = countPetals();
-    hud.textContent =
+    const c = countPetals(S.plant);
+    let text =
       `${name}  seed ${seed}\n` +
       `${S.plant.stage()}  step ${step}${ff > 0 ? '  (fast-forward ' + ff + ')' : ''}\n` +
       `${c.fl} floral axes · ${c.p} petals · ${pollen.n} grains · ${Math.round(fpsA)} fps`;
+    if (gardenN) {
+      let germ = 0, flow = 0, tp = 0;
+      for (const s of specs) {
+        if (!s.S) continue;
+        germ++;
+        const cc = countPetals(s.S.plant);
+        if (cc.fl > 0) flow++;
+        tp += cc.p;
+      }
+      text = `${S.name}  garden of ${specs.length}  seed ${seed}\n` +
+        `${germ} germinated · ${flow} flowering · ${tp} petals\n` +
+        `step ${step}${ff > 0 ? '  (fast-forward ' + ff + ')' : ''} · capture ${capMs.toFixed(1)}ms · ${Math.round(fpsA)} fps`;
+    }
+    hud.textContent = text;
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

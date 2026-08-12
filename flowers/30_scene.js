@@ -565,42 +565,55 @@ class FlowerScene {
   }
 
   // Push one captured frame into the GPU-side buffers.
-  upload(B) {
-    if (B.triN > this.triCap) {
-      while (this.triCap < B.triN) this.triCap *= 2;
+  upload(B) { this.uploadMany([B]); }
+
+  // Concatenate N specimens' FlowerBuffers into the four stream arrays — the
+  // garden path. One list of copies per stream, caps grown by doubling as
+  // ever; with a single B this is `upload` exactly, byte for byte, which is
+  // what keeps the solo page the same page.
+  uploadMany(list) {
+    let tn = 0, pn = 0, sn = 0, qn = 0;
+    for (const B of list) { tn += B.triN; pn += B.petbN; sn += B.segN; qn += B.ptN; }
+
+    if (tn > this.triCap) {
+      while (this.triCap < tn) this.triCap *= 2;
       this.triArr = new Float32Array(this.triCap);
       this._bindTri();
     }
-    this.triArr.set(B.tri.subarray(0, B.triN));
+    let o = 0;
+    for (const B of list) { this.triArr.set(B.tri.subarray(0, B.triN), o); o += B.triN; }
     this._triIB.needsUpdate = true;
-    this.triGeo.setDrawRange(0, B.triN / 10);
+    this.triGeo.setDrawRange(0, tn / 10);
 
-    if (B.petbN > this.petCap) {
-      while (this.petCap < B.petbN) this.petCap *= 2;
+    if (pn > this.petCap) {
+      while (this.petCap < pn) this.petCap *= 2;
       this.petArr = new Float32Array(this.petCap);
       this._bindPet();
     }
-    this.petArr.set(B.petb.subarray(0, B.petbN));
+    o = 0;
+    for (const B of list) { this.petArr.set(B.petb.subarray(0, B.petbN), o); o += B.petbN; }
     this._petIB.needsUpdate = true;
-    this.petGeo.setDrawRange(0, B.petbN / 16);
+    this.petGeo.setDrawRange(0, pn / 16);
 
-    if (B.segN > this.segCap) {
-      while (this.segCap < B.segN) this.segCap *= 2;
+    if (sn > this.segCap) {
+      while (this.segCap < sn) this.segCap *= 2;
       this.segArr = new Float32Array(this.segCap);
       this._bindSeg();
     }
-    this.segArr.set(B.seg.subarray(0, B.segN));
+    o = 0;
+    for (const B of list) { this.segArr.set(B.seg.subarray(0, B.segN), o); o += B.segN; }
     this._segIB.needsUpdate = true;
-    this.ribGeo.instanceCount = B.segN / 12;
+    this.ribGeo.instanceCount = sn / 12;
 
-    if (B.ptN > this.ptCap) {
-      while (this.ptCap < B.ptN) this.ptCap *= 2;
+    if (qn > this.ptCap) {
+      while (this.ptCap < qn) this.ptCap *= 2;
       this.ptArr = new Float32Array(this.ptCap);
       this._bindPt();
     }
-    this.ptArr.set(B.pt.subarray(0, B.ptN));
+    o = 0;
+    for (const B of list) { this.ptArr.set(B.pt.subarray(0, B.ptN), o); o += B.ptN; }
     this._ptIB.needsUpdate = true;
-    this.ptGeo.setDrawRange(0, B.ptN / 7);
+    this.ptGeo.setDrawRange(0, qn / 7);
   }
 
   render(t) {
