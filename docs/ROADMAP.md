@@ -198,6 +198,60 @@ priority.** The list below is the priority.
    an ARRESTED stand**, because a live meristem is a different program from a retired
    one and a sweep that mixes them reports cost going *down* as the specimen gets
    bigger. Numbers at the end of the 2026-07-30 and 2026-07-31 JOURNAL entries.
+0f. **WHAT THE FLOWER FIELD OWES (`flowers/`, `?garden=N`, landed 2026-08-12).** The
+   flowers page is a garden now: N specimens on one ground in one wind under a four-shot
+   director. It is built, gated (`flowers/parity.test.mjs` 20/20, `test/smoke.mjs` 73/73)
+   and written up in `flowers/README.md`; what follows is the debt, ranked, and the first
+   item is the one that decides whether any of the rest is worth doing.
+
+   0f-i. **NOBODY HAS WATCHED IT AT FRAMERATE IN A REAL BROWSER.** Every judgement about
+   this field — the spacing, the shot list, the ground, the sky, the LOD — is a still or
+   a headless number. This project's own record says that is the weakest evidence it
+   accepts and that the deciding instrument has four times been a person watching for a
+   few seconds (a wind at vibration frequencies, an upside-down crown, a Charlie Brown
+   tree, an invisible pathogen). **Watch a garden of 5, 7 and 12 through at least two
+   full shot cycles before building anything below.** `node tools/flowers_perf.mjs
+   'garden=7&seed=21'` is the sampler, and it prints without judging on purpose.
+
+   0f-ii. **The wide shot does not read as a field.** Looked at 2026-08-12:
+   `?garden=7&seed=21&ff=3000&shot=wide` is a wall of near canopy with nothing receding
+   behind it and no ground in frame. The pose is honest about its own reasoning — the
+   distance is set by the subject (`d = 2.4 hTop`) after a first version that distanced
+   off the ring and photographed the inside of a hedge — but neither version accounts for
+   **canopy reach**, and this catalogue's tail is enormous (one creeper at `maxR` 70.9).
+   The field is measured from *origins* plus a 3.0 canopy margin; measuring it from the
+   drawn bounds instead is the obvious next try, and it is cheap.
+
+   0f-iii. **Pollen is the hero's alone.** `pollen.step(S, ...)` takes specimen 0, so
+   six sevenths of a flowering field shed nothing. It is one of the few channels that
+   says "this place is alive" rather than "this plant is alive". *(Being looked at in
+   parallel; if it has landed, this item is done and the follow-up is cost — grains are
+   points and points are the cheapest thing in the buffer, but seven fields of them are
+   still seven.)*
+
+   0f-iv. **The solo page inherited the ground, and that is a TASTE CALL for AJ.** The
+   ground is unconditional, so the signature Nightglass Parasol close-up goes from a moon
+   in black to a moon over indigo soil. The argument for it is that a plant standing on
+   nothing was always a cheat; the argument against is that the black frame is the shot
+   the piece is known by. Dials, all in `25_ground.js`: `soil0`/`soil1` (both already one
+   step darker than the first attempt, which doubled the field's value against the void)
+   and where the melt begins — `FL_HAZE`'s `N`, the first units of ground that are floor
+   rather than air. `?haze=G,H,P,N` sweeps it in one session. **This wants an eye, not a
+   sweep.**
+
+   0f-v. **Every member wears the hero's bullseye and the hero's spots.** `uBull` and the
+   spot atlas are scene-wide uniforms, so a whole field's petals sample one specimen's
+   pigment pattern — whisper-level, wrong per species, and the fix is a per-specimen
+   uniform plus a wider atlas. Written up in `40_boot.js` where it happens; listed here so
+   it is not rediscovered.
+
+   0f-vi. **Garden time slows with N, and the knob is a pool.** The step budget is
+   `max(8, nAct)` calls a frame, so at N = 12 each plant gets one step a frame against a
+   solo page's six and the world clock runs ~6x slower — a garden of twelve takes ~6x as
+   long to reach bloom. It is the right *shape* of trade (a heavy frame slows garden time
+   rather than fps) and nobody has sat through it. Raising the pool trades it straight
+   back for frame rate; the honest fix is the same one the main app owes (#10b): a grown
+   specimen should not pay full simulation cost to pattern tissue that will never change.
 1. **[#10b's remainder](#10-a-garden-2026-07-29)** — its headline half is 0a above. What
    is left is not about frames: a species picker that samples with replacement (a stand
    of seven from a catalogue of eight came out as four distinct species), and a director

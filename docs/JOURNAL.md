@@ -3665,3 +3665,114 @@ freeze (`speedMul = 0`) before the shutter. And stage polling cannot be made fin
 in headless at all — the app takes up to 12 simulation steps per frame and
 software rendering makes frames long, so a specimen crosses fruiting, ripe and
 senescing inside one 200ms poll whatever `speedMul` says. Stop at `flowering`.
+
+## The flowers piece becomes a field, and three measurements that corrected it (2026-08-12)
+
+`flowers.html` grew one specimen. `?garden=N` grows up to twelve, on one ground in
+one wind on one world clock, with a director rather than a framer. The build is in
+`flowers/README.md` ("A GARDEN") and the constants are in TUNING; this entry is for
+the three things that were **measured against a belief and won**, and for the two
+places the instruments were wrong before the code was.
+
+### 1. The capture cost was FLORAL, and the shipped app's own diagnosis points at leaves
+
+CLAUDE.md says `bladeMesh` is the only level of detail in the piece with no distance
+term, and it is right — but pointed at the flower page it names the wrong organ.
+Profiled with `test/flowers_capture.mjs` (headless, no browser, the same
+`flDrawSpecimen` the page calls), a field of seven at world step 3000 spends **~70%
+of its capture inside FLORAL organs**, not leaves.
+
+The cause is one line in `20_draw.js`: every floral organ is handed `detL = 1.0` —
+the microscope, permanently on — so a petal is built at the leaf's own lattice,
+~5,600 vertices, ~75 x 75. That is right and deliberate for the close-up this piece
+is named after and it is nonsense at forty units. **`detL = 1.0` is applied by organ
+IDENTITY, and identity is not size**: the clearest single case is a 0.1-unit stamen
+filament covering ~70 pixels being built as a 75 x 75 grid.
+
+The fix is the vein cull's law restated for a surface — never finer than one quad
+per pixel, off the drawing buffer's height and the camera's fov, a cap and never a
+raise. Live in a real browser at `garden=7`, capture went **120.9 → 38.0 ms** a
+frame (with the batching below); headless on the shipped plan it is **127.3 → 56.1
+ms** and 25.0M → 7.80M floats.
+
+⚠ **Two traps came with measuring it**, and both are already elsewhere in this file
+in another costume. First, the gate written for "the close-up is not touched" was
+*"the corolla keeps ≥ 95% of the petal stream"*, which passed at 1600 steps (96.6%)
+and failed at 1400 (89.0%) — **a percentage of a stream is a statement about a growth
+stage**, because a younger flower's organs are smaller and a cap in pixels bites a
+small organ first. The gate is the claim itself now: the largest petal in the
+close-up is drawn float for float as it was. Second, a synthesised close-up eye lands
+*inside* the specimen's bounding sphere, the near-face distance clamps at 0.1 and the
+check passes at 100% — **a maximum unreachable by construction**, which is exactly
+`test/venation.mjs`'s first metric trap. The gate sits on the browser's own measured
+close-up distance (4.51) instead.
+
+### 2. Reach is a statement about a SEED, and it is not bounded in time
+
+Spacing was going to be one number off one specimen. The first table was one seed and
+got the middle right and the tail 3x wrong; the sweep that replaced it is 8 species x
+4 forms x 5 seeds, 160 cells, taken off the **drawn** streams
+(`scratch/g2_placement/seedsweep.out`): `maxR` med 9.7, p90 23.2, max 70.9.
+
+The tail is one species doing something no table anticipated. An Ember Creeper
+columbine measures `maxR` **7.4 at seed 21 and 65.9 at seed 31697** — same species,
+same floral form, 9x apart — and sampling it every 200 steps shows why: 11.9 (step
+1000) → 28.8 → 44.4 → **70.9 (step 3200)**, still climbing linearly. Its axes never
+arrest, so its reach is a function of how long you watch it.
+
+**The conclusion is a refusal, and it is the interesting part.** No fixed spacing can
+keep a creeper off its neighbours and none should try — where a plant stands is
+staging, but how far it reaches is the organism's business (`organBudget`, apical
+control), and a spacing chosen to contain the worst case would be a spatial prior
+smuggled in through the environment category. So `FL_GARDEN_SPACING = 12` is quoted
+as what it is: full clearance of two median *bodies*, and **62%** of full clearance
+of two median *arms*. Two neighbours' outermost peduncles may cross; their bodies do
+not. Full arm clearance was built and rejected by looking — at 19-44 units apart,
+plants 20-48 units tall stop being a stand and read as a row of isolated specimens.
+
+### 3. A plain palette mean is mud, measurably
+
+A garden of seven standing in the hero's weather is one species' sky over eight
+species of plant, so the atmosphere is blended across the members. **The obvious
+blend is an average and it is grey**: averaging in RGB cancels hue against hue, and
+on the shipped field at `garden=7&seed=21` the plain mean fog has saturation **0.261
+against a member mean of 0.598**, `keyCol` **0.090 against 0.328**. `flFieldPal`
+keeps the mean's luminance and hue direction exactly and rescales its distance from
+the achromatic axis back to the members' mean chroma, clamped so no channel is driven
+negative — restoring chroma must not invent light. Blended fog saturation lands at
+**0.527**.
+
+Then the hero's lead, which is the only free number in it. At 1.0 the sky is the
+hero's alone; at 0.0 the sky is the field mean and **every garden looks the same**,
+which is the failure a blend invites and the one a still cannot show you. Measured
+over 40 fields of seven: the mean pairwise angle between two gardens' fog **hues** is
+84° at lead 1.0, **64° at 0.35**, 27° at 0.0. 0.35 keeps two thirds of the
+between-garden variety and is still the field's air rather than the hero's.
+
+### A harness checked by a second implementation, twice
+
+`tools/flowers_shot.mjs` summed the garden's buffers and then added the hero's again
+— `__fl.B` *is* `garden[0].B` once a garden exists — and reported **998 organs for
+771**, 10.34M tri floats for 8.18M. Nothing in the page disagreed with it; the
+headless profiler, which reaches the same quantities down an entirely different path,
+did. That is this repo's standing argument (`test/petiole.mjs` keeps a second pipe
+model; `39a_stem.js` keeps `cantileverHz`) arriving in the capture tools.
+
+⚠ **And a profile of a field is a profile of that field's germination schedule.** The
+per-kind table quoted in `28_lod.js` and the first half of `flowers/README.md`'s cost
+section was taken while the stagger was 2400 with uniform-random `startAt`s. The
+shipped plan staggers 1200 with a first cohort, so every member is older and carries
+more leaf, and re-running the identical command today gives **46.7% of floats in the
+petal stream, not 58%**, with sepals overtaking petals in the per-kind table. The
+headline (floral organs dominate; the microscope is the cause) survives at 74%. The
+sub-numbers did not, and nothing would have said so.
+
+### What is NOT settled, and should not be read as settled
+
+**Nobody has watched this at framerate in a real browser.** Every judgement in this
+entry is a still or a headless number, which this project's own record calls the
+weakest evidence it accepts — four times now the deciding instrument has been a
+person watching for a few seconds. Two specific things a still cannot referee: the
+`wide` shot at `garden=7&seed=21&ff=3000` photographs a wall of near canopy with no
+recession and no visible ground (looked at, 2026-08-12), and the world clock slows
+~6x at N = 12 because the step pool divides by the number of active plants.

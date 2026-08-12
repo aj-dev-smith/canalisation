@@ -78,6 +78,8 @@ node test/tree.mjs                                 # ROADMAP 13: the crown — s
 node test/crown.mjs '{"maxGen":2}'                 # HOW MUCH OF ANYTHING IS THERE — crown fill, at five rasters (~40s)
 node test/pathogen.mjs                             # AN AGENT IN THE TISSUE: invasion front against a closed form
 node test/infected.mjs                             # that agent on real tissue, measured and DRAWN
+node test/flowers_capture.mjs '{"n":7}'            # flowers.html: what a FIELD costs to draw, per organ kind
+node flowers/parity.test.mjs                       # flowers.html: captured streams == shipped drawSpecimen
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -90,6 +92,15 @@ node tools/garden_hitch.mjs 7             # DOES PLANTING A GARDEN FREEZE THE TA
 node tools/veinlod_shot.mjs shots         # before/after for the vein LOD, on the hero
 node tools/views_shot.mjs shots           # every render view, wide and close
 GARDEN=7 node tools/clip.mjs shots/g 10   # record the stand moving
+```
+
+The flower page has its own three, because none of the above can drive it (`window.__fl`,
+not `window.app`):
+
+```bash
+node tools/flowers_shot.mjs shots/g.png 'garden=7&seed=21&ff=3000&speed=0&shot=wide'
+node tools/flowers_perf.mjs 'garden=7&seed=21'     # rAF gaps, 30s of LIVE growth; prints, does not judge
+node tools/flowers_horizon.mjs shots/h 'garden=7'  # does the ground melt? three camera heights
 ```
 
 **THERE IS A PATH TRACER NOW, AND IT IS A BRIDGE RATHER THAN A SECOND RENDERER
@@ -836,6 +847,59 @@ statically unstable in twist, which the pre-flight predicted in advance. It is d
 and re-measurable, like `rhoI: 0` and `38_shoot.js`, and **the thing not to do is widen
 `kappa` until it behaves** — that is the one move the pre-flight forbids. ROADMAP 9 says
 what would have to change instead.
+
+**THERE IS A SECOND PAGE, `flowers.html`, AND SINCE 2026-08-12 IT IS A GARDEN.** It is a
+Three.js piece that grows the shipped specimen with the shipped `makeSpecimen` and points
+everything at the organ the main page treats as a minor character. It adds **no growth
+code and no organ geometry** — a renderer, plus petal mechanisms taken from published
+morphogenesis and petal optics, each reading a channel the engine already computes.
+[flowers/README.md](flowers/README.md) is the whole story and is written as argument, not
+as a feature list; read it before touching anything in `flowers/`.
+
+```bash
+node flowers/build.js         # -> flowers.html (single file, no server, no CDN)
+node flowers/parity.test.mjs  # THE GATE: captured streams == shipped drawSpecimen (20/20)
+open 'flowers.html?garden=7'  # a FIELD: N specimens, one wind, one ground, one clock
+```
+
+`?garden=N` (2..12) plans N specimens with `flGardenPlan` (`flowers/35_garden.js`), gives
+each its own species, seed, floral form and germination date, stands them on a real
+ground (`25_ground.js`) and points a four-shot director at them (`45_director.js`).
+Without the parameter the page is the single specimen it always was — every one of those
+paths is a no-op at N < 2 by construction. Five things to know before touching it, all
+with numbers in TUNING and JOURNAL 2026-08-12:
+
+- **The capture cost was FLORAL, not leaf, and this file's own diagnosis pointed the
+  wrong way.** 70% of a field capture is floral organs, because `20_draw.js` hands every
+  floral organ `detL = 1.0` — the microscope permanently on — so a 0.1-unit stamen
+  filament covering 70 pixels was built as a 75 x 75 grid. `28_lod.js` caps the blade
+  mesh at **one quad per pixel**, off the drawing buffer's height and the camera's fov:
+  `garden=7` went 120.9 → 38.0 ms of capture a frame. **Do not lower that cap to buy
+  frames — it is Nyquist, not taste**, exactly like the vein cull's anchor, and the same
+  goes for `FL_RECAP_HZ` (four samples per period of the wind's fastest gust), which sets
+  how few specimens a frame may redraw.
+- **The spacing is a stated fraction and the tail is unbounded.** `FL_GARDEN_SPACING = 12`
+  comes off a 160-cell sweep of drawn reach (8 species x 4 forms x 5 seeds): median arm
+  9.7, median body 5.0, **max 70.9**. 12 is full clearance of two median bodies and
+  **62%** of two median arms, chosen by looking — full arm clearance reads as a row of
+  isolated specimens rather than a stand. And **reach is a statement about a seed**: one
+  Ember Creeper columbine measures 7.4 at seed 21 and 65.9 at seed 31697, still climbing
+  linearly at step 3200. No spacing can contain that and none should try.
+- **A blended sky needs its chroma restored, and the hero's lead is measured.** Averaging
+  palettes in RGB lands on grey (fog saturation 0.261 against a member mean of 0.598), so
+  `flFieldPal` keeps the mean's luminance and hue and rescales chroma back. `FL_SKY_LEAD
+  = 0.35` is measured, not tasted: mean pairwise angle between two gardens' fog hues is
+  84° at lead 1.0, **64° at 0.35** and 27° at 0.0 — a pure field mean gives every garden
+  the same sky.
+- **Garden time slows with N.** The step pool is `max(8, nAct)` calls a frame, so at
+  N = 12 each plant gets one step a frame against the solo page's six and the world clock
+  runs ~6x slower. That is deliberate — a heavy frame slows garden time instead of
+  killing fps — and it has not been watched.
+- **NOBODY HAS WATCHED THE FIELD AT FRAMERATE IN A REAL BROWSER.** Every judgement so far
+  is a still or a headless number, which this file spends two thousand words explaining
+  is the weakest evidence this project accepts. The `wide` shot at
+  `garden=7&seed=21&ff=3000` is a wall of near canopy with no recession and no visible
+  ground; that was found by looking at one PNG, and there will be more of them.
 
 ### Where the work goes next
 

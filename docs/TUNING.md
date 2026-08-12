@@ -1705,3 +1705,98 @@ toward its asymptote (0.570 → 0.742 → 0.794 cells/tu) rather than decaying.
 If you want a genuinely self-limiting lesion you need something that breaks
 translation invariance — clearance that rises with cumulative damage is the
 obvious candidate and it is not built.
+
+## The flower field (`flowers/`, `?garden=N`, 2026-08-12)
+
+The flowers piece grows a whole field now. Its numbers live here for the same
+reason everything else in this file does, with one caveat at the top: **almost
+every constant in this section is environment or staging, not chemistry.** Where
+a plant stands, where the camera stands, how thick the air is and how coarse a
+distant blade is drawn are the `37_wind.js` category. Nothing here touches what a
+plant *is*, and a wrong value can only make the scene wrong, never the physics.
+
+The full argument for each is in `flowers/README.md` ("A GARDEN"); this is the
+table, plus the two things that must not be dialled.
+
+| knob | file | ships | may I move it? |
+|---|---|---|---|
+| `FL_GARDEN_SPACING` | `35_garden.js` | 12 | ⚠ **a stated fraction of a measurement** — see below |
+| `FL_FIELD_PACK` | `35_garden.js` | 0.83 | derived: `R = s sqrt(1.5 N / 2.19)` off the dart-throwing saturation density |
+| `FL_GARDEN_STAGGER` | `35_garden.js` | 1200 steps | taste — but re-take any field profile after moving it |
+| `FL_GARDEN_COHORT` | `35_garden.js` | `max(2, min(4, ceil(n/3)))` | taste; it exists so the opening frames are a field |
+| `FL_STEP_BUDGET` | `35_garden.js` | 8 | ⚠ it is the world clock's rate limit — see below |
+| `FL_RECAP_HZ` | `35_garden.js` | `1.78 * 4` | **no. Nyquist against the wind's fastest gust** |
+| blade-mesh cap | `28_lod.js` | 1 quad/pixel | **no. Nyquist against the raster** |
+| `FL_HAZE` | `25_ground.js` | `[2.0, 3.0, 1.5, 5.0]` | by looking, in `uRef`'s category (`?haze=G,H,P,N`) |
+| `FL_SKY_LEAD` | `25_ground.js` | 0.35 | measured — see below (`?sky=`) |
+| `FL_DIR_SHOTS` holds | `45_director.js` | 20/24/16/12 s | by eye, and only by eye |
+| `FL_DIR_ORBIT_HOLD` | `45_director.js` | 25 s | by eye. The solo page's 6 s is wrong for a field: a viewer who drags is walking around *in* a place |
+| `FL_DIR_HERO` | `45_director.js` | 1.25 | ⚠ **it is paying for a limitation** — delete it the day the sight-line cull follows the subject instead of specimen 0 |
+
+### `FL_GARDEN_SPACING` — 12 is 62% of what the sweep says, deliberately
+
+Measured, not chosen: 8 flowering species x 4 forms x 5 seeds grown to 3000 steps,
+horizontal reach taken off the **drawn streams** (`scratch/g2_placement/`, table in
+`seedsweep.out`, 160 cells).
+
+| | p10 | med | p75 | p90 | max |
+|---|---|---|---|---|---|
+| `maxR` outermost vertex | 3.6 | 9.7 | 14.4 | 23.2 | 70.9 |
+| `r90` the body | 2.2 | 5.0 | 7.5 | 12.1 | 20.4 |
+
+12 is full clearance of two median **bodies** (2 x 5.0) with margin and **62% of
+full clearance of two median arms** (2 x 9.7 = 19.4). The other end was measured
+and rejected by looking: at 19-44 units apart, plants 20-48 units tall stop being a
+stand and read as a row of isolated specimens. The shipped `plantGarden`'s 2.5 was
+~5x too small in the direction that shows — at `garden=7&seed=21` two specimens had
+grown *through* each other.
+
+**Do not "fix" the overlap that remains by raising it.** The tail is not a species
+property and it is not bounded in time: an Ember Creeper columbine reaches `maxR`
+7.4 at seed 21 and 65.9 at seed 31697, and sampled every 200 steps that specimen
+goes 11.9 (step 1000) → 28.8 → 44.4 → 70.9 (step 3200), still climbing linearly.
+Reproduce with
+`node scratch/g2_placement/arc.mjs '{"species":"Ember Creeper","form":"columbine","seed":31697,"end":3200}'`
+(re-run 2026-08-12, reproduces every figure). No fixed spacing keeps a creeper off
+its neighbours; that is `organBudget` and apical control's business, not
+placement's.
+
+### `FL_STEP_BUDGET` — the pool that slows garden time instead of the frame rate
+
+The pool is `max(FL_STEP_BUDGET, nAct)` `plant.step()` calls a frame, and each
+active specimen may spend `floor(pool / nAct)` of it. A solo page never feels it (1
+active, 8 ≥ the 6-step frame cap). **A field does, and the effect lands on the
+clock rather than the frame rate:** at N = 12 every plant is allowed exactly one
+step a frame against the solo page's six, so the world runs ~6x slower per
+wall-clock second and a garden of twelve takes ~6x as long to reach bloom. That is
+a deliberate trade — a heavy frame slows garden time rather than killing fps — but
+it is a statement about how long a viewer waits, and **it has not been watched.**
+
+### The two that are Nyquist, and are not dials
+
+`FL_RECAP_HZ` and the blade-mesh pixel cap look like quality knobs and are not.
+`FL_RECAP_HZ = 1.78 * 4` is four samples per period of the wind's fastest gust mode
+(`37_wind.js`); below ~3.6 Hz the air judders and reads as a solver bug, which is
+the same bound `tools/blender_seq.mjs` states about its frame stride and
+`15_petal.js` states about its ripple. The blade cap is one quad per pixel, off the
+drawing buffer's own height and the camera's own fov. **Lowering either to buy
+frames is the vein-cull mistake in a new place** — it makes the piece cheaper by
+making it a different piece, and unlike a taste constant there is no argument
+available for where the new value should sit.
+
+### `FL_SKY_LEAD` — 0.35, and what a plain mean costs
+
+A garden's atmosphere is blended across the species standing in it. Averaging
+palettes in RGB cancels hue against hue: on the field at `garden=7&seed=21` the
+plain mean fog has saturation **0.261 against a member mean of 0.598**, and
+`keyCol` **0.090 against 0.328** — near-grey. `flFieldPal` keeps the weighted
+mean's luminance and hue direction and rescales its chroma back to the members'
+mean, clamped so no channel goes negative; that puts blended fog saturation at
+**0.527**.
+
+The hero's extra weight over an equal share is then the only free number here, and
+it is set against a measurement rather than a preference: over 40 fields of seven,
+the mean pairwise angle between two gardens' fog **hues** is **84° at lead 1.0, 64°
+at 0.35 and 27° at 0.0**. A pure field mean gives every garden nearly the same sky —
+0.35 keeps about two thirds of the between-garden variety while still being the
+field's air rather than the hero's.
