@@ -83,6 +83,15 @@ const FL_GARDEN_STAGGER = 1200;   // world steps over which germination spreads
 // (measured, by looking). The boot loop constructs at most one member per
 // frame, so a cohort costs that many frames of construction, not a hitch.
 const FL_GARDEN_COHORT = (n) => Math.max(2, Math.min(4, Math.ceil(n / 3)));
+// HOW OFTEN EVERY SPECIMEN MUST BE REDRAWN, in Hz. The step pool is spent
+// depth-first (40_boot), so a member is redrawn only on the frames it is paid
+// on, and this is the floor that decides how few of those there may be. It is
+// Nyquist against the fastest thing in the scene rather than a preference: the
+// wind's fastest gust mode is 1.78 Hz (37_wind.js), and four samples a period
+// is the same margin 15_petal.js's ripple guard keeps in space. Below ~3.6 Hz
+// the air judders and reads as a solver bug (tools/blender_seq.mjs says the
+// same thing about its frame stride) — this sits at 2x that.
+const FL_RECAP_HZ = 1.78 * 4;
 
 const FL_FORMS = ['abc', 'columbine', 'daisy', 'double'];
 

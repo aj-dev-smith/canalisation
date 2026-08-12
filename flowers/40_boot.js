@@ -37,6 +37,18 @@ function flBoot() {
     : null;
 
   const env = flEnv();
+  // THE BLADE MESH GETS A DISTANCE TERM (28_lod.js). A cap, never a raise: the
+  // shipped answer, then "never finer than the raster". Installed once, on the
+  // one env every specimen is drawn through.
+  env.bladeMesh = flBladeMeshLOD;
+  // ?lod=0 is the pre-LOD renderer, exactly (`app.veinLOD = false`'s argument):
+  // a negative result you cannot re-measure is just a story, and a before/after
+  // pair has to be shootable from ONE build at one seed and one step.
+  const lodOff = q.get('lod') === '0';
+  // ?batch=0 is the pre-batching step pool: one step to every specimen every
+  // frame, so every specimen recaptures every frame. Same argument as ?lod=0 —
+  // a before/after has to be shootable from one build.
+  const batchOff = q.get('batch') === '0';
   const S = App.prototype.makeSpecimen.call(env, gardenN ? plan[0].name : name, seed);
   // Flowers are the subject and floral organs never senesce, but the canopy
   // under them does; hold it unless asked to watch the whole arc. NOTE
@@ -123,9 +135,14 @@ function flBoot() {
 
   let step = 0, acc = 0, last = performance.now();
   let fpsA = 0, capMs = 0, rrCursor = 0, heroHadCull = false;
+  let stepN = 0, capN = 0;   // plants stepped / recaptured this frame, for the HUD
   // console access, and the screenshot harness's window into the piece
   window.__fl = { S, env, scene, B, garden: specs, plan,
-    state: () => ({ step, radius, capMs, target: target.toArray(), dist: scene.camera.position.distanceTo(target) }) };
+    // stepN/capN are how many specimens the step pool paid and how many were
+    // rebuilt this frame — the batching's own numbers, so a harness can read
+    // the thing that is being traded rather than infer it from fps
+    state: () => ({ step, radius, capMs, stepN, capN,
+      target: target.toArray(), dist: scene.camera.position.distanceTo(target) }) };
 
   // Frame the flowers once there are flowers; the whole plant until then.
   // Petal REACH, not axis length — a flower framed from `ax.length` reads as
@@ -359,12 +376,22 @@ function flBoot() {
     env.cam.dist = e.distanceTo(target);
     // width floor as shipped, LOD off: every vein the chemistry grew.
     setView(env.cam.eye, 0.004, 0);
+    // THE RASTER, for 28_lod.js's never-finer-than-a-pixel cap on the blade
+    // mesh. Set beside setView because it is the same kind of statement — where
+    // the eye is and what it can resolve — and read per specimen below.
+    flSetRaster(env.cam.eye, lodOff ? 0 : scene.rasterH(), scene.fovRad());
     const cull = heroCull();
     heroHadCull = cull !== null;
     for (let i = 0; i < specs.length; i++) {
       const s = specs[i];
       if (!s.S || !dirty[i]) continue;
       env.t = s.age;
+      // one near-face distance per specimen (28_lod.js): the subject is large
+      // on screen, so the cap lands above the leaf's lattice for anything a
+      // close-up is actually looking at — no hero exemption, and the 3.4% of
+      // the petal stream it does take at the close-up is stamens and carpels,
+      // which the microscope draws at full lattice however small they are
+      env._flD = flSpecimenDist(s.S);
       s.B.reset();
       flDrawSpecimen(env, s.B, s.S, i === 0 ? cull : null);
       s._drawn = true;
@@ -426,19 +453,70 @@ function flBoot() {
         acc -= n;
       }
       step += n;
-      // pay every specimen up to its own age target, round-robin from a
-      // persistent cursor so a capped frame's shortfall is debt paid fairly
-      let left = pool;
-      for (let sweep = 0; left > 0 && sweep < 128; sweep++) {
-        let any = false;
-        for (let k = 0; k < specs.length && left > 0; k++) {
-          const s = specs[(rrCursor + k) % specs.length];
-          if (!s.S || s.age >= step - s.startAt) continue;
-          s.S.plant.step(1); s.age++; s.stepped++; left--; any = true;
-        }
-        if (!any) break;
+      // PAY IN BATCHES, NOT IN SLICES — the same steps, spent on fewer plants.
+      //
+      // The pool used to be spent breadth-first: one step to every specimen,
+      // sweep after sweep. Every specimen therefore STEPPED every frame, and a
+      // specimen that stepped is recaptured — so the frame paid the whole
+      // field's geometry rebuild (7 x ~11 ms, measured) to advance garden time
+      // by one step. Depth-first spends exactly the same budget and settles at
+      // the same average rate per plant, but concentrates it: each specimen is
+      // paid its WHOLE accrued debt when its turn comes, and is not touched at
+      // all in between. Roughly `pool / debtPerFrame` specimens are recaptured
+      // per frame instead of all of them.
+      //
+      // The thing this is allowed to cost is temporal resolution, so the bound
+      // is Nyquist against the motion — the same argument tools/blender_seq.mjs
+      // makes about its stride. A specimen jumps at most `pool` steps (8) =
+      // 64 ms of plant time between draws, against the wind's fastest gust at
+      // 1.78 Hz (562 ms) and the stem's own mode at 0.56-0.64 Hz. At 30 fps a
+      // field of seven redraws each member ~11 times a second, three times the
+      // 3.6 Hz floor that judders.
+      //
+      // The HERO is exempt and always paid first: it is the subject, the
+      // close-up and the pollen's plant, and it is the one specimen whose
+      // motion is being looked at.
+      //
+      // WHAT IT COSTS, measured and not waved away (tools/flowers_perf.mjs,
+      // 60s of live growth, isolated with ?batch=0): median gap 50.0 -> 34.9ms,
+      // and p99 83.4 -> 108.4ms. It trades the TAIL for the median, because a
+      // frame that pays three plants their whole debt is heavier than one that
+      // pays a step to seven, and the plants are wildly unequal (a Sun Coral
+      // capture is 20ms, a Spiral Ossuary 1.4ms). Bounded by the pool. Read
+      // that before writing a hitch gate for this page.
+      //
+      // HOW MANY PLANTS MAY MOVE THIS FRAME. Debt only builds if something
+      // refuses to pay it, and the refusal is where the frame is bought — so
+      // this is the actual knob, and it is set by Nyquist rather than by taste:
+      // every specimen must be redrawn at least FL_RECAP_HZ (35_garden.js: four
+      // samples per period of the wind's fastest gust, which is 15_petal.js's
+      // ripple guard applied to time). A specimen is redrawn `fps * m / nAct`
+      // times a second, so m = nAct * FL_RECAP_HZ / fps.
+      //
+      // It is a feedback loop and it settles: capping m raises fps, which
+      // lowers the m the law asks for, until the field is redrawing at exactly
+      // the rate the air needs. fpsA is a 20-frame EMA, which is the damping.
+      // During ?ff= there is no cap — a fast-forward is a harness affordance
+      // and must arrive at the state it claims.
+      const mCap = (ff > 0 || batchOff) ? specs.length
+        : Math.max(1, Math.min(specs.length,
+          Math.ceil(nAct * FL_RECAP_HZ / Math.max(6, fpsA))));
+      let left = pool, drawnN = 0;
+      const nSpec = specs.length;
+      for (let k = 0; k < nSpec && left > 0 && (k === 0 || drawnN < mCap); k++) {
+        // 0 first, then the members from a persistent cursor
+        const s = specs[k === 0 ? 0 : 1 + ((rrCursor + k - 1) % Math.max(1, nSpec - 1))];
+        if (!s.S) continue;
+        const debt = (step - s.startAt) - s.age;
+        if (debt <= 0) continue;
+        const pay = Math.min(debt, left);
+        for (let j = 0; j < pay; j++) s.S.plant.step(1);
+        s.age += pay; s.stepped = pay; left -= pay; drawnN++;
       }
-      rrCursor = (rrCursor + 1) % specs.length;
+      stepN = drawnN;
+      // advance the cursor over the MEMBERS only (the hero is not in the
+      // rotation), so a field of n rotates through n-1 members
+      rrCursor = nSpec > 1 ? (rrCursor + 1) % (nSpec - 1) : 0;
     }
     env.t = specs[0].age;
 
@@ -460,6 +538,7 @@ function flBoot() {
       dirty[i] = d;
       if (d) anyDirty = true;
     }
+    capN = dirty.reduce((a2, d) => a2 + (d ? 1 : 0), 0);
     if (anyDirty) captureDirty(dirty);
     if (specs[0].stepped > 0) pollen.step(S, specs[0].stepped, specs[0].age);
     scene.uploadPollen(pollen.buf, pollen.n * 7);
@@ -507,7 +586,8 @@ function flBoot() {
       }
       text = `${S.name}  garden of ${specs.length}  seed ${seed}\n` +
         `${germ} germinated · ${flow} flowering · ${tp} petals\n` +
-        `step ${step}${ff > 0 ? '  (fast-forward ' + ff + ')' : ''} · capture ${capMs.toFixed(1)}ms · ${Math.round(fpsA)} fps`;
+        `step ${step}${ff > 0 ? '  (fast-forward ' + ff + ')' : ''} · capture ${capMs.toFixed(1)}ms ` +
+        `(${capN}/${specs.length}) · ${Math.round(fpsA)} fps`;
     }
     hud.textContent = text;
     requestAnimationFrame(frame);

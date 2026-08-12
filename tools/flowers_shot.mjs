@@ -121,8 +121,13 @@ const counts = await pg.evaluate(() => {
       tot.tri += c.tri; tot.seg += c.seg; tot.pt += c.pt; tot.pet += c.pet;
       tot.organs += c.organs;
     }
-    // the hero's own buffer is __fl.B whether or not a garden exists
-    const h = read(fl.B);
+    // The hero's own buffer is __fl.B whether or not a garden exists — but in
+    // a garden it IS garden[0].B, and adding it again counted the hero twice:
+    // a stand of seven reported 998 organs for 771, and 10.34M tri floats for
+    // 8.64M (caught by a headless field that reproduced the page exactly and
+    // disagreed by precisely the hero). Only add it if it is not already in.
+    const inGarden = g.some(e => e && (e.B === fl.B || e === fl.B));
+    const h = inGarden ? null : read(fl.B);
     if (h) { tot.tri += h.tri; tot.seg += h.seg; tot.pt += h.pt; tot.pet += h.pet; tot.organs += h.organs; }
     return tot;
   }
