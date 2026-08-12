@@ -68,7 +68,9 @@ function flBoot() {
   }
   const B = specs[0].B;   // the hero's buffers — bestFlower, the cull, tools
 
-  const scene = new FlowerScene(document.getElementById('stage'), S.pal);
+  // the plan goes in so the ATMOSPHERE can be the field's rather than the
+  // hero's (flFieldPal, 25_ground.js); null keeps the solo page identical
+  const scene = new FlowerScene(document.getElementById('stage'), S.pal, plan);
   // The bullseye threshold: one number per specimen, drawn from the published
   // trimodal distribution (Todesco 2022 [D]: 0.33 / 0.59 / 0.78, sd ~0.16 —
   // we jitter by a modest fraction of that). Same PRNG discipline as the
