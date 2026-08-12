@@ -11295,9 +11295,10 @@ const FL_POLLEN = {
   // measured FL_GARDEN_SPACING) keeps the plume among the flowers where the
   // light is and spends nothing. ?pol=rate,beyond,size sweeps all three.
   //
-  // It also settles the ground: at 90, 48% of grains ended by touching y=0 —
-  // all of them far downwind, drawn at the 1-px floor, invisible — and at 12
-  // none do. Stokes settling is 3.25 cm/s against a wind that moves a grain
+  // It also settles the ground. Solo at `beyond` 90, 48% of grains ended by
+  // touching y=0 and at 12 none did; a field of seven (rim 26, so the story
+  // runs to 38) lands 13%. Every one of those is out at the rim, drawn at the
+  // 1-px floor. Stokes settling is 3.25 cm/s against a wind that moves a grain
   // 100x faster, so nothing in this piece ever watches pollen land, and the
   // y < 0 test below is a floor rather than an event. A landing behaviour
   // (the shed blade's "lie still, then fade") was considered and is not built:
