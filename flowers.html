@@ -11338,8 +11338,17 @@ class FlPollen {
       }
     }
     this.rate = rate;
-    // the clearing's rim: where the outermost plant stands. Solo pages have no
-    // plan and no rim, so the story is one plant's room wide either way.
+    // The clearing's rim: where the outermost plant STANDS. Solo pages have no
+    // plan and no rim, so the story starts one plant's room wide.
+    //
+    // ⚠ WHERE A PLANT STANDS IS NOT HOW FAR IT REACHES, and 35_garden.js
+    // measured exactly that: median reach 9.7 units but a p90 of 23.2 and an
+    // Ember Creeper columbine at 70.9 — "a creeper whose axes never arrest".
+    // A rim-only edge would have killed a sprawler's grains on the step they
+    // were shed. So the rim GROWS with the furthest anther the field has ever
+    // dehisced from (_emit, monotone — the story may not shrink under a plant
+    // that already used it).
+    this.beyond = beyond;
     let rim = 0;
     if (plan) for (const p of plan) rim = Math.max(rim, Math.hypot(p.origin[0], p.origin[2]));
     this.rEdge = rim + beyond;
@@ -11359,6 +11368,10 @@ class FlPollen {
     this.age[this.n] = 0;
     this.n++;
     this.stat.emit++;
+    // the story reaches one plant's room past the furthest anther, not past
+    // the furthest ROOT (see rEdge in the constructor)
+    const rs = Math.hypot(b[i], b[i + 2]) + this.beyond;
+    if (rs > this.rEdge) this.rEdge = rs;
   }
 
   // The dehiscing organs of one specimen. Walked only for a specimen that was
