@@ -66,6 +66,18 @@ const FL_DIR_ORBIT_HOLD = 25;
 // never reach the clamp, because a clamped eye is a framing that silently
 // stopped being the one that was computed.
 const FL_DIR_EYE_FLOOR = 1.0;
+// ⚠ A THUMB ON THE SCALE FOR THE HERO, AND IT IS PAYING FOR A LIMITATION
+// ELSEWHERE. The sight-line clearance in 40_boot's heroCull is specimen 0's
+// alone — the members are captured cull-less — and in a stand this dense that
+// clearance is the difference between a photographed corolla and a wall of
+// leaf: measured on ?garden=7&seed=21, the hero close-up draws in 33.9 ms with
+// the flower visible, while ?focus=flower on a Cathedral Fern two plants over
+// is 131 ms of the subject's own blades across the lens. 1.25 is small enough
+// that a clearly better flower elsewhere still wins. DELETE IT the day the
+// cull follows the subject instead of the hero — that is one line in
+// captureDirty (`i === 0 ? cull : null`) plus a spec index on heroCull's
+// return, and it is the highest-value follow-up this director has.
+const FL_DIR_HERO = 1.25;
 
 // A fresh director. Lazily, from updateFraming — see the load-order note.
 function flDirMake() {
@@ -211,7 +223,7 @@ function flDirCompact(bb) {
   return smoothstep(4.0, 1.0, bb.r);
 }
 
-function flDirScoreOf(specs, i, ai, scoreAxis, F) {
+function flDirScoreOf(specs, i, ai, scoreAxis, F) {   // i === 0 is the hero
   const s = specs[i];
   if (!s || !s.S || !s.S.plant.axes[ai]) return 0;
   const base = scoreAxis(s, ai);
@@ -220,7 +232,7 @@ function flDirScoreOf(specs, i, ai, scoreAxis, F) {
   if (!bb) return 0;
   const rim = F ? 0.65 + 0.5 * smoothstep(0, F.R, Math.hypot(bb.c[0] - F.cx, bb.c[2] - F.cz)) : 1;
   return base * (0.25 + 0.75 * flDirOpenness(s.S.plant.axes[ai]))
-    * flDirCrowd(specs, s, bb) * rim * flDirCompact(bb);
+    * flDirCrowd(specs, s, bb) * rim * flDirCompact(bb) * (i === 0 ? FL_DIR_HERO : 1);
 }
 
 function flDirPick(specs, eye, scoreAxis, F) {   // eslint-disable-line no-unused-vars
@@ -243,7 +255,7 @@ function flDirPick(specs, eye, scoreAxis, F) {   // eslint-disable-line no-unuse
       // middle of it. F is optional: ?focus=flower asks before the field has
       // been measured on the first frame.
       const rim = F ? 0.65 + 0.5 * smoothstep(0, F.R, Math.hypot(bb.c[0] - F.cx, bb.c[2] - F.cz)) : 1;
-      const sc = base * open * clear * rim * flDirCompact(bb);
+      const sc = base * open * clear * rim * flDirCompact(bb) * (i === 0 ? FL_DIR_HERO : 1);
       if (sc > bs) { bs = sc; best = { i, ai, bb, score: sc }; }
     }
   }
