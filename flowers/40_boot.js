@@ -6,6 +6,14 @@
 // `ff` fast-forwards in chunks before settling into real time — for arriving
 // at bloom in a screenshot harness. Growth is deterministic from (species,
 // seed, steps), so a fast-forwarded plant IS the plant you'd have watched.
+//
+// ?garden=N (2..12) grows a whole flowering FIELD: N specimens planned by
+// flGardenPlan (35_garden.js) — species dealt without replacement, a jittered
+// ring with minimum spacing, germination staggered — all in ONE wind, each
+// with its own FlowerBuffers, recaptured only when it changed. Specimen 0 is
+// the hero: ?focus=flower, the sight-line cull, the bullseye and the pollen
+// all stay pointed at it. Without ?garden the page is the single-specimen
+// piece exactly (held to byte identity by the formref harness + parity).
 
 function flBoot() {
   const q = new URLSearchParams(location.search);
@@ -13,240 +21,62 @@ function flBoot() {
   const seed = +(q.get('seed') || 21);
   let speed = +(q.get('speed') || 1);
   let ff = Math.max(0, +(q.get('ff') || 0));
+  // ?garden=N, clamped to 2..12. Absent (or unparseable) means the
+  // single-specimen page, bit for bit.
+  const gN = Math.round(+(q.get('garden')));
+  const gardenN = q.get('garden') !== null && isFinite(gN) ? Math.max(2, Math.min(12, gN)) : 0;
+
+  // THE PLAN comes first in garden mode, because entry 0 decides the hero's
+  // species when the URL didn't: the deck deals without replacement and the
+  // hero's card counts against the first deal.
+  const plan = gardenN
+    ? flGardenPlan(seed, gardenN, {
+        radius: q.get('radius') !== null ? +q.get('radius') : undefined,
+        heroName: q.get('species') !== null ? name : null,
+      })
+    : null;
 
   const env = flEnv();
-  const S = App.prototype.makeSpecimen.call(env, name, seed);
+  const S = App.prototype.makeSpecimen.call(env, gardenN ? plan[0].name : name, seed);
   // Flowers are the subject and floral organs never senesce, but the canopy
   // under them does; hold it unless asked to watch the whole arc. NOTE
   // plant.sp, not S.sp — Plant copies its options at construction (PITFALLS).
+  // ?hold=none applies to every specimen in the field.
   if (q.get('hold') !== 'none') S.plant.sp.senesceHold = true;
-  // HOMEOTIC FORM. `?form=double` is the ABC model's B-class expansion
-  // (Meyerowitz [D]): a real doubled rose, peony or camellia is a homeotic
-  // conversion — organs that would have been stamens founded as petals. Here
-  // that is ONE threshold moved on the floral identity field q the engine
-  // already computes: org.petal = q < petalQ (40_plant.js:611), so raising
-  // petalQ converts the stamen-analog whorls and EVERYTHING else falls out —
-  // petal library, petal length, petal tilt, and the q-lagged bloom, so the
-  // converted inner whorls stay cupped while the outer ones recurve. Nested,
-  // graded, never drawn. `?homeo=` moves the threshold (default 0.62; the
-  // engine's q tops out at 0.94, so 0.9+ is a fully sterile double, which is
-  // what real double cultivars are). Set before any step runs, so every organ
-  // is FOUNDED under the new identity, and on both copies of sp (the plant
-  // holds its own — PITFALLS).
-  // Both halves of the C-class mutant: B-expansion converts the stamen band
-  // (petalQ up), and lost determinacy keeps the meristem founding (apexRenew —
-  // the WUS shutoff failing, see consumeApex()). floralOrgans is the ceiling
-  // over the physical spend and has to rise with it, same shape as budTake
-  // needing the organ pool raised with it (TUNING's ladder).
-  // Measured (Ember Creeper, seed 21, step 3200): wild 6 petals/flower;
-  // B alone ~8; B + renewal 0.6 -> 14, 0.8 -> 23 — peony-grade — and C alone
-  // gives 11 with petalQ untouched, which is the pure ag phenotype. Fruit
-  // still sets in every case; the apex spends through floralGrace.
-  // The double ships as the DEFAULT form — the piece is titled flowers, and a
-  // 20-petal graded corolla is the strongest image it makes. `?form=wild` is
-  // the shipped configuration, untouched.
-  // `?form=abc` — now the DEFAULT — is the FULL ABC model: whorlBands cuts q
-  // into sepal / petal / stamen / carpel (sharp boundaries — AP3/AG mutual
-  // antagonism), so a flower is a green calyx, a corolla, a ring of filaments
-  // carrying glowing anthers, and a central pistil, in that order, off the one
-  // coordinate the meristem's self-consumption already produces. The bands are
-  // set against the MEASURED q founding sequence (abc_probe: renewal 0.45 +
-  // floralDome 3 spans q 0 -> 0.85 over ~13 organs), not an idealised one:
-  // {0.08, 0.30, 0.65} gives S4-6 P4-6 A3-5 C0-2, which is a eudicot plan.
-  // floralDome 3 is the measured size at which Ember's WORKING axillaries
-  // already convert (R0/organR = 3.0); without it a terminal apex founds ten
-  // organs at q ~= 0 and reads as one whorl (the Parasol's only flower is
-  // terminal, so this is not optional). Compression knobs as the double's.
-  // No ?form= rotates the default PER SEED, so a bare open shows a different
-  // body plan each visit and every form is reachable by reseeding — a piece
-  // titled flowers should not always open on the same one. Deterministic
-  // (seed % 4), same discipline as everything else here: the URL fully
-  // decides the plant. 'wild' stays URL-only — it is the control, not a card
-  // in the deck. (Order puts the default seed, 21, on the columbine.)
-  const FL_FORMS = ['abc', 'columbine', 'daisy', 'double'];
-  const form = q.get('form') || FL_FORMS[seed % FL_FORMS.length];
-  if (form === 'abc') {
-    // TWO FLORAL PROGRAMS, assigned per species from the measured whorl
-    // balance (scratchpad abc_sweep, 8 species x both, step 5200): program A
-    // for species whose q climbs steadily; program B — smaller dome, more
-    // renewal, bands shifted down — for species whose q sits at zero for
-    // most foundings and then jumps (a Cathedral Fern under A is S8 P1 A0
-    // C1; under B it is S3 P5 A4 C1, a real eudicot plan). Spiral Ossuary
-    // founds only 3 floral organs even WILD — its flowers were always
-    // inconspicuous, and no program can conjure organs its meristem does
-    // not make; it takes A and does what it always did.
-    const progB = new Set(['Cathedral Fern', 'Hoarfrost Thicket', 'Sulphur Rosette']);
-    const P = progB.has(name)
-      ? { renew: 0.75, organs: 28, dome: 2.2, bands: [0.06, 0.24, 0.60] }
-      : { renew: 0.55, organs: 26, dome: 3.0, bands: [0.08, 0.38, 0.65] };
-    const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || P.renew)));
-    const over = {
-      whorlBands: {
-        sepal: +(q.get('sepal') || P.bands[0]),
-        stamen: +(q.get('stamen') || P.bands[1]),
-        carpel: +(q.get('carpel') || P.bands[2]),
-        // filament 3.0 threw the anthers clear of the flower; 1.8 holds them
-        // just above the corolla (by eye, like the wind's uRef)
-        filament: 1.8, style: 1.5,
-      },
-      apexRenew: rn, floralOrgans: P.organs, floralDome: P.dome,
-      floralElong: 0.08, floralStretch: 0.08, floralNode: 0.008,
-      floralGrace: 960, petalGrade: 0.35,
-      // ?zygo=0.8 breaks radial symmetry the way a snapdragon does (CYC/DICH,
-      // see 40_plant.js). Off by default: the radial corolla is the classical
-      // flower, and the bilateral form is a variation to visit. Terminal
-      // flowers stay radial either way (peloria), so the Parasol's moon shot
-      // is untouched at any setting.
-      zygomorphy: Math.min(1, Math.max(0, +(q.get('zygo') || 0))),
-    };
-    S.sp = { ...S.sp, ...over };
-    Object.assign(S.plant.sp, over);
+  // HOMEOTIC FORM — flApplyForm (35_garden.js) carries what used to be inline
+  // here, verbatim: `?form=` pins it, a bare open rotates the default per
+  // seed, and in a garden every member rotates off its OWN seed, so a default
+  // field shows every body plan. 'wild' stays URL-only — the control, not a
+  // card in the deck. (Order puts the default seed, 21, on the columbine.)
+  const form = flApplyForm(S, gardenN ? plan[0].name : name, seed, q);
+
+  // ONE AIR over the whole clearing (70_app.js makeSpecimen's own argument):
+  // the hero's field is THE field, handed to every later specimen.
+  const wind = S.plant.wind;
+
+  // The garden: specs[0] is the hero. Members are constructed LAZILY, at most
+  // one per frame as the world clock reaches their startAt — a Plant costs
+  // ~70ms to construct (every Axis settles its meristem 220 steps), and seven
+  // back to back was plantGarden's measured 501ms hitch.
+  const specs = [{ S, B: new FlowerBuffers(), plan: plan ? plan[0] : null,
+    startAt: 0, age: 0, stepped: 0, form, _drawn: false }];
+  if (plan) {
+    for (let i = 1; i < plan.length; i++) {
+      specs.push({ S: null, B: null, plan: plan[i], startAt: plan[i].startAt,
+        age: 0, stepped: 0, form: null, _drawn: false });
+    }
   }
-  if (form === 'daisy') {
-    // THE CAPITULUM — a composite head. A daisy is not a flower; it is dozens
-    // of flowers on a disc, and this form is the round-3 machinery read at a
-    // different scale: the SAME four whorl bands land on Asteraceae anatomy
-    // exactly — sepal band = the involucre's phyllaries, petal band = the ray
-    // florets, stamen band = the disc florets (which is why the disc glows
-    // and sheds pollen: those organs were already anthers), carpel = centre.
-    // `receptacle` (40_plant.js) un-collapses the floral dome: q RECORDS the
-    // radius each organ was founded at, so the head becomes the disc the
-    // meristem actually was, rim founded first, centre last. Measured
-    // (daisy_probe, Ember seed 21, step 5200): renew .88 + dome 4 + cap 90
-    // founds 52-53 florets per axillary head — S15 P11 A26, against a real
-    // daisy's 13-21 rays — closing by the cap with a FRUIT at the disc's
-    // centre, the engine's ovary where a real capitulum packs its hundred.
-    // The terminal head stays small (the q-zero terminal trap, round 3);
-    // bestFlower prefers the big axillaries on organ count, so the camera
-    // finds the heads that work.
-    const rn = Math.min(0.95, Math.max(0, +(q.get('renew') || 0.88)));
-    const over = {
-      whorlBands: {
-        sepal: +(q.get('sepal') || 0.05),
-        stamen: +(q.get('stamen') || 0.18),
-        carpel: +(q.get('carpel') || 0.96),
-        sepalLen: 0.16,          // phyllaries: short bracts under the rim
-        petalLen: 0.45,          // a ray is a strap, half again a petal
-        stamenLen: 0.10,         // a disc floret is small...
-        filament: 0.9,           // ...and sits IN the disc, not above it
-        style: 1.5,
-      },
-      receptacle: +(q.get('disc') || 1.1),
-      apexRenew: rn, floralOrgans: 90, floralDome: 4.0,
-      // Under `receptacle` the florets ride the TIP (40_plant.js elongate),
-      // so floral elongation stops being corolla smear and becomes the
-      // PEDUNCLE — the daisy bolts. .35 grows a 9-10 unit scape. And the
-      // scape must not climb the trunk: at the herb's tropism .02 a 12-unit
-      // peduncle ends 0.4 units from the trunk (measured), at .002 it holds
-      // ~3 units clear with a gentle sun-turn, span 0.38 — a disc, held out.
-      floralElong: 0.35, floralStretch: 0.08, floralNode: 0.008,
-      tropism: 0.002,
-      // a head founds for far longer than a eudicot flower, and dozens of
-      // heads spend far past the herb's pool — both raised together
-      // (TUNING's budTake ladder: anything that multiplies organs pays)
-      floralGrace: 1600, organBudget: 400, maxOrgans: 140,
-      petalGrade: 0, petalTilt: 1.5, zygomorphy: 0,
-    };
-    S.sp = { ...S.sp, ...over };
-    Object.assign(S.plant.sp, over);
-  }
-  if (form === 'columbine') {
-    // THE SPURRED FLOWER — Aquilegia's plan, read off the same bands. Two
-    // moves the other forms don't make: B-class expression expands OUTWARD
-    // into whorl 1 (wb.sepalPetaloid — a columbine's showy outer whorl is
-    // petaloid sepals, the same homeotic lever as the double but pointed the
-    // other way), and the petal whorl carries a NECTAR SPUR — its proximal
-    // sheet domain rolled closed and elongated backward by phase-II cell
-    // anisotropy (Puzey et al. 2012 [D], see 12_form.js; the tube's taper is
-    // the margin's own base width, not a drawn cone). The BICOLOR is the
-    // A. coerulea read: sepals wear the species' full petal colour, blades
-    // pale toward cream — one palette split, species identity kept.
-    // Program measured (col_probe, Ember 21, step 5200): renew .70 + dome 3
-    // + cap 32 founds 17-24 organs per flower; the q-zero founding pile IS
-    // the sepal whorl (~7), petals band to .28 (~8-11 spurred), stamens to
-    // .75, and the fruit itself is the pistil at the centre.
-    const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || 0.70)));
-    const over = {
-      whorlBands: {
-        sepal: +(q.get('sepal') || 0.02),
-        stamen: +(q.get('stamen') || 0.28),
-        carpel: +(q.get('carpel') || 0.75),
-        sepalLen: 0.32,          // the showy outer whorl: sepals half again a petal
-        petalLen: 0.26,          // blades shortish — the spur is the length
-        stamenLen: 0.13, filament: 1.5, style: 1.5,
-        sepalPetaloid: 1,
-        spur: {
-          uS: +(q.get('us') || 0.30),
-          aniso: +(q.get('aniso') || 6),
-          // pi + petalTilt maps every petal's spur to the SAME world
-          // direction — anti-parallel to the flower's axis — so the five
-          // tubes descend behind the corolla as a parallel ring, which is
-          // the columbine silhouette. Measured at three angles: +0.35
-          // converges under the fruit, -0.85 bundles over the crown.
-          angle: Math.PI + +(q.get('spurang') || 0.8),
-        },
-      },
-      apexRenew: rn, floralOrgans: 32, floralDome: 3.0,
-      // a SMALL receptacle: the whorls nest on the dome they were founded on
-      // (sepals at the rim, the pistil at centre), the organs ride the tip —
-      // and floral elongation below them becomes the PEDICEL, which is how a
-      // real columbine carries each flower clear of its own foliage. Without
-      // this the axillaries sat 0.24 units off the trunk (the round-3
-      // unphotographable case) and the director could only shoot the
-      // terminal, fruit-first.
-      receptacle: +(q.get('disc') || 0.25),
-      floralElong: 0.30, floralStretch: 0.08, floralNode: 0.008,
-      tropism: 0.004,
-      floralGrace: 1200, organBudget: 260, maxOrgans: 120,
-      // blades cup forward (a columbine's corolla is a crown, not a splay);
-      // sepals spread on the leaf tilt they inherited
-      petalGrade: 0.15, petalTilt: 0.8, zygomorphy: 0,
-    };
-    S.sp = { ...S.sp, ...over };
-    Object.assign(S.plant.sp, over);
-    const pp = S.petalPal;
-    const mixc = (a, b, t) => a.map((v, k) => lerp(v, b[k], t));
-    // sepals: the species' petal colour at full depth, tips held back from
-    // the pale gradient so the outer whorl reads saturated behind the blades
-    S.sepalPal = { ...pp, blade1: mixc(pp.blade1, pp.blade0, 0.55) };
-    // blades: paled toward cream — the bicolor. Held back from full white:
-    // at 0.60/0.72 the blades saturated through the velvet sheen and the
-    // bloom chain into white blotches (the anther lesson, arriving through
-    // albedo), and the nectar guides need pigment left to bite on
-    S.petalPal = { ...pp,
-      blade0: mixc(pp.blade0, [0.97, 0.95, 0.90], 0.35),
-      blade1: mixc(pp.blade1, [0.99, 0.97, 0.93], 0.48),
-      glow: pp.glow * 0.85 };
-    // a columbine's pistil is a sheaf of slender follicles, not a berry —
-    // fruitScale is a draw-time scalar (fruitShell only), so this changes
-    // what the centre weighs in the frame and nothing in the simulation
-    const fsO = { fruitScale: S.sp.fruitScale * 0.55 };
-    S.sp = { ...S.sp, ...fsO };
-    Object.assign(S.plant.sp, fsO);
-  }
-  if (form === 'double') {
-    const pq = Math.min(0.94, Math.max(0.05, +(q.get('homeo') || 0.62)));
-    const rn = Math.min(0.9, Math.max(0, +(q.get('renew') || 0.7)));
-    // Compression, the founding gate and the grace move TOGETHER (all three
-    // measured, each alone un-doubles the flower): a compressed axis cannot
-    // clear the shipped floral minInternode between foundings, so floralNode
-    // drops with it — floral organs sharing a node is what a whorl is — and
-    // a compressed flower's early founding cadence outruns floralGrace 320,
-    // so the grace triples or the axillary flowers silently die at 9 petals.
-    // Measured result: 20-23 petals per flower, spread 0.26-0.40 units
-    // against 8.4-13.0 loose — a corolla, not a raceme.
-    const over = { petalQ: pq, apexRenew: rn, floralOrgans: 34,
-      floralElong: 0.08, floralStretch: 0.08, floralNode: 0.008,
-      floralGrace: 960, petalGrade: 0.5 };
-    S.sp = { ...S.sp, ...over };
-    Object.assign(S.plant.sp, over);
-  }
-  const B = new FlowerBuffers();
+  const B = specs[0].B;   // the hero's buffers — bestFlower, the cull, tools
+
   const scene = new FlowerScene(document.getElementById('stage'), S.pal);
   // The bullseye threshold: one number per specimen, drawn from the published
   // trimodal distribution (Todesco 2022 [D]: 0.33 / 0.59 / 0.78, sd ~0.16 —
   // we jitter by a modest fraction of that). Same PRNG discipline as the
   // fruit's chemistry: a derived stream off the specimen seed.
+  // LIMITATION (garden): uBull and the spots atlas are scene-wide and stay
+  // the HERO's — every member's petals sample the hero's bullseye threshold
+  // and the hero's baked spot rows. Whisper-level pigment, wrong per species;
+  // a per-specimen uniform + a wider atlas is the fix when it earns a look.
   {
     const r = mulberry32((seed ^ 0xb0117e) >>> 0);
     const modes = [0.33, 0.59, 0.78];
@@ -254,7 +84,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso=';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso= ?garden=2..12 ?radius=';
   // The form rail. A form is decided at founding — every organ's identity is
   // read off sp the step it is founded — so switching means regrowing, and
   // the honest way to regrow deterministically is a reload with the form in
@@ -264,7 +94,7 @@ function flBoot() {
     for (const f of FL_FORMS) {
       const b = document.createElement('button');
       b.textContent = f;
-      if (f === form) b.classList.add('on');
+      if (f === form && !gardenN) b.classList.add('on');
       b.onclick = () => {
         const p = new URLSearchParams(location.search);
         p.set('form', f);
@@ -272,16 +102,28 @@ function flBoot() {
       };
       rail.appendChild(b);
     }
+    // the garden is a reload too — a field is grown, not toggled
+    const g = document.createElement('button');
+    g.textContent = gardenN ? 'solo' : 'garden';
+    if (gardenN) g.classList.add('on');
+    g.onclick = () => {
+      const p = new URLSearchParams(location.search);
+      if (gardenN) p.delete('garden'); else { p.set('garden', '7'); p.delete('form'); }
+      location.search = p.toString();
+    };
+    rail.appendChild(g);
   }
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
-  // grains sample the same wind field the stem bends in.
+  // grains sample the same wind field the stem bends in. Hero-only for now —
+  // the population, like the close-up, follows the subject.
   const pollen = new FlPollen(seed, S.pal.keyCol);
 
   let step = 0, acc = 0, last = performance.now();
-  let fpsA = 0;
+  let fpsA = 0, capMs = 0, rrCursor = 0, heroHadCull = false;
   // console access, and the screenshot harness's window into the piece
-  window.__fl = { S, env, scene, B, state: () => ({ step, radius, target: target.toArray(), dist: scene.camera.position.distanceTo(target) }) };
+  window.__fl = { S, env, scene, B, garden: specs, plan,
+    state: () => ({ step, radius, capMs, target: target.toArray(), dist: scene.camera.position.distanceTo(target) }) };
 
   // Frame the flowers once there are flowers; the whole plant until then.
   // Petal REACH, not axis length — a flower framed from `ax.length` reads as
@@ -413,6 +255,36 @@ function flBoot() {
         return;
       }
     }
+    if (gardenN) {
+      // THE FIELD: the bound of every specimen that exists, the same lerp and
+      // dolly law as the solo wide shot. Phase-1 deliberately — a proper
+      // garden director (walking the field, visiting flowers) comes later.
+      let n = 0, x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+      for (const s of specs) {
+        if (!s.S) continue;
+        for (const ax of s.S.plant.axes) for (const p of ax.pts) {
+          if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0];
+          if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1];
+          if (p[2] < z0) z0 = p[2]; if (p[2] > z1) z1 = p[2];
+          n++;
+        }
+      }
+      if (n) {
+        const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
+        const r = Math.max(2, Math.hypot(x1 - cx, y1 - cy, z1 - cz));
+        target.lerp(new THREE.Vector3(cx, Math.max(1.2, cy), cz), 0.02);
+        radius += (Math.max(5, r * 1.15) - radius) * 0.02;
+      }
+      scene.controls.target.copy(target);
+      scene.fogU.uFogNear.value = Math.max(0, scene.camera.position.distanceTo(target) - radius * 1.1);
+      const eye = scene.camera.position;
+      const d = eye.distanceTo(target);
+      const want = radius * 2.35;
+      if (Math.abs(d - want) > 0.01) {
+        eye.sub(target).multiplyScalar(1 + (want / Math.max(1e-3, d) - 1) * 0.02).add(target);
+      }
+      return;
+    }
     let n = 0, cx = 0, cy = 0, cz = 0, r = 0;
     for (const ax of S.plant.axes) {
       if (!ax.floral) continue;
@@ -451,40 +323,57 @@ function flBoot() {
     }
   }
 
-  function capture() {
+  // the sight-line clearance, sized off the subject flower's DRAWN bounds
+  // FROM THE LAST FRAME (they must be read before reset() empties the
+  // streams; one frame stale is invisible) and opened only as the camera
+  // arrives (the shipped ramp — engaging at full width from the wide shot
+  // made half the plant vanish in one frame). Hero-only: garden members are
+  // captured cull-less, so a close-up through a crowded field may still catch
+  // a NEIGHBOUR's blade across the frame — noted, phase 2's problem.
+  function heroCull() {
+    if (framedAx < 0) return null;
+    const e = scene.camera.position;
+    const bb = B.floralBounds(framedAx);
+    if (!bb) return null;
+    let rad = Math.max(S.sp.fruitScale * 2.2, bb.r * 1.25);
+    const dx0 = bb.c[0] - e.x, dy0 = bb.c[1] - e.y, dz0 = bb.c[2] - e.z;
+    const de = Math.hypot(dx0, dy0, dz0) || 1;
+    const near = smoothstep(0.20, 0.38, 2 * rad / de);
+    if (near < 0.01) return null;
+    rad *= near;
+    return { keep: S.plant.axes[framedAx], rad, dist: de, r: de - rad,
+      dx: dx0 / de, dy: dy0 / de, dz: dz0 / de };
+  }
+
+  // Recapture every specimen whose streams are stale, then upload the lot as
+  // one concatenation. A specimen that did not step keeps last frame's
+  // streams — the ribbons face the eye in the vertex shader, so they are
+  // valid from any camera; only the PIXEL width floor and the meristem's
+  // detail ramp go stale, which a stepping plant refreshes anyway.
+  function captureDirty(dirty) {
+    const t0 = performance.now();
     const e = scene.camera.position;
     env.cam.eye[0] = e.x; env.cam.eye[1] = e.y; env.cam.eye[2] = e.z;
     env.cam.dist = e.distanceTo(target);
     // width floor as shipped, LOD off: every vein the chemistry grew.
     setView(env.cam.eye, 0.004, 0);
-    // the sight-line clearance, sized off the subject flower's DRAWN bounds
-    // FROM THE LAST FRAME (they must be read before reset() empties the
-    // streams; one frame stale is invisible) and opened only as the camera
-    // arrives (the shipped ramp — engaging at full width from the wide shot
-    // made half the plant vanish in one frame)
-    let cull = null;
-    if (framedAx >= 0) {
-      const bb = B.floralBounds(framedAx);
-      if (bb) {
-        let rad = Math.max(S.sp.fruitScale * 2.2, bb.r * 1.25);
-        const dx0 = bb.c[0] - e.x, dy0 = bb.c[1] - e.y, dz0 = bb.c[2] - e.z;
-        const de = Math.hypot(dx0, dy0, dz0) || 1;
-        const near = smoothstep(0.20, 0.38, 2 * rad / de);
-        if (near >= 0.01) {
-          rad *= near;
-          cull = { keep: S.plant.axes[framedAx], rad, dist: de, r: de - rad,
-            dx: dx0 / de, dy: dy0 / de, dz: dz0 / de };
-        }
-      }
+    const cull = heroCull();
+    heroHadCull = cull !== null;
+    for (let i = 0; i < specs.length; i++) {
+      const s = specs[i];
+      if (!s.S || !dirty[i]) continue;
+      env.t = s.age;
+      s.B.reset();
+      flDrawSpecimen(env, s.B, s.S, i === 0 ? cull : null);
+      s._drawn = true;
     }
-    B.reset();
-    flDrawSpecimen(env, B, S, cull);
-    scene.upload(B);
+    scene.uploadMany(specs.filter(s => s.S).map(s => s.B));
+    capMs = capMs * 0.9 + (performance.now() - t0) * 0.1;
   }
 
-  function countPetals() {
+  function countPetals(P) {
     let p = 0, fl = 0;
-    for (const ax of S.plant.axes) {
+    for (const ax of P.axes) {
       if (ax.floral) fl++;
       for (const org of ax.organs) if (org.petal) p++;
     }
@@ -496,31 +385,84 @@ function flBoot() {
     last = now;
     fpsA = fpsA * 0.95 + (1 / Math.max(1e-3, dt)) * 0.05;
 
-    let stepped = 0;
-    if (ff > 0) {
-      const n = Math.min(ff, 40);
-      for (let i = 0; i < n; i++) S.plant.step(1);
-      step += n; ff -= n; stepped = n;
-    } else {
-      acc += dt * 125 * speed;
-      const n = Math.min(6, Math.floor(acc));
-      acc -= n;
-      for (let i = 0; i < n; i++) S.plant.step(1);
-      step += n; stepped = n;
+    for (const s of specs) s.stepped = 0;
+    // Plant at most ONE pending member per frame, and hold the world clock
+    // while doing so: construction is the sharp cost (plantGarden's lesson),
+    // and pausing one world step keeps every specimen exactly at
+    // age == world - startAt, so nobody accrues silent debt.
+    let planting = false;
+    if (gardenN) {
+      for (const s of specs) {
+        if (s.S || s.startAt > step) continue;
+        const p = s.plan;
+        const M = App.prototype.makeSpecimen.call(env, p.name, p.seed, p.origin, wind);
+        if (q.get('hold') !== 'none') M.plant.sp.senesceHold = true;
+        s.form = flApplyForm(M, p.name, p.seed, q);
+        s.S = M; s.B = new FlowerBuffers();
+        planting = true;
+        break;
+      }
     }
-    env.t = step;
+
+    // THE WORLD CLOCK, gated by the step pool. The pool is total plant.step()
+    // calls the frame may spend (FL_STEP_BUDGET, 35_garden.js); the world only
+    // advances as many steps as every active specimen can be paid for, so a
+    // heavy field slows garden time instead of killing fps — and a solo page
+    // (1 active, pool 8 >= the 6-step frame cap) never feels it.
+    if (!planting) {
+      let nAct = 0;
+      for (const s of specs) if (s.S && s.startAt <= step) nAct++;
+      const pool = ff > 0 ? FL_STEP_BUDGET_FF : Math.max(FL_STEP_BUDGET, nAct);
+      const afford = Math.max(1, Math.floor(pool / Math.max(1, nAct)));
+      let n;
+      if (ff > 0) {
+        n = Math.min(ff, 40, afford);
+        ff -= n;
+      } else {
+        acc += dt * 125 * speed;
+        n = Math.min(6, Math.floor(acc), afford);
+        acc -= n;
+      }
+      step += n;
+      // pay every specimen up to its own age target, round-robin from a
+      // persistent cursor so a capped frame's shortfall is debt paid fairly
+      let left = pool;
+      for (let sweep = 0; left > 0 && sweep < 128; sweep++) {
+        let any = false;
+        for (let k = 0; k < specs.length && left > 0; k++) {
+          const s = specs[(rrCursor + k) % specs.length];
+          if (!s.S || s.age >= step - s.startAt) continue;
+          s.S.plant.step(1); s.age++; s.stepped++; left--; any = true;
+        }
+        if (!any) break;
+      }
+      rrCursor = (rrCursor + 1) % specs.length;
+    }
+    env.t = specs[0].age;
 
     // recapture on camera motion too, not just sim steps: the sight-line
     // clearance is computed at capture time from the capture eye, so a frozen
     // plant with a moving camera (speed=0, or orbiting) kept the clearance —
-    // and the whole cull — from wherever the camera was steps ago
+    // and the whole cull — from wherever the camera was steps ago. In garden
+    // mode camera motion only redraws the HERO, and only while a cull is (or
+    // just was) engaged — the members' streams are camera-valid as captured.
     const _e = scene.camera.position;
     const camMoved = Math.hypot(_e.x - env.cam.eye[0], _e.y - env.cam.eye[1],
       _e.z - env.cam.eye[2]) > 0.02;
-    if (stepped > 0 || camMoved || !frame.drawn) { capture(); frame.drawn = true; }
-    if (stepped > 0) pollen.step(S, stepped, step);
+    const dirty = [];
+    let anyDirty = false;
+    for (let i = 0; i < specs.length; i++) {
+      const s = specs[i];
+      let d = !!s.S && (s.stepped > 0 || !s._drawn);
+      if (i === 0 && camMoved && (!gardenN || framedAx >= 0 || heroHadCull)) d = !!s.S;
+      dirty[i] = d;
+      if (d) anyDirty = true;
+    }
+    if (anyDirty) captureDirty(dirty);
+    if (specs[0].stepped > 0) pollen.step(S, specs[0].stepped, specs[0].age);
     scene.uploadPollen(pollen.buf, pollen.n * 7);
-    // spot fields bake lazily in the draw loop; ship each to the GPU once
+    // spot fields bake lazily in the draw loop; ship each to the GPU once.
+    // HERO's library only: the 3-row atlas is scene-wide (see uBull note).
     const plib = S.plant.leaves.plib || [];
     for (let li = 0; li < plib.length; li++) {
       const L = plib[li];
@@ -539,11 +481,25 @@ function flBoot() {
     scene.compU.uRange.value = dofR;
     scene.render(now);
 
-    const c = countPetals();
-    hud.textContent =
+    const c = countPetals(S.plant);
+    let text =
       `${name}  seed ${seed}\n` +
       `${S.plant.stage()}  step ${step}${ff > 0 ? '  (fast-forward ' + ff + ')' : ''}\n` +
       `${c.fl} floral axes · ${c.p} petals · ${pollen.n} grains · ${Math.round(fpsA)} fps`;
+    if (gardenN) {
+      let germ = 0, flow = 0, tp = 0;
+      for (const s of specs) {
+        if (!s.S) continue;
+        germ++;
+        const cc = countPetals(s.S.plant);
+        if (cc.fl > 0) flow++;
+        tp += cc.p;
+      }
+      text = `${S.name}  garden of ${specs.length}  seed ${seed}\n` +
+        `${germ} germinated · ${flow} flowering · ${tp} petals\n` +
+        `step ${step}${ff > 0 ? '  (fast-forward ' + ff + ')' : ''} · capture ${capMs.toFixed(1)}ms · ${Math.round(fpsA)} fps`;
+    }
+    hud.textContent = text;
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
