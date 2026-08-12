@@ -372,6 +372,217 @@ strain profile, the shader gain constants (grade-category, like the shipped
 palette scalars), and the bullseye jitter width. Every physical constant
 above them is published, and flagged where it lands in the files.
 
+## A GARDEN — `?garden=N`, and the four numbers it had to state
+
+`?garden=N` (2 to 12) grows a whole flowering **field** on one page: N specimens,
+each with its own species, seed, floral form and germination date, standing on one
+ground in one wind on one world clock. Without the parameter the page is the single
+specimen it always was — the plan, the field palette and the director are all
+no-ops at N < 2 **by construction**, not by a branch someone remembered to write.
+
+None of it says anything about a plant's **shape**. Where a plant stands, where the
+camera stands, what colour the air is and what the floor is made of are staging and
+environment — the category `37_wind.js` and the Blender bridge's arc already
+established (`tools/README.md`), and the only place this piece is allowed a stated
+number. Several are stated here, and each of them says so out loud — TUNING has the
+table of which may be moved and which are Nyquist rather than taste.
+
+### Where a plant stands, and why the spacing is 12 (`35_garden.js`)
+
+Placement is a **field, not a ring**: dart-thrown over a disc, uniform in *area*
+(`d = R sqrt(u)`, because `R u` crowds the centre), accepting the first candidate
+that clears `FL_GARDEN_SPACING` of every origin already placed, and keeping the
+**best** failed throw rather than the last so a crowded clearing degrades to maximum
+spacing instead of to whatever the 48th dart did. The clearing grows with the count
+so areal density is constant: N discs of radius `s/2` saturate a random-sequential
+disc at ~0.547 area fraction, so sizing at ~1.5x the count it can hold gives
+`R = 0.83 s sqrt(N)`. A fixed radius was what the shipped `plantGarden` had, and a
+circle that cannot hold seven plants of measured reach 9.5-22 is why the first wide
+shot photographed six of them in one overlapping column.
+
+The spacing itself is **measured, and the measurement is the interesting part**. The
+shipped 2.5 was set by eye against one corolla and was wrong by ~5x in the direction
+that shows — at `garden=7&seed=21` two specimens had grown *through* each other.
+`scratch/g2_placement/` grows 8 flowering species x 4 forms x 5 seeds (the seeds a
+garden actually deals) to 3000 steps and takes horizontal reach off the **drawn**
+streams, the same argument as `floralBounds`: measure what is on screen, not a guess
+reconstructed from organ lengths. 160 cells, `seedsweep.out`:
+
+| | p10 | med | p75 | p90 | max |
+|---|---|---|---|---|---|
+| `maxR` (outermost vertex) | 3.6 | 9.7 | 14.4 | 23.2 | 70.9 |
+| `r90` (the body: 90% of drawn geometry) | 2.2 | 5.0 | 7.5 | 12.1 | 20.4 |
+
+**Reach is a statement about a SEED, not about a species**, and the one-seed version
+of this table got the middle right and the tail completely wrong. An Ember Creeper
+columbine reads `maxR` **7.4 at seed 21 and 65.9 at seed 31697** — same species, same
+form, 9x apart. Worse, that specimen's reach **is not bounded in time**: sampled every
+200 steps it goes 11.9 (step 1000) -> 28.8 -> 44.4 -> **70.9 (step 3200)** and is still
+climbing linearly, a creeper whose axes never arrest. **No fixed spacing keeps a
+creeper off its neighbours and none should try** — that is the organism's business
+(`organBudget`, apical control), not placement's, which is why every number above is
+quoted as a median.
+
+So **12 is a stated fraction and should be read as one**: full clearance of two median
+*bodies* (2 x 5.0) with margin, ~80% of a p75 pair, and **62% of full clearance of two
+median arms** (2 x 9.7 = 19.4). Full arm clearance was measured and rejected by
+looking — at 19-44 units apart, plants 20-48 units tall stop being a stand and read as
+a row of isolated specimens. Two neighbours' outermost peduncles may cross; their
+bodies do not, which is what a meadow looks like and what the defect actually was.
+Grown end to end at `garden=7&seed=21` to step 3600, 3 of 21 pairs overlap at `r90`
+and all three involve the runaway creeper or the hero.
+
+Two smaller things the plan fixes at the planning stage, both ROADMAP 10b defects in
+the shipped app: species are dealt **without replacement** from a shuffled deck —
+and the reshuffle seam is fixed too, so a field of 12 cannot stand two of a kind side
+by side — and `Ashfall Spire` is skipped, because the conifer never flowers and this
+page is titled flowers. Seeds are `baseSeed + i*7919`, injective for any field this
+piece can ask for; a shared seed is an identical twin plant and a viewer sees it.
+
+### A field germinates, it does not appear
+
+`startAt` spreads germination over `FL_GARDEN_STAGGER` = 1200 world steps — the piece
+is *growing* a garden, so the growth is the show — but **not from step 0**. A first
+cohort (`max(2, min(4, ceil(n/3)))`) germinates together so the opening frames are a
+field rather than one plant alone in a clearing, and the rest are spread *evenly* with
+jitter narrower than the gap. N uniform-random draws clump: at the first version's 2400
+with every `startAt` uniform, `garden=7` had 2 of 7 up at step 1100, and three of the
+draws landed inside 300 steps followed by nothing for 900. The boot loop constructs at
+most **one** member per frame and holds the world clock while it does, so a cohort costs
+that many frames of construction rather than a hitch, and every specimen stays exactly
+at `age == world - startAt` with nobody accruing silent debt.
+
+### A field needs a director, not a framer (`45_director.js`)
+
+Pointed at a garden, the shipped framing law does the only thing it can — it frames the
+bound of *every* specimen at once. Measured at `?garden=7&seed=21&ff=3000`: radius 36.1,
+camera 84.2 units out, six plants bunched into one column and most of the frame empty.
+A field photographed from far away and above is not a field; it is a diagram of one.
+
+Four shots cycle, each with a hold set by eye (the rule: a shot must outlast the
+viewer's first read of it and stop before it becomes a still) and 5 s of eased travel
+between them, with the hold not starting until the move has finished so the director
+can never cut mid-transition:
+
+| shot | hold | what it is |
+|---|---|---|
+| `wide` | 20 s | the field from just outside it, eye at a fifth of flower height, aimed *past* the centre |
+| `dolly` | 24 s | a walk along a chord outside the ring, aim held on one flower while everything between sweeps past |
+| `close` | 16 s | the best flower **anywhere in the field** |
+| `low` | 12 s | kneeling, aimed above the flowers so the bank reads against the sky's glow |
+
+`?shot=wide|dolly|close|low` pins one, for stills — a capture affordance in the same
+category as `?ff=`. `?focus=flower` is the fifth thing the camera can be doing and it
+is not in the rotation: it is the solo page's close-up law, extended to score every
+flower in the field.
+
+Three measurements decided more of that file than any preference did. The camera stands
+off the field's **short** axis (from the plan covariance of the origins) because a stand
+of seven is never round and standing on the long axis lays the specimens one behind
+another. Distances are set by the **subject** rather than by the ring — the frame is
+`2 d tan(fov/2)` = 0.752 d units tall, so a median plant fills 55% of frame height at
+`d = 2.4 hTop`; the first version distanced off the ring and photographed the inside of
+a hedge. And the field is measured in **medians and percentiles**, off flower height
+rather than plant height: this garden's tallest specimen is a 46.6-unit Sun Coral whose
+flowers all sit between 5.9 and 13.8, so a framing off plant height aims at bare stem.
+
+`flowerScore` is the shipped `bestFlower` — petals over drawn reach, times clearance
+from its own trunk — with three terms a field adds: how **open** the corolla is
+(`org.dev`, the same channel the bloom reads, so "the most open flower" is a chemistry
+question the engine already answered), how **crowded** it is by its neighbours, and a
+**rim** bonus, because everything about a close-up is easier from outside the crowd.
+⚠ The obvious version of the crowding term is wrong and was built first: a sight-line
+test from the *current* camera measures the wrong shot, since the close-up ends up 4.2
+corolla radii from its subject, and compounded over seven specimens it chose a 3-petal
+Parasol on the rim over a 26-petal Fern in the middle. What can block a close-up is what
+stands near the **flower**.
+
+⚠ `FL_DIR_HERO = 1.25` is a thumb on the scale for specimen 0 and it is **paying for a
+limitation elsewhere**: the sight-line clearance in `captureDirty` is the hero's alone,
+and in a stand this dense that clearance is the difference between a photographed
+corolla and a wall of leaf — measured on `?garden=7&seed=21`, the hero close-up draws in
+33.9 ms with the flower visible while `?focus=flower` on a Cathedral Fern two plants over
+is 131 ms of the subject's own blades across the lens. Delete the thumb the day the cull
+follows the subject instead of specimen 0.
+
+### The ground, and a field's own sky (`25_ground.js`)
+
+One disc, shaded with `FL_TRI_FS` subsetted, coloured from the palette only (soil is
+`bgBot` and `ambBot` pulled toward `stem0`, albedo 0.03-0.10 against blades at
+0.26-0.58 and below `bloomThresh`, so a floor is felt rather than seen), alpha carrying
+linear depth like every other surface here.
+
+⚠ **The melt used to be a radius and it read as a tabletop.** The rim is not what a
+viewer sees; the **horizon** is, and a fully fogged ground and the sky just above it
+differ by 3-5x in luminance on these palettes (Sun Coral: fog L 0.041 against `bgBot` L
+0.005). No radial fade can close that, because the seam is wherever the plane runs out
+of screen. So the ground melts into **the actual sky in that direction** — `flSky`, the
+background's own function, shared rather than resembled, evaluated at the fragment's
+screen position — and where the melt is complete the ground is bit-for-bit the void
+behind it. What drives it is the shared fog rather than radius, through the closed-form
+optical depth of an exponential-height haze along a ray that ends *on* the ground:
+`tau = rho0 L H (1 - exp(-yEye/H)) / yEye`, uniform when the eye is inside the layer and
+thinning as `1/yEye` when it is above. That is the whole trick: an eye at ground level
+sees its own near ground go, an eye above the layer does not. `FL_HAZE` is four numbers
+set by looking (`?haze=G,H,P,N`), in the wind's `uRef` category, and it exists because a
+garden from eye level and a solo close-up pull in opposite directions — `G` alone trades
+one against the other, `P` and `N` are what let both be right.
+
+**A plain palette mean is mud, and it is measurable.** The scene's fog, void,
+hemisphere, key and glow used to come from the hero, so a garden of seven stood in one
+species' weather. Averaging in RGB cancels hue against hue: over the field at
+`garden=7&seed=21` the plain mean fog has saturation **0.261 against a member mean of
+0.598**, and `keyCol` **0.090 against 0.328** — near-grey. `flFieldPal` therefore keeps
+the weighted mean's luminance and hue direction exactly and rescales its distance from
+the achromatic axis back to the members' mean chroma, clamped so no channel goes
+negative (restoring chroma must not invent light). Measured on the same field, that puts
+blended fog saturation at **0.527** where the plain mean was 0.261. The **grade** is
+deliberately not blended — `bloomThresh`, exposure, grain, vignette and dof are the
+lens, not the weather.
+
+**The hero leads at 0.35, and that number is measured rather than tasted.** At lead 1.0
+the sky is the hero's alone; at 0.0 it is the pure field mean, and every garden then
+looks the same, which is the failure a blend invites. Over 40 fields of seven, the mean
+pairwise angle between two gardens' fog **hues** is 84° at lead 1.0, **64° at 0.35** and
+27° at 0.0 — so two thirds of the between-garden variety survives the blend. `?sky=`
+overrides it, which is how the A/B was shot.
+
+### The harness
+
+```bash
+node tools/flowers_shot.mjs shots/g.png 'garden=7&seed=21&ff=3000&speed=0&shot=wide'
+node tools/flowers_perf.mjs 'garden=7&seed=21'      # rAF gap sampler, 30 s of LIVE growth
+node tools/flowers_horizon.mjs shots/h 'garden=7' # the horizon from three camera heights
+node test/flowers_capture.mjs '{"n":7,"steps":3000}'   # the field profiler, headless
+```
+
+`flowers_horizon.mjs` exists because the boot's framer owns the camera and picks one
+height, so no shot tool here could answer "does the ground melt from a low camera"; it
+wraps `scene.render` and overrules the framer per frame. `flowers_perf.mjs` is
+`garden_hitch.mjs`'s lesson applied to this page — **a harness that waits cannot see a
+freeze** — and it prints without judging, because this piece has no frame budget yet;
+read `garden_hitch`'s other lesson before adding a verdict line to it.
+
+**And one of them was checked by another implementation, which is why it is right
+now.** `tools/flowers_shot.mjs` summed the garden's buffers and then added the hero's
+again — `__fl.B` *is* `garden[0].B` in a garden — so a stand of seven reported 998
+organs for 771 and 10.34M tri floats for 8.18M. Nothing in the page disagreed with it.
+`test/flowers_capture.mjs`, which reaches the same quantities down a different path,
+did.
+
+### ⚠ What has NOT been done, and it is the important line here
+
+**Nobody has watched a garden at framerate in a real browser.** Every judgement above —
+the spacing, the shot list, the ground, the sky, both LOD terms — rests on stills and
+headless numbers, and this project's record says that is its weakest evidence: four
+times the deciding instrument has been a person watching for a few seconds. Two things
+a still has already caught, and neither is fixed: the **`wide` shot** at
+`garden=7&seed=21&ff=3000` is a wall of near canopy with nothing receding behind it,
+because the field is measured from origins plus a fixed canopy margin and this
+catalogue's reach tail is enormous; and **garden time slows with N** — the step pool is
+`max(8, nAct)`, so at N = 12 each plant gets one step a frame against a solo page's six.
+ROADMAP 0f has both, ranked, with watching it first.
+
 ## What a FIELD costs, and the two terms that pay for it
 
 `?garden=N` multiplies the one thing this piece was never asked to do more
@@ -398,6 +609,28 @@ is one line in `20_draw.js`: every floral organ is handed `detL = 1.0`, the
 microscope, permanently on, so a petal is built at the leaf's own lattice
 (~5,600 vertices). That is right for the close-up the piece is named after and
 nonsense for a flower forty units away covering sixteen pixels.
+
+**⚠ That table was taken before the germination plan changed, and half of it does not
+reproduce.** It was measured with `FL_GARDEN_STAGGER` 2400 and uniform-random
+`startAt`s; the shipped plan staggers over 1200 with a first cohort, so every member
+is *older* and carries more leaf. Re-run on the shipped plan — same command, same
+seed, same raster, `node test/flowers_capture.mjs '{"n":7,"steps":3000,"lod":0}'` —
+the field is 761 organs and 127.3 ms of capture, and it splits:
+
+| kind | ms | share | | kind | ms | share |
+|---|---|---|---|---|---|---|
+| sepal | 37.6 | 29% | | stamen | 22.3 | 17% |
+| petal | 33.5 | 26% | | rest | 5.9 | 5% |
+| leaf | 29.9 | 23% | | | | |
+
+**The headline survives and one of its numbers does not.** Floral organs are 74% of
+the capture (was "70%"), and the cause is still one `detL = 1.0`. But the petal
+stream is **46.7% of the floats, not 58%**, and *sepals overtake petals* once the
+members are grown. Two things follow: the absolute ms are machine-relative and worth
+nothing across machines, and **a profile of a field is a profile of that field's
+germination schedule** — re-take it when the plan moves. With the cap on, the same
+field costs 56.1 ms and 7.80M floats against 127.3 ms and 25.0M, and flips to
+leaf-dominated (leaf 56.6% of the capture).
 
 ### 1. Never finer than the raster (`28_lod.js`)
 

@@ -1001,3 +1001,52 @@ wiring-up. It is a *meristem* mechanism. `20_meristem.js` runs `'grad'`, where
 
 `test/infected.mjs` section 4 asserts this rather than commenting it, so the
 byte-identical rows are a confirmed derivation rather than a suspicious null.
+
+## `ln -s` from the repo root ATE `node_modules`, and every browser tool died with it (2026-08-12)
+
+A worktree has no `node_modules`, so the standing advice (tools/README) is to
+symlink the real one in. An agent ran
+
+```bash
+ln -s /Users/aj/Code/xenobotany/node_modules node_modules      # from the MAIN repo
+```
+
+**from the repository root instead of from its worktree**, where `node_modules` was
+the real directory and the link's own target. What was left was a self-referential
+broken symlink where the dependency tree had been, and every Playwright tool in
+`tools/` — `flowers_shot`, `flowers_perf` and `flowers_horizon` with them — failed
+with `ERR_MODULE_NOT_FOUND` on `playwright`, which reads as "the harness is broken"
+rather than as "the dependencies are gone". (`ln -s` into an existing directory
+places the link *inside* it; with `-f` it replaces. Either way the safe form is the
+same and the safe cwd is the same.)
+
+Two rules, and the second is the one that saves you:
+
+- **`ln -sfn`, always.** `-n` stops the link being created inside an existing
+  directory link and `-f` replaces rather than nests.
+- **Run it from the worktree, never from the repo root.** `cd` into the worktree
+  first and use the absolute path as the *source* only. Nothing a worktree agent
+  does should write to the main working copy at all, and this is the one command
+  that can do it by accident.
+
+Recovery is `npm i`, which is cheap; noticing is the expensive half, because the
+failure surfaces three tools later in something that looks unrelated.
+
+## A profile of a field is a profile of that field's germination schedule (2026-08-12)
+
+`test/flowers_capture.mjs` grows the field `flGardenPlan` plans, *with* the stagger,
+which is correct and is the whole reason it reproduces the page. It also means the
+profile moves when the plan moves — and the plan moved on the same branch as the
+profile.
+
+The per-kind table quoted in `flowers/28_lod.js` was taken with
+`FL_GARDEN_STAGGER = 2400` and uniform-random `startAt`s. Shipped, it is 1200 with a
+first cohort, so every member is *older* and carries more leaf. Re-running the
+identical command on the identical seed: floral organs still dominate (74%, quoted as
+"70%"), but **the petal stream is 46.7% of emitted floats and not 58%**, and *sepals
+overtake petals* in the per-kind ms. Nothing failed, nothing warned, and both numbers
+are correct measurements of different fields.
+
+So: state the plan a field profile was taken under, and re-take it when the plan
+changes. The same applies to any garden number in the shipped app —
+`plantGarden`'s head starts are the same kind of schedule.

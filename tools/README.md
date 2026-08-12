@@ -201,6 +201,49 @@ inside **single** quotes, so it never interpolated.
   you are trying to measure — the first two baseline runs of this tool disagreed
   about which species was worst, because they were not looking at the same plants.
 
+### The flowers page has its own three (2026-08-12)
+
+`flowers.html` is a separate build with its own boot, its own handle
+(`window.__fl` rather than `window.app`) and, since `?garden=N`, its own field.
+None of the tools above can drive it.
+
+- `flowers_shot.mjs out.png '<query>'` — one capture of the flower piece, at any
+  URL the page understands: `'garden=7&seed=21&ff=3000&speed=0&shot=wide'` is the
+  garden's wide shot at bloom, frozen. It drains `?ff=` and waits for the camera
+  to *settle* rather than for a fixed time, prints stream counts and the HUD line,
+  and checks the mean pixel so a black PNG cannot be reported as a picture.
+  Headed ANGLE-on-Metal on darwin, for the reason at the top of this file.
+
+  ⚠ **It counted the hero twice until 2026-08-12** — `__fl.B` *is* `garden[0].B`
+  once a garden exists — and reported 998 organs for 771, 10.34M tri floats for
+  8.18M. Nothing on the page disagreed; `test/flowers_capture.mjs`, which reaches
+  the same quantities down a different path, did. **A capture tool's totals are a
+  second implementation of the page's bookkeeping and should be treated as one.**
+- `flowers_perf.mjs ['<query>'] [seconds]` — the rAF gap sampler, `garden_hitch`'s
+  lesson applied to this page: **a harness that waits cannot see a freeze**, so the
+  sampler runs *inside* the page. 30 s of LIVE growth (it refuses `?ff=`, which
+  would bury the number), median / p95 / p99 / worst / fps. It **prints and does
+  not judge** — this piece has no frame budget yet, and `garden_hitch`'s verdict
+  line outliving its scene is the reason not to invent one.
+- `flowers_horizon.mjs <outprefix> '<query>' [cams]` — the ground, from three
+  camera heights. It exists because the boot's framer owns the camera and picks
+  one height, so no other tool here can answer "does the ground melt from a low
+  camera": it wraps `scene.render` and overrules the framer before every draw.
+  Default eyes are 0.35 (across the field), 3.5 (the shipped framing) and 26
+  (down onto the disc, where the geometric rim is nearest to being in frame).
+
+Their headless counterpart is `test/flowers_capture.mjs`, which profiles a whole
+field's capture cost per specimen, per organ kind and per stream without a
+browser — and it grows the field `flGardenPlan` plans *with the germination
+stagger*, so it is the page's field and not a different one.
+
+⚠ **Symlinking `node_modules` into a worktree: `ln -sfn`, and never from the repo
+root.** The advice under `clip.mjs` above is right and it is sharp: run
+`ln -sfn /abs/path/to/node_modules node_modules` **from inside the worktree**.
+Without `-n`, and from the wrong directory, it replaces the real `node_modules`
+with a link to itself and every tool on this page dies with `ERR_MODULE_NOT_FOUND`
+on `playwright`. PITFALLS 2026-08-12.
+
 ---
 
 ## The Blender bridge — not Playwright, not a capture tool
