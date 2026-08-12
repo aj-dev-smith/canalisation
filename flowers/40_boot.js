@@ -385,8 +385,10 @@ function flBoot() {
       if (!s.S || !dirty[i]) continue;
       env.t = s.age;
       // one near-face distance per specimen (28_lod.js): the subject is large
-      // on screen and its cap lands above the leaf's own lattice, so a
-      // close-up is untouched by construction rather than by exemption
+      // on screen, so the cap lands above the leaf's lattice for anything a
+      // close-up is actually looking at — no hero exemption, and the 3.4% of
+      // the petal stream it does take at the close-up is stamens and carpels,
+      // which the microscope draws at full lattice however small they are
       env._flD = flSpecimenDist(s.S);
       s.B.reset();
       flDrawSpecimen(env, s.B, s.S, i === 0 ? cull : null);
@@ -472,6 +474,15 @@ function flBoot() {
       // The HERO is exempt and always paid first: it is the subject, the
       // close-up and the pollen's plant, and it is the one specimen whose
       // motion is being looked at.
+      //
+      // WHAT IT COSTS, measured and not waved away (tools/flowers_perf.mjs,
+      // 60s of live growth, isolated with ?batch=0): median gap 50.0 -> 34.9ms,
+      // and p99 83.4 -> 108.4ms. It trades the TAIL for the median, because a
+      // frame that pays three plants their whole debt is heavier than one that
+      // pays a step to seven, and the plants are wildly unequal (a Sun Coral
+      // capture is 20ms, a Spiral Ossuary 1.4ms). Bounded by the pool. Read
+      // that before writing a hitch gate for this page.
+      //
       // HOW MANY PLANTS MAY MOVE THIS FRAME. Debt only builds if something
       // refuses to pay it, and the refusal is where the frame is bought — so
       // this is the actual knob, and it is set by Nyquist rather than by taste:
