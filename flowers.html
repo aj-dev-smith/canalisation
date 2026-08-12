@@ -11201,6 +11201,24 @@ function flSpotsRun(leaf) {
 // statement about a flower and the cap is a statement about the frame. 7
 // floats a grain: 4096 grains is 114 kB.
 //
+// ⚠ AND IT HAS BEEN LOOKED AT, WHICH IS THE ONLY VERDICT THAT COUNTS. Over a
+// full director cycle at ?garden=7 the field holds 330-390 grains, and the
+// number of them drawn LARGER THAN 2 PIXELS is 0 (wide) / 5 (dolly) / 7
+// (close) / 23 (low) — never more than 4 px, because the camera is never
+// within 10 units of a grain: the shots stand outside the crowd (45_director)
+// and a grain only exists within a plant's room of a plant. So the mechanism
+// is right and what reaches a viewer is a scatter of one-pixel dots; it reads
+// as motes in the close-up and as nothing at all in the wide shot.
+//
+// The lever is the drawn SIZE, and the honest form of it is the vein width
+// floor's argument applied to a mote: a real grain is sub-pixel at every
+// distance, so what you see is a glare spot of roughly constant ANGULAR size,
+// not a constant world size. `?pol=0.05,12,0.07` shows what that buys — at
+// 3.2x, motes read around the corollas in the dolly shot and the sky stays
+// clean, because the population is concentrated where the plants are. It is
+// NOT shipped: it is a look decision, and the look decisions in this piece
+// are made by watching, not by the person who found the lever.
+//
 // ------------------------------------------------------------- TWO CLOCKS
 //
 // The garden runs its specimens on their own clocks — the step pool is spent
@@ -11275,7 +11293,7 @@ const FL_POLLEN = {
   // and 38 / 38 / 38 of them within one plant's room. The whole difference is
   // grains nobody can see, so one plant's room past the last plant (the
   // measured FL_GARDEN_SPACING) keeps the plume among the flowers where the
-  // light is and spends nothing. ?pol=rate,beyond sweeps both.
+  // light is and spends nothing. ?pol=rate,beyond,size sweeps all three.
   //
   // It also settles the ground: at 90, 48% of grains ended by touching y=0 —
   // all of them far downwind, drawn at the 1-px floor, invisible — and at 12
