@@ -479,6 +479,14 @@ function flBoot() {
       : Math.max(2.0, radius * 0.62);
     dofR = dofR === undefined ? dofT : dofR + (dofT - dofR) * 0.05;
     scene.compU.uRange.value = dofR;
+    // THE GROUND EXISTS NOW (25_ground.js), and the framing laws predate it:
+    // on a tall specimen the wide shot happily walked the eye to y = -16 and
+    // shot up through the floor — invisible against a void, a screen-filling
+    // ceiling of soil once there is one (measured: the first frame after the
+    // ground landed). A photographer with a real floor kneels at it instead
+    // of phasing through it, so the eye is held just above the plane; the
+    // orbit and the easing both pass through here every frame.
+    if (scene.camera.position.y < 0.5) scene.camera.position.y = 0.5;
     scene.render(now);
 
     const c = countPetals(S.plant);
