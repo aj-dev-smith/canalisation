@@ -13008,7 +13008,7 @@ function flGardenPlan(baseSeed, n, opts = {}) {
 // single-specimen piece exactly (held to byte identity by the formref harness
 // + parity).
 //
-// ?shot=wide|dolly|close|low pins the garden director to one shot, for stills.
+// ?shot=wide|bank|dolly|close|low pins the garden director to one shot, for stills.
 
 function flBoot() {
   const q = new URLSearchParams(location.search);
@@ -13093,7 +13093,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso= ?garden=2..12 ?radius= ?shot=wide|dolly|close|low';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso= ?garden=2..12 ?radius= ?shot=wide|bank|dolly|close|low';
   // The form rail. A form is decided at founding — every organ's identity is
   // read off sp the step it is founded — so switching means regrowing, and
   // the honest way to regrow deterministically is a reload with the form in
@@ -13299,7 +13299,7 @@ function flBoot() {
   // distance). null on the solo page, where the shipped law below still runs
   // untouched.
   let dofPlan = null;
-  // ?shot=wide|dolly|close|low pins the director to one shot — a capture
+  // ?shot=wide|bank|dolly|close|low pins the director to one shot — a capture
   // affordance, the same category as ?ff=, so a still of a named shot is
   // reproducible. Unpinned (the page as watched) it cycles.
   let pinIdx = -2;   // resolved on first use — FL_DIR_SHOTS is in its TDZ at boot
@@ -13459,7 +13459,7 @@ function flBoot() {
         // by the same smoothstep the other shots use, turns those three lerps
         // into an ease-in-out without touching the framer the solo page shares.
         {
-          const w = smoothstep(0, 1, Math.min(1, director.el / FL_DIR_TRANS));
+          const w = smoothstep(0, 1, Math.min(1, director.el / flDirTrans(director)));
           if (w < 0.999) {
             scene.camera.position.lerp(director.fromEye, 1 - w);
             target.lerp(director.fromTgt, 1 - w);
@@ -13477,18 +13477,21 @@ function flBoot() {
         director.fromR = radius;
       }
       const sh = FL_DIR_SHOTS[director.shot];
-      const u = Math.min(1, director.el / (FL_DIR_TRANS + sh.hold));
+      const u = Math.min(1, director.el / (flDirTrans(director) + sh.hold));
       let rWant;
       if (name === 'dolly') { rWant = flDirPoseDolly(director, F, bb, u); dofPlan = { k: 0.35, min: 1.5 }; }
       else if (name === 'low') { rWant = flDirPoseLow(director, F); dofPlan = { k: 0.45, min: 3.0 }; }
-      else { rWant = flDirPoseWide(director, F); dofPlan = { k: 0.42, min: 3.0 }; }
+      // the establishing frame is SOLVED from the live camera's own fov and
+      // aspect, so it is the one pose that is handed the camera
+      else if (name === 'wide') { rWant = flDirPoseEstab(director, F, scene.camera); dofPlan = { k: 0.55, min: 6.0 }; }
+      else { rWant = flDirPoseBank(director, F); dofPlan = { k: 0.42, min: 3.0 }; }
       // THE TRANSITION: an eased blend from the pose the camera held at the
-      // cut to the pose this shot wants, over FL_DIR_TRANS seconds, with a
+      // cut to the pose this shot wants, over flDirTrans(director) seconds, with a
       // little damping on top so a want that moves (the dolly, a growing
       // subject) never reads as a step. Ease-in-out, not the exponential lerp
       // the solo framer uses: a cut across a field is a MOVE, and an
       // exponential move starts at its fastest.
-      const w = smoothstep(0, 1, Math.min(1, director.el / FL_DIR_TRANS));
+      const w = smoothstep(0, 1, Math.min(1, director.el / flDirTrans(director)));
       _poseE.copy(director.fromEye).lerp(director.wantEye, w);
       _poseT.copy(director.fromTgt).lerp(director.wantTgt, w);
       scene.camera.position.lerp(_poseE, 0.12);
@@ -13825,9 +13828,10 @@ flBoot();
 //     stand small against the fog. Depth comes from the plants themselves
 //     occluding each other, which is exactly what the overhead shot destroys.
 //  2. A SHOT LIST, NOT A SHOT. The piece grows over minutes and one framing is
-//     dead after twenty seconds. Four shots cycle: the wide field, a dolly
-//     across it at flower height, a close-up on the best flower ANYWHERE in
-//     the field, and a low upward shot with the plants against the sky glow.
+//     dead after twenty seconds. Five shots cycle: the establishing frame that
+//     says what this place IS, a bank shot inside the thicket, a dolly across
+//     it at flower height, a close-up on the best flower ANYWHERE in the
+//     field, and a low upward shot with the plants against the sky glow.
 //  3. THE VIEWER OWNS THE CAMERA WHEN THEY TOUCH IT, and for much longer than
 //     the solo page's six seconds — see FL_DIR_ORBIT_HOLD.
 //
@@ -13844,18 +13848,51 @@ flBoot();
 // was: a shot must outlast the viewer's first read of it (what is that, where
 // am I, what is it doing) and stop before it becomes a still. The dolly is
 // longest because it is the only shot that is going somewhere; the low shot is
-// shortest because it is a punctuation mark, not a scene. ---
+// shortest because it is a punctuation mark, not a scene.
+//
+// FIVE SHOTS, NOT FOUR. `wide` used to be the pose now called `bank`, and it
+// was not wide: it distanced off the MEDIAN FLOWER height (5.9-13.8 units on
+// ?garden=7&seed=21) while the plants standing there are 4.4-49.2 tall, so it
+// framed flowers at eye level and every tall specimen ran out of the top of
+// the picture. That frame is a good frame — it is the inside of the stand,
+// petals across the whole width — and it survives under its own name. What it
+// cannot do is say what the place IS, so `wide` is now solved from the PLANT
+// bounds (flDirPoseEstab) and `bank` is the thicket.
+//
+// The holds were re-balanced rather than kept, because five shots at the old
+// numbers is a 112 s loop:
+//     wide   16   the establishing read: count them, find the ground, then go
+//     bank   12   the same field from inside it; dense, so it reads fast
+//     dolly  18   still the longest — the only shot that is going somewhere
+//     close  16   the subject
+//     low     9   punctuation
+// 71 s of hold + 5 transitions = 96 s, against 92 s for the old four.
 const FL_DIR_SHOTS = [
-  { name: 'wide', hold: 20 },
-  { name: 'dolly', hold: 24 },
+  { name: 'wide', hold: 16, trans: 7.5 },
+  { name: 'bank', hold: 12 },
+  { name: 'dolly', hold: 18 },
   { name: 'close', hold: 16 },
-  { name: 'low', hold: 12 },
+  { name: 'low', hold: 9 },
 ];
 // Seconds of eased travel between shots. 5 s across the ~25 units a wide-to-
 // close move covers is ~5 u/s at the peak of a smoothstep — a glide, not a
 // whip. A shot's hold does NOT start until its transition has finished, so the
 // director can never cut mid-move.
+//
+// A shot may state its own, and `wide` does. Every cut flips the heading end
+// for end, so a transition crosses the field: at ?garden=7 the old worst move
+// was ~87 units in 5 s (17 u/s mean, ~26 at the peak of a smoothstep, since a
+// smoothstep peaks at 1.5x its mean). The establishing shot stands at 81.8
+// units where `bank` stands at 47.9, which takes that move to ~130 units and
+// would have peaked near 39 u/s — 2.4 m/s in WORLD.unitM, a jog. 7.5 s puts it
+// back at 26, exactly the peak the other four already have. It is NOT the
+// 59-62 u/s whip the close-up's arrival gate was built for; it is the same
+// arithmetic caught one shot earlier.
 const FL_DIR_TRANS = 5.0;
+function flDirTrans(dir) {
+  const sh = FL_DIR_SHOTS[dir.shot];
+  return (sh && sh.trans) || FL_DIR_TRANS;
+}
 // How long a drag owns the camera. The solo page uses 6 s, which is right for
 // one subject in the middle of the frame: you turn it, you look, it resumes.
 // A field is a place — a viewer who drags is walking around IN it, past plants
@@ -13895,21 +13932,37 @@ function flDirMake() {
 }
 
 // THE FIELD, measured rather than assumed: where the germinated specimens
-// stand, how far out the ring reaches, and — the number the whole wide shot is
+// stand, how far out the ring reaches, and — the number the INSIDE shots are
 // built on — how high the FLOWERS are. Not how high the plants are: this
 // garden's tallest specimen is a 46.6-unit Sun Coral whose flowers all sit
 // between 5.9 and 13.8, so a framing off plant height points the camera at
 // bare stem. Medians, not extremes, for the same reason.
+//
+// TWO MORE NUMBERS, AND THEY ARE THE OTHER HALF OF THAT SENTENCE. An
+// establishing frame has the opposite job: it must contain the PLANTS, so it
+// is solved from `hHi` (how tall the field is) and `Rout` (how wide, canopy
+// included — an origin is a stem and the plant standing on it reaches out).
+// Both are 85th percentiles for the reason `R` is a 75th: a dart-thrown field
+// regularly hands one member a veto. Measured on ?garden=7&seed=21, an Ember
+// Creeper sprawls 46.7 units from its own origin — twice the whole ring's
+// spacing — and takes the field's outer radius from 30.6 (p85) to 62.4 (max).
+// Framing off that one axis doubles the standoff and photographs a clearing
+// nobody is standing in. Height loses nothing to the same treatment there
+// (p85 48.0 against max 49.2); at ?garden=12 it is 44.8 against 49.9.
 function flDirField(specs) {
   let n = 0, sx = 0, sz = 0;
-  const fh = [], hs = [], pos = [];
+  const fh = [], hs = [], pos = [], reach = [];
   for (const s of specs) {
     if (!s.S) continue;
     const o = s.plan ? s.plan.origin : [0, 0, 0];
     sx += o[0]; sz += o[2]; n++;
-    let ymax = 0;
-    for (const ax of s.S.plant.axes) for (const p of ax.pts) if (p[1] > ymax) ymax = p[1];
-    hs.push(ymax);
+    let ymax = 0, rch = 0;
+    for (const ax of s.S.plant.axes) for (const p of ax.pts) {
+      if (p[1] > ymax) ymax = p[1];
+      const rr = Math.hypot(p[0] - o[0], p[2] - o[2]);
+      if (rr > rch) rch = rr;
+    }
+    hs.push(ymax); reach.push(rch);
     // the weight is the specimen's own station count — how much PLANT is
     // standing there. A germinating seedling and a grown Abyssal Frond are one
     // origin each, and a centre that treats them alike aims the camera at the
@@ -13940,10 +13993,16 @@ function flDirField(specs) {
   for (const p of pos) { cx += p[0] * p[2]; cz += p[1] * p[2]; wsum += p[2]; }
   cx /= wsum; cz /= wsum;
   const ds = pos.map(p => Math.hypot(p[0] - cx, p[1] - cz)).sort((a, b) => a - b);
+  const pct = (a, p) => a[Math.min(a.length - 1, Math.floor(a.length * p))];
   // 75th percentile + a canopy margin: an origin is a stem, and the plant
   // standing on it reaches out. 3.0 is a measured corolla reach (floralBounds
   // r runs 0.5-4.6 across this catalogue; the ring's own spacing is 2.5).
-  const R = Math.max(4, ds[Math.min(ds.length - 1, Math.floor(ds.length * 0.75))] + 3.0);
+  const R = Math.max(4, pct(ds, 0.75) + 3.0);
+  // and the field's own outer bound: each specimen's distance from the middle
+  // PLUS what that specimen actually reaches, at the 85th percentile
+  const outs = pos.map((p, i) => Math.hypot(p[0] - cx, p[1] - cz) + reach[i]).sort((a, b) => a - b);
+  const Rout = Math.max(R, pct(outs, 0.85));
+  const hHi = Math.max(2, pct(hs.slice().sort((a, b) => a - b), 0.85));
   const hMid = fh.length ? med(fh) : Math.max(2, med(hs) * 0.55);
   // THE FIELD'S SHORT AXIS, from the plan covariance of the origins, is where
   // the camera stands: a stand of seven is never round, and standing off the
@@ -13957,7 +14016,7 @@ function flDirField(specs) {
     sxx += dx * dx; szz += dz * dz; sxz += dx * dz;
   }
   const pa = 0.5 * Math.atan2(2 * sxz, sxx - szz) + Math.PI / 2;
-  return { cx, cz, R, hMid, hTop: med(hs), pa, n };
+  return { cx, cz, R, Rout, hMid, hHi, hTop: med(hs), pa, n };
 }
 
 // The heading a shot is taken from: the field's long axis, flipped end for end
@@ -14080,14 +14139,87 @@ function flDirOutward(dir, F, bb) {
 // --- the poses. Each writes dir.wantEye / dir.wantTgt and returns the
 // subject scale (the `radius` the fog and the dolly law are built on). ---
 
-// THE WIDE FIELD. Eye just outside the ring at a fifth of flower height,
-// aimed PAST the centre: the target sits 0.30 R beyond it, so the mass of the
-// field is in the near half of the frame and the far plants have somewhere to
-// recede to. Distance 1.75 R + 5 was set by eye against the alternative of
-// framing the bound (which is what phase 1 did, and which put the camera 84
-// units out): at this distance the ring's near plants overflow the frame edges
-// and its far ones stand about a third of frame height.
-function flDirPoseWide(dir, F) {
+// THE ESTABLISHING FRAME — the one shot that has to answer "what is this
+// place". Three things a viewer must be able to do from it: count the plants,
+// see where the field ENDS, and find the ground. None of those survive a
+// framing built on flower height, which is what `bank` (below) is and why
+// `wide` used to be a thicket mid-shot with five specimens cropped top and
+// bottom.
+//
+// SO IT IS SOLVED, not tuned. The frame at distance d is fovH*d units tall and
+// A*fovH*d wide, where fovH = 2 tan(fov/2) = 0.752 at the shipped 41.25 deg
+// and A is the canvas aspect — both read off the live camera rather than
+// written down, because a window is not 1.41 wide by decree. Two conditions,
+// and the distance is whichever binds:
+//
+//   WIDTH   the field's full diameter 2*Rout across fW of the frame width
+//   HEIGHT  the field's top hHi across fH of the frame height
+//
+// Which one binds is a property of the FIELD's own aspect and it swaps inside
+// the shipped range, which is the argument for taking the max of both rather
+// than picking one: at ?garden=3 the stand is 30.6 wide and 34.0 tall and the
+// HEIGHT binds (58.0 against 33.6); at ?garden=12 it is 106.8 wide and 44.8
+// tall and the WIDTH binds (117.1 against 76.4). ?garden=7 is height-bound at
+// 81.8 against 67.1. A pose that solved only one of them is inside the field
+// at one end of the range and a mile away at the other.
+//
+// THEN THE COMPOSITION, which is two more fractions and is where the eye gets
+// its say. The frame at the field's own depth spans y in
+// [yT - fovH*d/2, yT + fovH*d/2], so putting the field's FEET at height bF up
+// the frame fixes the target: yT = fovH*d*(0.5 - bF). And the HORIZON sits at
+// the eye's own elevation, so putting it at hz up the frame fixes the eye:
+// yE = yT + fovH*d*(hz - 0.5). Feet below the horizon, tops above it — the
+// plants cross the skyline, which is what makes a field read as standing on
+// something. The numbers: fW 0.86, fH 0.78, feet at 0.16, horizon at 0.46.
+// ?estab=fW,fH,bF,hz sweeps all four; the ladder that chose them is in the
+// branch notes.
+//
+// ⚠ THIS IS NOT PHASE 1'S FRAMING OF THE BOUND, though the distances are
+// comparable (81.8 here against 84.2 there). That one framed a SPHERE from
+// above and put six plants in an overlapping column; this one stands off the
+// short axis at 1.15 m of eye height and looks across, so the long axis lies
+// across the frame and the depression angle is 2 degrees. Far away and above
+// is a diagram; far away and level is a landscape.
+const FL_ESTAB = [0.86, 0.78, 0.16, 0.46];
+function flEstabKnobs() {
+  if (typeof location === 'undefined') return FL_ESTAB;
+  const v = (new URLSearchParams(location.search).get('estab') || '').split(',').map(Number);
+  return (v.length === 4 && v.every(isFinite)) ? v : FL_ESTAB;
+}
+function flDirPoseEstab(dir, F, cam) {
+  const fovH = 2 * Math.tan(cam.fov * Math.PI / 360);
+  const A = Math.max(0.5, cam.aspect);
+  const k = flEstabKnobs();
+  const dW = 2 * F.Rout / (k[0] * A * fovH);
+  const dH = F.hHi / (k[1] * fovH);
+  // and never inside the field it is establishing, whatever the fractions say
+  const D = Math.max(dW, dH, F.Rout * 1.15 + 6);
+  const a = flDirAng(dir, F), c = Math.cos(a), s = Math.sin(a);
+  const yT = fovH * D * (0.5 - k[2]);
+  const yE = Math.max(FL_DIR_EYE_FLOOR, yT + fovH * D * (k[3] - 0.5));
+  dir.wantEye.set(F.cx + c * D, yE, F.cz + s * D);
+  // aimed at the MIDDLE, unlike every other shot here: the establishing frame
+  // is the one whose subject is the whole field, so there is nothing to push
+  // into the near half of the picture.
+  dir.wantTgt.set(F.cx, yT, F.cz);
+  // the fog's scale (uFogNear = dist - 1.1 r) and the lens range. Half the
+  // field's height rather than Rout alone: at ?garden=3 the stand is tall and
+  // narrow, and fogging from 1.1*Rout would start the haze 15 units in front
+  // of the near plants.
+  return Math.max(F.Rout, F.hHi * 0.6);
+}
+
+// THE BANK — inside the stand, at flower height. This was `wide` until the
+// establishing frame above existed, and it is kept whole because it is the
+// best-looking frame the director has: the eye just outside the ring at a
+// fifth of flower height, aimed PAST the centre (the target sits 0.30 R
+// beyond it), so the mass of the field is in the near half of the frame and
+// the far plants have somewhere to recede to. Distance is set by the SUBJECT
+// and the subject here is a flowering plant, so it is 2.0 hTop with a floor
+// against the ring — which is exactly why it cannot be the establishing shot:
+// hTop is a MEDIAN and the two spires in a stand of seven are twice it.
+// Nothing below this line changed when it was renamed.
+function flDirPoseBank(dir, F) {
   const a = flDirAng(dir, F), c = Math.cos(a), s = Math.sin(a);
   // Distance is set by the SUBJECT, not by the ring: the frame is
   // 2*d*tan(fov/2) = 0.752 d units tall at distance d (41.25 deg, 30_scene),
@@ -14156,12 +14288,12 @@ function flDirPoseLow(dir, F) {
 // Advance the shot clock. Returns the name of the shot to play this frame, and
 // sets dir.cut on the frame a new shot begins (which is when the subject is
 // re-picked and the transition's start pose is frozen). A shot's total length
-// is FL_DIR_TRANS + hold, so nothing ever cuts mid-transition.
+// is flDirTrans(dir) + hold, so nothing ever cuts mid-transition.
 function flDirClock(dir, now) {
   const sh = FL_DIR_SHOTS[dir.shot];
   const el = (now - dir.t0) / 1000;
   dir.cut = false;
-  if (el > FL_DIR_TRANS + sh.hold) {
+  if (el > flDirTrans(dir) + sh.hold) {
     dir.shot = (dir.shot + 1) % FL_DIR_SHOTS.length;
     dir.t0 = now;
     // The heading is the field's long axis (flDirAng); what walks between

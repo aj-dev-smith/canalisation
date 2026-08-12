@@ -17,7 +17,7 @@
 // single-specimen piece exactly (held to byte identity by the formref harness
 // + parity).
 //
-// ?shot=wide|dolly|close|low pins the garden director to one shot, for stills.
+// ?shot=wide|bank|dolly|close|low pins the garden director to one shot, for stills.
 
 function flBoot() {
   const q = new URLSearchParams(location.search);
@@ -102,7 +102,7 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso= ?garden=2..12 ?radius= ?shot=wide|dolly|close|low';
+  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso= ?garden=2..12 ?radius= ?shot=wide|bank|dolly|close|low';
   // The form rail. A form is decided at founding — every organ's identity is
   // read off sp the step it is founded — so switching means regrowing, and
   // the honest way to regrow deterministically is a reload with the form in
@@ -308,7 +308,7 @@ function flBoot() {
   // distance). null on the solo page, where the shipped law below still runs
   // untouched.
   let dofPlan = null;
-  // ?shot=wide|dolly|close|low pins the director to one shot — a capture
+  // ?shot=wide|bank|dolly|close|low pins the director to one shot — a capture
   // affordance, the same category as ?ff=, so a still of a named shot is
   // reproducible. Unpinned (the page as watched) it cycles.
   let pinIdx = -2;   // resolved on first use — FL_DIR_SHOTS is in its TDZ at boot
@@ -468,7 +468,7 @@ function flBoot() {
         // by the same smoothstep the other shots use, turns those three lerps
         // into an ease-in-out without touching the framer the solo page shares.
         {
-          const w = smoothstep(0, 1, Math.min(1, director.el / FL_DIR_TRANS));
+          const w = smoothstep(0, 1, Math.min(1, director.el / flDirTrans(director)));
           if (w < 0.999) {
             scene.camera.position.lerp(director.fromEye, 1 - w);
             target.lerp(director.fromTgt, 1 - w);
@@ -486,18 +486,21 @@ function flBoot() {
         director.fromR = radius;
       }
       const sh = FL_DIR_SHOTS[director.shot];
-      const u = Math.min(1, director.el / (FL_DIR_TRANS + sh.hold));
+      const u = Math.min(1, director.el / (flDirTrans(director) + sh.hold));
       let rWant;
       if (name === 'dolly') { rWant = flDirPoseDolly(director, F, bb, u); dofPlan = { k: 0.35, min: 1.5 }; }
       else if (name === 'low') { rWant = flDirPoseLow(director, F); dofPlan = { k: 0.45, min: 3.0 }; }
-      else { rWant = flDirPoseWide(director, F); dofPlan = { k: 0.42, min: 3.0 }; }
+      // the establishing frame is SOLVED from the live camera's own fov and
+      // aspect, so it is the one pose that is handed the camera
+      else if (name === 'wide') { rWant = flDirPoseEstab(director, F, scene.camera); dofPlan = { k: 0.55, min: 6.0 }; }
+      else { rWant = flDirPoseBank(director, F); dofPlan = { k: 0.42, min: 3.0 }; }
       // THE TRANSITION: an eased blend from the pose the camera held at the
-      // cut to the pose this shot wants, over FL_DIR_TRANS seconds, with a
+      // cut to the pose this shot wants, over flDirTrans(director) seconds, with a
       // little damping on top so a want that moves (the dolly, a growing
       // subject) never reads as a step. Ease-in-out, not the exponential lerp
       // the solo framer uses: a cut across a field is a MOVE, and an
       // exponential move starts at its fastest.
-      const w = smoothstep(0, 1, Math.min(1, director.el / FL_DIR_TRANS));
+      const w = smoothstep(0, 1, Math.min(1, director.el / flDirTrans(director)));
       _poseE.copy(director.fromEye).lerp(director.wantEye, w);
       _poseT.copy(director.fromTgt).lerp(director.wantTgt, w);
       scene.camera.position.lerp(_poseE, 0.12);
