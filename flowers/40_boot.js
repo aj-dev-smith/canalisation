@@ -130,7 +130,8 @@ function flBoot() {
     state: () => ({ step, radius, capMs, target: target.toArray(),
       dist: scene.camera.position.distanceTo(target),
       eye: scene.camera.position.toArray(),
-      shot: framedShot, subj: director && director.subj
+      shot: framedShot, el: director ? director.el : 0,
+      subj: director && director.subj
         ? { i: director.subj.i, ax: director.subj.ai } : null }) };
 
   // Frame the flowers once there are flowers; the whole plant until then.
@@ -420,6 +421,11 @@ function flBoot() {
       if (!bb && (name === 'close' || name === 'dolly')) name = 'wide';
 
       if (name === 'close') {
+        if (director.cut) {
+          director.fromEye.copy(scene.camera.position);
+          director.fromTgt.copy(target);
+          director.fromR = radius;
+        }
         frameAxisFlower(sj.ai, specs[sj.i], flDirOutward(director, F, bb));
         framedAx = sj.i === 0 ? sj.ai : -1;
         scene.controls.target.copy(target);
@@ -430,6 +436,24 @@ function flBoot() {
         const want = radius * 2.35;
         if (Math.abs(d - want) > 0.01) {
           eye.sub(target).multiplyScalar(1 + (want / Math.max(1e-3, d) - 1) * 0.03).add(target);
+        }
+        // THE ARRIVAL GATE. The close-up is the shipped framer, and the shipped
+        // framer is three exponential lerps (target 0.03, eye 0.012, dolly
+        // 0.03) — which is an ease-OUT, and an ease-out STARTS at its fastest.
+        // Measured over a full cycle with the sampler: entering the close-up
+        // from the dolly peaked at 59-62 units/s, against 19 for every other
+        // transition (WORLD.unitM makes that 3.9 m/s against 1.2 — a whip
+        // against a walk). Holding the camera back toward the pose it cut from,
+        // by the same smoothstep the other shots use, turns those three lerps
+        // into an ease-in-out without touching the framer the solo page shares.
+        {
+          const w = smoothstep(0, 1, Math.min(1, director.el / FL_DIR_TRANS));
+          if (w < 0.999) {
+            scene.camera.position.lerp(director.fromEye, 1 - w);
+            target.lerp(director.fromTgt, 1 - w);
+            radius = lerp(radius, director.fromR, 1 - w);
+            scene.controls.target.copy(target);
+          }
         }
         dofPlan = { k: 0.22, min: 0.4 };
         framedShot = name;
