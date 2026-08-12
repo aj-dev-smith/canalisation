@@ -11158,6 +11158,64 @@ function flSpotsRun(leaf) {
 //   Converted to world units with the same velToWorld(WORLD) the wind and the
 //   falling blade already use; g and the air come from WORLD itself.
 //
+// ---------------------------------------------------------- ONE POPULATION
+//
+// A FIELD sheds, not a plant. The population walks a LIST of specimens — the
+// boot's `specs` array, hero first — instead of the hero alone, which is what
+// it did through phase 2 and which left six of seven flowering plants shedding
+// nothing. The alternative shape, one FlPollen per specimen, was rejected for
+// three reasons and they are all the same reason:
+//
+//   - A GRAIN IS NOT PART OF A PLANT. The only per-plant thing about it is the
+//     instant and the place it dehisced at; from then on its inputs are the
+//     wind field and gravity, both of which are scene-wide by construction.
+//     Per-specimen populations would be N copies of one air.
+//   - THE CAP IS A SCENE-WIDE RESOURCE. `max` is a legibility and cost number
+//     (below), and N caps of 4096 is not the same statement as one — it says
+//     "each plant may fill the frame with motes", which is the thing a cap
+//     exists to stop. One population also uploads once: `uploadPollen` takes
+//     one array, and N of them would need a concatenation pass the way the
+//     four geometry streams do.
+//   - A GRAIN CROSSING BETWEEN PLANTS IS THE POINT. It is the one thing in
+//     this piece that is about the field rather than about a specimen, and a
+//     population owned by a plant would be a lie about where its grains are.
+//
+// What it costs, stated: seven plants' anthers draw on one 4096-grain budget,
+// so a field's per-plant plume is thinner than a solo page's. Measured
+// (test/flowers_pollen.mjs, garden=7 seed=21): the field's anther count climbs
+// 12 -> 59 -> 96 over steps 1500-4500 against the hero's own 16, and the
+// population runs 5-31% of the cap over that whole range. The cap does not
+// bind at seven, so nothing is being traded away yet; at the 12 the URL allows
+// it would begin to, and the honest fix then is the cap and not the rate,
+// because the rate is a per-anther statement about a flower and the cap is a
+// statement about the frame. 7 floats a grain: 4096 grains is 114 kB.
+//
+// ------------------------------------------------------------- TWO CLOCKS
+//
+// The garden runs its specimens on their own clocks — the step pool is spent
+// depth-first, so a member is paid its whole debt when its turn comes and
+// nothing in between (40_boot.js) — and pollen needs BOTH clocks, not either:
+//
+//   - SHEDDING is a plant process, so a specimen sheds in proportion to the
+//     plant time IT advanced this frame (`spec.stepped`). A member that was
+//     not paid this frame dehisced nothing.
+//   - DRIFT is the air, so every grain advances on the WORLD clock, and the
+//     wind is sampled at world time. `windAt`'s `t` is a wall clock over the
+//     whole clearing; a plant's age is not one, and the population is scene-
+//     wide, so there is no per-plant clock available to be wrong with.
+//
+// It is a no-op on today's page and it is still worth writing down: the hero
+// is exempt from the step pool and is paid first out of it, so its age equals
+// the world step exactly, and the shipped call passed `specs[0].age` for the
+// wind's `t` and got the right number by that accident.
+//
+// ⚠ THE PLANTS THEMSELVES DO NOT DO THIS, and it is outside this file. Each
+// `Plant` samples `windAt` at `this.time` (40_plant.js), which for a member
+// that germinated at world step 900 is the air of 900 steps ago. That is one
+// wind field evaluated at N different times, i.e. N fields, and it is the same
+// class of defect 37_wind.js exists to prevent. The pollen deliberately does
+// not copy it.
+//
 // Stated, honestly:
 //   - WHICH organs dehisce is [OURS]: inner organs in the outer part of the
 //     inner q-range (qn < qBand) — the stamen-analog band. The carpel-analog
@@ -11167,13 +11225,17 @@ function flSpotsRun(leaf) {
 //     as the vein width floor MINW: a real grain is 0.0005 world units and
 //     sub-pixel at every distance, so a grain is drawn as the mote you see
 //     when a shaft of light catches one. Its colour is the KEY LIGHT'S colour,
-//     not a pigment — a backlit mote shows you the light, not itself.
+//     not a pigment — a backlit mote shows you the light, not itself, which in
+//     a field means the FIELD's key light (flFieldPal, 25_ground.js) and not
+//     the hero's: a grain should match the air it is in.
+//   - The edge of the story is a legibility number too, and `?pol=` sweeps it.
+//     See `beyond`.
 
 const FL_POLLEN = {
   dGrain: 30e-6,     // grain diameter, m [D: 20-40 um across taxa]
   rhoGrain: 1200,    // grain density, kg/m^3 [D]
   muAir: 1.81e-5,    // dynamic viscosity of air, Pa s (physics)
-  max: 4096,         // population cap
+  max: 4096,         // population cap, SHARED BY THE WHOLE FIELD
   rate: 0.05,        // grains per dehiscing organ per plant-time unit [legibility]
   qBand: 0.72,       // stamen-analog band: qn below this sheds [OURS]
   devGate: 0.85,     // dehiscence gate: the organ is essentially mature
@@ -11182,10 +11244,26 @@ const FL_POLLEN = {
   bright: 1.1,       // key-colour multiplier on a mote [grade-category]
   fadeIn: 40,        // pt units to full brightness — a grain POPPING to full
   fadeOut: 150,      // white at the anther reads as a glitch, not a mote
+  // HOW FAR PAST THE OUTERMOST PLANT A GRAIN IS STILL PART OF THE PICTURE,
+  // in world units beyond the clearing's rim. This is a LEGIBILITY number and
+  // not physics — a real grain keeps going — and it is needed because the
+  // point pass has no fog and floors gl_PointSize at 1 px (30_scene.js), so a
+  // grain does not fade or shrink out of the frame at any distance: at 90
+  // units it is still a full-brightness one-pixel dot on the sky. Measured on
+  // the shipped 90: the mean grain sat 30-46 units from the clearing's centre
+  // and 60-85% of the whole population was outside the field the plants stand
+  // in, so most of the cap was spent on sky. One plant's room (the measured
+  // FL_GARDEN_SPACING) past the last plant keeps the plume in among the
+  // flowers where the light is. ?pol=rate,beyond sweeps both.
+  beyond: 12,
 };
 
 class FlPollen {
-  constructor(seed, keyCol) {
+  // (seed, keyCol, plan): `keyCol` is the SCENE's key light — the field's when
+  // there is a field. `plan` is flGardenPlan's array or null; the population
+  // reads only the clearing's rim off it, so it never has to know what a
+  // garden is.
+  constructor(seed, keyCol, plan) {
     this.buf = new Float32Array(FL_POLLEN.max * 7);   // pt layout: pos3 col3 size
     this.age = new Float32Array(FL_POLLEN.max);
     this.n = 0;
@@ -11195,12 +11273,29 @@ class FlPollen {
       * velToWorld(w);   // world units per plant-time unit, downward
     this.col = [keyCol[0] * P.bright, keyCol[1] * P.bright, keyCol[2] * P.bright];
     this._w = v3();
-    this._acc = 0;
+    // one shed accumulator per specimen — fractional expected counts, so a
+    // low rate still sheds eventually, and a member that is paid in bursts
+    // sheds the same total as one paid a step at a time
+    this._acc = [];
     this._cand = [];
+    let rate = P.rate, beyond = P.beyond;
+    if (typeof location !== 'undefined') {
+      const s = (new URLSearchParams(location.search).get('pol') || '').split(',').map(Number);
+      if (s.length === 2 && s.every(isFinite)) { rate = s[0]; beyond = s[1]; }
+    }
+    this.rate = rate;
+    // the clearing's rim: where the outermost plant stands. Solo pages have no
+    // plan and no rim, so the story is one plant's room wide either way.
+    let rim = 0;
+    if (plan) for (const p of plan) rim = Math.max(rim, Math.hypot(p.origin[0], p.origin[2]));
+    this.rEdge = rim + beyond;
+    // a census, so the population can be asked where its grains went rather
+    // than only how many there are (test/flowers_pollen.mjs asserts on it)
+    this.stat = { emit: 0, refuse: 0, age: 0, ground: 0, edge: 0 };
   }
 
   _emit(x, y, z, r) {
-    if (this.n >= FL_POLLEN.max) return;
+    if (this.n >= FL_POLLEN.max) { this.stat.refuse++; return; }
     const i = this.n * 7, b = this.buf;
     b[i] = x + (this.rnd() - 0.5) * r;
     b[i + 1] = y + (this.rnd() - 0.5) * r;
@@ -11209,38 +11304,52 @@ class FlPollen {
     b[i + 6] = FL_POLLEN.size * (0.7 + 0.6 * this.rnd());
     this.age[this.n] = 0;
     this.n++;
+    this.stat.emit++;
   }
 
-  // Advance the population by `dt` plant-time units at wind-clock `t`.
-  step(S, dt, t) {
-    if (dt <= 0) return;
-    const P = S.plant, C = FL_POLLEN;
-
-    // shed: every mature stamen-analog is a candidate, and the expected count
-    // accumulates fractionally so a low rate still sheds eventually
-    const cand = this._cand;
-    cand.length = 0;
+  // The dehiscing organs of one specimen. Walked only for a specimen that was
+  // PAID plant time this frame, which under depth-first batching is a handful
+  // of the field rather than all of it: an organ's dev, senescence and frame
+  // move only when its plant does, and a specimen that did not step sheds
+  // nothing whatever its anthers look like.
+  _sources(S) {
+    const c = this._cand;
+    c.length = 0;
     const pQ = S.sp.petalQ, wb = S.sp.whorlBands;
-    for (const ax of P.axes) {
+    for (const ax of S.plant.axes) {
       if (!ax.floral) continue;
       for (const org of ax.organs) {
         if (!org.floral || org.petal || org.shed) continue;
-        if ((org.dev || 0) < C.devGate || (org.sen || 0) > 0) continue;
+        if ((org.dev || 0) < FL_POLLEN.devGate || (org.sen || 0) > 0) continue;
         if (!org.frame || org.len < 0.05) continue;
         // with whorl bands the stamens are NAMED, so the q-band heuristic
         // retires and only true anthers shed
         if (wb) { if (org.whorl !== 'stamen') continue; }
         else {
           const qn = ((org.q || 0) - pQ) / Math.max(1e-3, 1 - pQ);
-          if (qn > C.qBand) continue;
+          if (qn > FL_POLLEN.qBand) continue;
         }
-        cand.push(org);
+        c.push(org);
       }
     }
-    if (cand.length) {
-      this._acc += cand.length * C.rate * dt;
-      let nEmit = Math.floor(this._acc);
-      this._acc -= nEmit;
+    return c;
+  }
+
+  // Advance the population. `specs` is the boot's specimen list — each entry
+  // { S, stepped } — `dt` is the WORLD clock's advance this frame and `t` the
+  // world time the air is sampled at. Every specimen sheds on its own
+  // `stepped`; every grain drifts on `dt`.
+  step(specs, dt, t) {
+    const C = FL_POLLEN;
+    // shed, plant by plant, each on the plant time it was actually paid
+    for (let i = 0; i < specs.length; i++) {
+      const s = specs[i];
+      if (!s.S || !(s.stepped > 0)) continue;
+      const cand = this._sources(s.S);
+      if (!cand.length) continue;
+      const a = (this._acc[i] || 0) + cand.length * this.rate * s.stepped;
+      let nEmit = Math.floor(a);
+      this._acc[i] = a - nEmit;
       for (; nEmit > 0; nEmit--) {
         const org = cand[Math.floor(this.rnd() * cand.length) % cand.length];
         const f = org.frame, L = org.len;
@@ -11248,11 +11357,15 @@ class FlPollen {
           L * 0.4);
       }
     }
+    if (dt <= 0) return;
 
     // drift: wind at the grain, plus settling; a grain leaves the story on the
-    // ground (the floor is where the stem starts, as everywhere here), at the
-    // edge of the world, or when its time is up
-    const wf = P.wind, b = this.buf, w = this._w;
+    // ground (which is a real disc at y = -0.01 now, 25_ground.js), past the
+    // rim of the clearing, or when its time is up. The wind field is the
+    // hero's, which IS the field: makeSpecimen hands the same one to every
+    // later specimen (40_boot.js).
+    const wf = specs[0].S.plant.wind, b = this.buf, w = this._w, st = this.stat;
+    const rE = this.rEdge, rE2 = rE * rE;
     for (let i = 0; i < this.n;) {
       const o = i * 7;
       windAt(w, wf, b[o], b[o + 1], b[o + 2], t);
@@ -11266,8 +11379,11 @@ class FlPollen {
       b[o + 3] = this.col[0] * env;
       b[o + 4] = this.col[1] * env;
       b[o + 5] = this.col[2] * env;
-      if (b[o + 1] < 0 || this.age[i] > C.life ||
-          Math.abs(b[o]) > 90 || Math.abs(b[o + 2]) > 90) {
+      let dead = 0;
+      if (b[o + 1] < 0) { st.ground++; dead = 1; }
+      else if (this.age[i] > C.life) { st.age++; dead = 1; }
+      else if (b[o] * b[o] + b[o + 2] * b[o + 2] > rE2) { st.edge++; dead = 1; }
+      if (dead) {
         const l = --this.n;
         if (i !== l) {
           b.copyWithin(o, l * 7, l * 7 + 7);
@@ -11278,6 +11394,10 @@ class FlPollen {
     }
   }
 }
+// A harness feature test (test/flowers_pollen.mjs): this population is handed
+// the whole FIELD, where the phase-2 one took a single specimen. Kept so the
+// before/after can be measured from either revision with one harness.
+FlPollen.prototype.takesField = true;
 
 // ===================== flowers/20_draw.js =====================
 // The organ loop, owned.
@@ -13124,15 +13244,27 @@ function flBoot() {
   }
 
   // The air carries pollen once the anther-analogs mature (18_pollen.js);
-  // grains sample the same wind field the stem bends in. Hero-only for now —
-  // the population, like the close-up, follows the subject.
-  const pollen = new FlPollen(seed, S.pal.keyCol);
+  // grains sample the same wind field the stem bends in. ONE population over
+  // the whole FIELD — it walks `specs`, so every germinated specimen sheds,
+  // where phase 2's hero-only population left six of seven flowering plants
+  // shedding nothing. A mote's colour is the KEY LIGHT'S, so in a field it is
+  // scene.pal's (flFieldPal's blend) and not the hero's: a grain matches the
+  // air it is in. On a solo page flFieldPal returns the hero's palette
+  // unchanged, so this is the same colour it always was. The plan goes in for
+  // the clearing's rim alone.
+  const pollen = new FlPollen(seed, scene.pal.keyCol, plan);
+  // The pollen's own clock: the WORLD's, read as a delta off `step`. The air
+  // is one field over the clearing and its `t` is a wall clock, not any
+  // plant's age (18_pollen.js has the argument). Equal to specs[0].age on
+  // every path today — the hero is exempt from the step pool and paid first
+  // out of it — which is why the shipped call got the right number.
+  let polStep = 0;
 
   let step = 0, acc = 0, last = performance.now();
   let fpsA = 0, capMs = 0, rrCursor = 0, heroHadCull = false;
   let stepN = 0, capN = 0;   // plants stepped / recaptured this frame, for the HUD
   // console access, and the screenshot harness's window into the piece
-  window.__fl = { S, env, scene, B, garden: specs, plan,
+  window.__fl = { S, env, scene, B, garden: specs, plan, pollen,
     // stepN/capN are how many specimens the step pool paid and how many were
     // rebuilt this frame — the batching's own numbers, so a harness can read
     // the thing that is being traded rather than infer it from fps. The
@@ -13736,7 +13868,7 @@ function flBoot() {
     }
     capN = dirty.reduce((a2, d) => a2 + (d ? 1 : 0), 0);
     if (anyDirty) captureDirty(dirty);
-    if (specs[0].stepped > 0) pollen.step(S, specs[0].stepped, specs[0].age);
+    if (step > polStep) { pollen.step(specs, step - polStep, step); polStep = step; }
     scene.uploadPollen(pollen.buf, pollen.n * 7);
     // spot fields bake lazily in the draw loop; ship each to the GPU once.
     // HERO's library only: the 3-row atlas is scene-wide (see uBull note).
