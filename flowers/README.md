@@ -349,3 +349,109 @@ real-time piece can show).
 strain profile, the shader gain constants (grade-category, like the shipped
 palette scalars), and the bullseye jitter width. Every physical constant
 above them is published, and flagged where it lands in the files.
+
+## What a FIELD costs, and the two terms that pay for it
+
+`?garden=N` multiplies the one thing this piece was never asked to do more
+than once: rebuild every specimen's geometry on the CPU, every frame, for
+every plant. Measured on the page's own HUD, a stand of seven at bloom cost
+**99.8 ms of capture a frame**. `test/flowers_capture.mjs` is the profiler,
+headless and reproducible — it grows the field `flGardenPlan` plans *with the
+germination stagger*, so it is the page's field and not a different one, and
+it reproduces the browser float for float. (That is how the double count in
+`tools/flowers_shot.mjs` was found: it added the hero twice, reporting 998
+organs for 771.)
+
+**Where it goes**, per organ kind, seven specimens at world step 3000:
+
+| kind | ms | share | | kind | ms | share |
+|---|---|---|---|---|---|---|
+| petal | 45.9 | 39% | | stamen | 13.1 | 11% |
+| sepal | 28.2 | 24% | | rest | 4.4 | 4% |
+| leaf | 25.3 | 22% | | | | |
+
+**70% is floral organs and 58% of every float emitted is the petal stream** —
+not the leaves, which is where the shipped app's diagnosis pointed. The cause
+is one line in `20_draw.js`: every floral organ is handed `detL = 1.0`, the
+microscope, permanently on, so a petal is built at the leaf's own lattice
+(~5,600 vertices). That is right for the close-up the piece is named after and
+nonsense for a flower forty units away covering sixteen pixels.
+
+### 1. Never finer than the raster (`28_lod.js`)
+
+`bladeMesh` is the only level of detail in the project with no distance term.
+It gets one, and it is the vein cull's law restated for the surface — a
+statement about sampling, not about the plant:
+
+    px/unit = pxHeight / (2 d tan(fov/2))      the raster, at distance d
+    cap     = round(bl * px/unit)               one quad per pixel
+    mu, mv  = min(shipped answer, cap)
+
+A cap and never a raise; the floor stays `bladeMesh`'s own 4x2 and the ceiling
+stays the leaf's lattice. Nothing in it is a taste constant: `pxHeight` is the
+drawing buffer, `fov` is the camera's, and one quad per pixel is Nyquist. The
+distance is per specimen, to its bounding sphere's **near face** — the same
+measure the fog is taken from, and the conservative end of the approximation.
+
+**No hero exemption**, because the law exempts the subject by itself: at the
+close-up's own framing a petal is ~180 px against a ~75-cell lattice. That
+claim is a sweep and a gate in `flowers_capture.mjs`, and measuring it
+corrected it twice. The solo page is **not** byte-identical any more: at the
+measured close-up distance it keeps 96.6% of the petal stream and 81% of the
+tri stream, and **none of the difference is leaves** — it is stamens and
+carpels, because `detL = 1.0` is applied by organ *identity*, so a 0.1-unit
+filament was built as a 75 x 75 grid. The two stills are indistinguishable.
+`?lod=0` is the pre-LOD renderer, exactly.
+
+### 2. Pay in batches, not in slices (`40_boot.js`)
+
+The step pool was spent breadth-first — one step to every specimen, sweep
+after sweep — so **every specimen stepped every frame, and a specimen that
+stepped is recaptured**: the frame paid the whole field's rebuild to advance
+garden time by one step. Depth-first spends the same budget on fewer plants at
+the same average rate each. How few is Nyquist rather than taste:
+`FL_RECAP_HZ = 1.78 * 4` — four samples per period of the wind's fastest gust,
+which is `15_petal.js`'s ripple guard applied to time — so `m = nAct * HZ /
+fps`. It is a feedback loop and it settles. The hero is exempt and always paid
+first: it is the subject, the close-up and the pollen's plant. `?batch=0` is
+the pre-batching pool.
+
+### What it bought, and what it cost
+
+Live grown field, real browser on Metal, `ff=3000` then `speed=1`:
+
+| field | before | after |
+|---|---|---|
+| 5 | 106.5 ms (5/5), 10 fps | 30.9 ms (2/5), **25 fps** |
+| 7 | 120.9 ms (7/7), 10 fps | 38.0 ms (3/7), **21 fps** |
+| 10 | 123.0 ms (9/10), 10 fps | 26.3 ms (3/10), **26 fps** |
+
+`tools/flowers_perf.mjs`, 60 s of live growth at speed 4, is where the cost
+shows and it is worth knowing before anyone writes a hitch gate. Isolated with
+the two switches:
+
+| | median | p95 | p99 | worst | fps |
+|---|---|---|---|---|---|
+| before | 50.0 | 67.1 | 83.4 | 100.0 | 21.6 |
+| LOD only | 49.9 | 60.0 | 75.0 | 91.7 | 22.9 |
+| LOD + batch | 34.9 | 75.1 | 108.4 | 116.8 | 25.6 |
+
+The LOD improves every column. **The batching trades the tail for the
+median**: frames are lumpier, because a frame that pays three plants their
+whole debt is heavier than one that pays a step to seven, and the plants are
+wildly unequal (a Sun Coral capture is 20 ms, a Spiral Ossuary 1.4 ms). That
+is inherent to round-robin over a heterogeneous field, it is bounded by the
+pool, and it is the honest price of the 30% median.
+
+### The negative result: there is no frozen tissue to cache
+
+The obvious third move is the `cellTable` argument — a specimen that has
+stopped changing does not need recapturing. **It does not hold here, and it is
+not the wind.** An Ember Creeper at step 3000 with **zero live axes** (nothing
+growing, nothing being founded) changes **56.4% of its triangle floats on the
+very next step**, with deltas up to 0.41 world units — and it still changes
+56.4% of them with the wind turned off (`uRef = 0`). The axes are damped
+cantilevers and the petioles hang off them; the *material* shape of a mature
+lamina is frozen and is already baked, but where that lamina IS in the world
+moves every step, on every plant, forever. A geometry cache would be a wrong
+picture, so the answer to "recapture less" is temporal (above), not memoised.
