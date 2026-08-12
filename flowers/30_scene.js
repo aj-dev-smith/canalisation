@@ -204,15 +204,24 @@ const FL_BG_VS = `
   varying vec2 vUv;
   void main() { vUv = uv; gl_Position = vec4(position.xy, 0.9999, 1.0); }
 `;
+// The void's gradient as a FUNCTION of screen position, because the ground
+// melts into it (25_ground.js) and two gradients that resemble each other is
+// exactly what the shared FL_FOG chunk exists to prevent. Body unchanged from
+// the shipped BG_FS.
+const FL_SKY = `
+  uniform vec3 uTop, uBot, uGlow; uniform float uT;
+  vec3 flSky(vec2 uv) {
+    vec2 p = uv * 2.0 - 1.0;
+    vec3 c = mix(uBot, uTop, pow(clamp(uv.y, 0.0, 1.0), 0.75));
+    float d = length(p * vec2(1.0, 1.25) - vec2(0.0, -0.15));
+    return c + uGlow * exp(-d * 2.1) * (0.85 + 0.15 * sin(uT * 0.0007));
+  }
+`;
 const FL_BG_FS = `
   varying vec2 vUv;
-  uniform vec3 uTop, uBot, uGlow; uniform float uT;
+  ${FL_SKY}
   void main() {
-    vec2 p = vUv * 2.0 - 1.0;
-    vec3 c = mix(uBot, uTop, pow(clamp(vUv.y, 0.0, 1.0), 0.75));
-    float d = length(p * vec2(1.0, 1.25) - vec2(0.0, -0.15));
-    c += uGlow * exp(-d * 2.1) * (0.85 + 0.15 * sin(uT * 0.0007));
-    gl_FragColor = vec4(c, 3.0);   // the void is far away, so it defocuses (shipped)
+    gl_FragColor = vec4(flSky(vUv), 3.0);   // the void is far away, so it defocuses (shipped)
   }
 `;
 
@@ -282,7 +291,13 @@ const FL_COMP_FS = `
 `;
 
 class FlowerScene {
-  constructor(container, pal) {
+  // (container, pal, plan): `plan` is flGardenPlan's array when the page is a
+  // garden. The scene's ATMOSPHERE — fog, void, hemisphere, key, soil — then
+  // comes from the whole field rather than from the hero alone (flFieldPal,
+  // 25_ground.js); with no plan, or a plan of one, `pal` is returned
+  // unchanged and the solo page is bit for bit what it always was.
+  constructor(container, pal, plan) {
+    pal = flFieldPal(pal, plan);
     this.pal = pal;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -429,7 +444,7 @@ class FlowerScene {
 
     // --- the ground (25_ground.js): one disc, the same eye and the same fog
     // uniforms as the tissue, alpha carrying depth like everything else ---
-    this.ground = new FlGround(this.scene, pal, { eyeU, fogU });
+    this.ground = new FlGround(this.scene, pal, { eyeU, fogU, bgU: this.bgU });
 
     // --- post: the shipped chain, manually — scene to a half-float target
     // (alpha = depth), bright + 3x widening blur at half res for bloom, the
