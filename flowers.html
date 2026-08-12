@@ -13429,8 +13429,12 @@ function flBoot() {
       const sj = director.subj;
       const bb = sj ? specs[sj.i].B.floralBounds(sj.ai) : null;
       // nothing flowering yet: the two shots that need a subject fall back to
-      // the field itself. The low shot does not need one.
-      if (!bb && (name === 'close' || name === 'dolly')) name = 'wide';
+      // the field itself. The low shot does not need one. They fall back to
+      // `bank` rather than `wide` because a field with nothing flowering is a
+      // field of seedlings, and `wide` is solved from the plant bounds — with
+      // nothing tall yet the WIDTH binds, so three of the five shots would be
+      // the empty clearing at maximum standoff.
+      if (!bb && (name === 'close' || name === 'dolly')) name = 'bank';
 
       if (name === 'close') {
         if (director.cut) {
@@ -13860,13 +13864,14 @@ flBoot();
 // bounds (flDirPoseEstab) and `bank` is the thicket.
 //
 // The holds were re-balanced rather than kept, because five shots at the old
-// numbers is a 112 s loop:
+// numbers is a 117 s loop:
 //     wide   16   the establishing read: count them, find the ground, then go
 //     bank   12   the same field from inside it; dense, so it reads fast
 //     dolly  18   still the longest — the only shot that is going somewhere
 //     close  16   the subject
 //     low     9   punctuation
-// 71 s of hold + 5 transitions = 96 s, against 92 s for the old four.
+// 71 s of hold + 27.5 s of transition = 98.5 s, against 92 s for the old four
+// (72 + 20). One more shot for six and a half seconds of cycle.
 const FL_DIR_SHOTS = [
   { name: 'wide', hold: 16, trans: 7.5 },
   { name: 'bank', hold: 12 },
@@ -13882,11 +13887,11 @@ const FL_DIR_SHOTS = [
 // A shot may state its own, and `wide` does. Every cut flips the heading end
 // for end, so a transition crosses the field: at ?garden=7 the old worst move
 // was ~87 units in 5 s (17 u/s mean, ~26 at the peak of a smoothstep, since a
-// smoothstep peaks at 1.5x its mean). The establishing shot stands at 81.8
-// units where `bank` stands at 47.9, which takes that move to ~130 units and
-// would have peaked near 39 u/s — 2.4 m/s in WORLD.unitM, a jog. 7.5 s puts it
-// back at 26, exactly the peak the other four already have. It is NOT the
-// 59-62 u/s whip the close-up's arrival gate was built for; it is the same
+// smoothstep peaks at 1.5x its mean). The establishing shot stands at 88.7
+// units where `bank` stands at 47.9, which takes that move to ~136 units and
+// would have peaked near 41 u/s — 2.6 m/s in WORLD.unitM, a jog. 7.5 s puts it
+// back at 27, within a unit of the peak the other four already have. It is
+// NOT the 59-62 u/s whip the close-up's arrival gate was built for; it is the same
 // arithmetic caught one shot earlier.
 const FL_DIR_TRANS = 5.0;
 function flDirTrans(dir) {
@@ -14158,9 +14163,9 @@ function flDirOutward(dir, F, bb) {
 // Which one binds is a property of the FIELD's own aspect and it swaps inside
 // the shipped range, which is the argument for taking the max of both rather
 // than picking one: at ?garden=3 the stand is 30.6 wide and 34.0 tall and the
-// HEIGHT binds (58.0 against 33.6); at ?garden=12 it is 106.8 wide and 44.8
-// tall and the WIDTH binds (117.1 against 76.4). ?garden=7 is height-bound at
-// 81.8 against 67.1. A pose that solved only one of them is inside the field
+// HEIGHT binds (62.8 against 33.6); at ?garden=12 it is 106.8 wide and 44.8
+// tall and the WIDTH binds (117.1 against 82.7). ?garden=7 is height-bound at
+// 88.7 against 67.1. A pose that solved only one of them is inside the field
 // at one end of the range and a mile away at the other.
 //
 // THEN THE COMPOSITION, which is two more fractions and is where the eye gets
@@ -14170,17 +14175,39 @@ function flDirOutward(dir, F, bb) {
 // the eye's own elevation, so putting it at hz up the frame fixes the eye:
 // yE = yT + fovH*d*(hz - 0.5). Feet below the horizon, tops above it — the
 // plants cross the skyline, which is what makes a field read as standing on
-// something. The numbers: fW 0.86, fH 0.78, feet at 0.16, horizon at 0.46.
-// ?estab=fW,fH,bF,hz sweeps all four; the ladder that chose them is in the
-// branch notes.
+// something. ?estab=fW,fH,bF,hz sweeps all four, and three rungs of that
+// ladder were shot at ?garden=7 and looked at:
+//   fH 0.62  d 103.0  the field is a small clump in the middle of a dark
+//                     frame — the tree_shot lesson exactly, "looks lost" and
+//                     "is too sparse" are the same picture
+//   fH 0.78  d  81.8  full and good, but the two nearest spires graze the top
+//                     edge (the frame's top is 0.411*d + yE, so a plant 25
+//                     units nearer than the middle loses 10 units of headroom)
+//   fH 0.72  d  88.7  SHIPPED. every specimen whole, sky above them, and the
+//                     stand still fills the frame
+// The horizon fraction is 0.45 — a shade below centre, so the ground has the
+// lower half and the plants cross the skyline into the upper.
 //
 // ⚠ THIS IS NOT PHASE 1'S FRAMING OF THE BOUND, though the distances are
-// comparable (81.8 here against 84.2 there). That one framed a SPHERE from
+// comparable (88.7 here against 84.2 there). That one framed a SPHERE from
 // above and put six plants in an overlapping column; this one stands off the
-// short axis at 1.15 m of eye height and looks across, so the long axis lies
-// across the frame and the depression angle is 2 degrees. Far away and above
-// is a diagram; far away and level is a landscape.
-const FL_ESTAB = [0.86, 0.78, 0.16, 0.46];
+// short axis at 1.25 m of eye height and looks across, so the long axis lies
+// across the frame and the depression angle is 2.2 degrees. Far away and
+// above is a diagram; far away and level is a landscape.
+//
+// ⚠ AND THE GROUND IS NOT VISIBLE FROM HERE, WHICH IS NOT THE MELT'S FAULT.
+// tools/flowers_horizon.mjs was run at this pose's own eye and target at three
+// heights (8.0 / 18.4 / 34.0 world units, the middle one the shipped pose):
+// there is NO hard horizon at any of them — 25_ground.js's melt holds, and
+// that is the thing that tool exists to catch. There is also no ground: the
+// floor is inferred entirely from where the stems stop. Raising the melt's
+// near shaping (?haze=2,3,2.5,5, the one knob built to keep floor near the
+// camera without bringing a horizon back) was shot against the default and is
+// indistinguishable. The limiter is VALUE, not optical depth — soil albedo is
+// 0.03-0.10 by decision ("a floor should be felt, not seen") and lands within
+// a hair of the void it is drawn against, so there is no contrast for a
+// horizon to be made of. Nothing here changes the ground; it is reported.
+const FL_ESTAB = [0.86, 0.72, 0.15, 0.45];
 function flEstabKnobs() {
   if (typeof location === 'undefined') return FL_ESTAB;
   const v = (new URLSearchParams(location.search).get('estab') || '').split(',').map(Number);

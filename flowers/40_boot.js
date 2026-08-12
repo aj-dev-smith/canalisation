@@ -438,8 +438,12 @@ function flBoot() {
       const sj = director.subj;
       const bb = sj ? specs[sj.i].B.floralBounds(sj.ai) : null;
       // nothing flowering yet: the two shots that need a subject fall back to
-      // the field itself. The low shot does not need one.
-      if (!bb && (name === 'close' || name === 'dolly')) name = 'wide';
+      // the field itself. The low shot does not need one. They fall back to
+      // `bank` rather than `wide` because a field with nothing flowering is a
+      // field of seedlings, and `wide` is solved from the plant bounds — with
+      // nothing tall yet the WIDTH binds, so three of the five shots would be
+      // the empty clearing at maximum standoff.
+      if (!bb && (name === 'close' || name === 'dolly')) name = 'bank';
 
       if (name === 'close') {
         if (director.cut) {
