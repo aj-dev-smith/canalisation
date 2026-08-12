@@ -136,7 +136,11 @@ function flBoot() {
   let stepN = 0, capN = 0;   // plants stepped / recaptured this frame, for the HUD
   // console access, and the screenshot harness's window into the piece
   window.__fl = { S, env, scene, B, garden: specs, plan,
-    state: () => ({ step, radius, capMs, target: target.toArray(), dist: scene.camera.position.distanceTo(target) }) };
+    // stepN/capN are how many specimens the step pool paid and how many were
+    // rebuilt this frame — the batching's own numbers, so a harness can read
+    // the thing that is being traded rather than infer it from fps
+    state: () => ({ step, radius, capMs, stepN, capN,
+      target: target.toArray(), dist: scene.camera.position.distanceTo(target) }) };
 
   // Frame the flowers once there are flowers; the whole plant until then.
   // Petal REACH, not axis length — a flower framed from `ax.length` reads as
