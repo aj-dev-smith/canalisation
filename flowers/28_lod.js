@@ -35,11 +35,23 @@
 // shipped answer, and the floor stays `bladeMesh`'s own 4 x 2 — a blade is
 // still a surface.
 //
-// WHY IT NEEDS NO HERO EXEMPTION. The subject of a shot is large on screen by
-// construction: at the flower close-up's own framing a petal is ~180 px, the
-// cap lands above the leaf's lattice, and the term does nothing at all —
-// measured, and asserted in test/flowers_capture.mjs. The exemption is the law
-// itself, which is the property the vein cull's anchor was built for too.
+// WHY IT NEEDS NO HERO EXEMPTION, and what measuring that turned up. The
+// subject of a shot is large on screen by construction, so at the flower
+// close-up's own framing a petal is ~180 px against a ~75-cell lattice and the
+// cap lands above it: 96.6% of the petal stream survives (browser, ?focus=
+// flower, near face 4.51 units — the sweep and the gate are in
+// test/flowers_capture.mjs). The exemption is the law itself, which is the
+// property the vein cull's anchor was built for too.
+//
+// The 3.4% that does not survive, and the 18% of the TRI stream that goes with
+// it, is worth knowing about because it is not the leaves: it is STAMENS and
+// CARPELS. `detL = 1.0` is applied by organ IDENTITY, so the microscope draws a
+// 0.1-unit filament at the same full lattice as a petal that fills the frame —
+// a 70-pixel organ built as a 75 x 75 grid. The two stills are
+// indistinguishable (shots/solo_before2.png vs solo_after2.png), so the solo
+// page is NOT byte-identical any more and the difference is sub-pixel by
+// construction. That is the honest statement, and it is the strongest evidence
+// that the microscope wanted a size term rather than an identity test.
 //
 // The distance is measured to the specimen's NEAR FACE (bounding sphere), not
 // to its centre and not per organ: `bladeMesh` is handed a leaf and a length

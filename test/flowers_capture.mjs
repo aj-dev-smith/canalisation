@@ -197,6 +197,64 @@ if (n <= 1) {
   printStreams(B);
   kindTable(timedPass(env, S).byKind);
   checkStructure(B, 'hero');
+
+  // WHAT THE RASTER CAP DOES TO THE SHOT THE PIECE IS NAMED AFTER.
+  //
+  // 28_lod.js claims the close-up needs no exemption because the subject is
+  // large on screen. That is a CLAIM, so it is measured rather than asserted in
+  // a comment — and measuring it corrected the claim twice.
+  //
+  // First: at the flower close-up the cap does not touch a petal (a petal is
+  // ~180 px long against a ~75-cell lattice), but it DOES bite on stamens and
+  // carpels, which the microscope draws at that same full lattice however small
+  // they are — a 70-pixel filament was being built as a 75 x 75 grid. Measured
+  // in a real browser at ?focus=flower: tri -18%, petal -3.4%, and the two
+  // stills are indistinguishable (shots/solo_before2.png vs solo_after2.png).
+  //
+  // Second, and it is why this is a distance SWEEP and not one number: a
+  // synthesised close-up eye lands INSIDE the specimen's bounding sphere, the
+  // near-face distance clamps at 0.1, and the check passes at 100% — a maximum
+  // unreachable by construction, which is the trap test/venation.mjs records.
+  // The real page's own value is printed beside the sweep: a browser at
+  // ?focus=flower measured near face 4.51 (eye 21.1 from a bounds centre with
+  // r 16.6), so THAT is the row the gate is on. The near-face measure is
+  // conservative by design — a tall plant's sphere swamps its flower — and
+  // conservative here means "too generous", never too coarse.
+  {
+    const D = [2, 4.51, 9, 20, 45, 90];
+    console.log('\n  the cap against distance (near face, units):');
+    console.log('    d      px/unit   tri kept   petal kept   vein kept');
+    const shot = (d, on) => {
+      M.flSetRaster(env.cam.eye, on ? pxH : 0, env.cam.fov);
+      env._flD = d;
+      const BB = new M.FlowerBuffers();
+      M.flDrawSpecimen(env, BB, S);
+      return BB;
+    };
+    const off = shot(1, false);
+    let gate = null;
+    for (const d of D) {
+      const on = shot(d, true);
+      const row = {
+        tri: on.triN / Math.max(1, off.triN),
+        pet: on.petbN / Math.max(1, off.petbN),
+        seg: on.segN / Math.max(1, off.segN),
+      };
+      if (d === 4.51) gate = row;
+      console.log(`    ${String(d).padStart(5)}  ${M.FL_LOD.px(d).toFixed(0).padStart(8)}  ` +
+        `${(100 * row.tri).toFixed(1).padStart(8)}%  ${(100 * row.pet).toFixed(1).padStart(10)}%  ` +
+        `${(100 * row.seg).toFixed(1).padStart(9)}%`);
+    }
+    // THE GATE, on the page's own measured close-up distance. The corolla is
+    // the subject and the close-up must keep essentially all of it; 0.95 is a
+    // floor with the measured value (0.966 in the browser) inside it, not a
+    // tolerance fitted to a result. The vein row is a second gate and an exact
+    // one — this law is about surfaces and must not touch the vasculature,
+    // which is the channel the whole engine is visible through.
+    ok(gate.pet >= 0.95, 'close-up keeps its corolla',
+      `${(100 * gate.pet).toFixed(1)}% of the petal stream at d 4.51`);
+    ok(gate.seg === 1, 'the cap touches no vein', `${(100 * gate.seg).toFixed(1)}%`);
+  }
 }
 
 // ---------------------------------------------------------------------- a field
