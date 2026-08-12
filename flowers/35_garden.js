@@ -25,6 +25,15 @@ const FL_STEP_BUDGET = 8;
 // During ?ff= the budget is the solo fast-forward chunk (40): ff is a harness
 // affordance, not a watched scene, and it must still pay every step honestly.
 const FL_STEP_BUDGET_FF = 40;
+// HOW OFTEN EVERY SPECIMEN MUST BE REDRAWN, in Hz. The step pool is spent
+// depth-first (40_boot), so a member is redrawn only on the frames it is paid
+// on, and this is the floor that decides how few of those there may be. It is
+// Nyquist against the fastest thing in the scene rather than a preference: the
+// wind's fastest gust mode is 1.78 Hz (37_wind.js), and four samples a period
+// is the same margin 15_petal.js's ripple guard keeps in space. Below ~3.6 Hz
+// the air judders and reads as a solver bug (tools/blender_seq.mjs says the
+// same thing about its frame stride) — this sits at 2x that.
+const FL_RECAP_HZ = 1.78 * 4;
 const FL_GARDEN_STAGGER = 2400;   // world steps over which germination spreads
 const FL_GARDEN_SPACING = 2.5;    // min distance between origins (corolla reach)
 

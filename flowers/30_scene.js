@@ -487,6 +487,14 @@ class FlowerScene {
     });
   }
 
+  // The RASTER: the drawing buffer's height in real pixels (CSS height times
+  // the pixel ratio, capped at 2 as the constructor caps it). 28_lod.js's
+  // never-finer-than-the-raster law is stated against this number, so it comes
+  // from the renderer rather than from a constant — a page open on a retina
+  // display and one on a projector do not resolve the same petal.
+  rasterH() { return this.renderer.domElement.height; }
+  fovRad() { return this.camera.fov * Math.PI / 180; }
+
   _fsPass(mat, target) {
     this._fsMesh.material = mat;
     this.renderer.setRenderTarget(target);
