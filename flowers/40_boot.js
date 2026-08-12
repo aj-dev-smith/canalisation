@@ -352,7 +352,7 @@ function flBoot() {
         if (Math.abs(d - want) > 0.01) {
           eye.sub(target).multiplyScalar(1 + (want / Math.max(1e-3, d) - 1) * 0.03).add(target);
         }
-        if (gardenN) dofPlan = { k: 0.22, min: 0.4 };
+        if (gardenN) { dofPlan = { k: 0.22, min: 0.4 }; framedShot = 'focus'; }
         return;
       }
     }

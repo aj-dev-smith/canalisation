@@ -12941,7 +12941,7 @@ function flBoot() {
         if (Math.abs(d - want) > 0.01) {
           eye.sub(target).multiplyScalar(1 + (want / Math.max(1e-3, d) - 1) * 0.03).add(target);
         }
-        if (gardenN) dofPlan = { k: 0.22, min: 0.4 };
+        if (gardenN) { dofPlan = { k: 0.22, min: 0.4 }; framedShot = 'focus'; }
         return;
       }
     }
@@ -13376,10 +13376,9 @@ const FL_DIR_TRANS = 5.0;
 // that are not the subject, and six seconds means the director hauls them off
 // the thing they went to look at. 25 s, by eye.
 const FL_DIR_ORBIT_HOLD = 25;
-// Frames between field re-measurements (origins, heights, flower centres).
-// The scan touches every axis point and every floral bound, so it is throttled;
-// nothing it measures moves fast enough for half a second of staleness to show.
-const FL_DIR_SCAN = 30;
+// The field is re-measured every 500 ms (40_boot). The scan touches every axis
+// point and every floral bound of every specimen, so it is throttled; nothing
+// it measures moves fast enough for half a second of staleness to show.
 // The eye never goes below this. The ground is a real plane at y = 0 now
 // (25_ground.js) and a camera under it shoots up through a screen-filling
 // ceiling of soil. 40_boot clamps at 0.5 as a backstop; the director aims to
@@ -13390,10 +13389,10 @@ const FL_DIR_EYE_FLOOR = 1.0;
 // A fresh director. Lazily, from updateFraming — see the load-order note.
 function flDirMake() {
   return {
-    shot: 0, t0: -1e9, ang: 0.9, u: 0, flip: 0, jit: 0,
+    shot: 0, t0: -1e9, el: 0, ang: 0.9, flip: 0, jit: 0,
     fromEye: new THREE.Vector3(), fromTgt: new THREE.Vector3(), fromR: 8,
     wantEye: new THREE.Vector3(), wantTgt: new THREE.Vector3(),
-    field: null, scan: -1e9, subj: null, held: false, cut: true,
+    field: null, scan: -1e9, subj: null, pickT: -1e9, cut: true,
   };
 }
 
