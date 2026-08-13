@@ -193,8 +193,17 @@ const FL_GND_FS = () => `
     // It keeps the GEOMETRIC rim, and must: a layer of lit air over the disc
     // has to end where the disc does, or the pool paints a band past the
     // horizon on the one view where the rim is what ends the ground.
+    //
+    // AND IT BREATHES, because the sky's glow already does and this is the
+    // same glow. flSky multiplies uGlow by (0.85 + 0.15 sin(uT x 0.0007)) — a
+    // 9.0 s period at +-15%, shipped, from the void's own gradient — so a pool
+    // held static would be a SECOND glow that merely resembles the first, and
+    // would drift visibly out of phase with the sky it sits under. Same term,
+    // same uT (the background's uniforms are already shared into this
+    // material), no new number. Nobody has watched it move.
     vec2 suv = vProj.xy / vProj.w * 0.5 + 0.5;
-    vec3 air = flSky(suv) + uGlowC * uPoolK * exp(-r / uPoolR) * (1.0 - geo);
+    float breath = 0.85 + 0.15 * sin(uT * 0.0007);
+    vec3 air = flSky(suv) + uGlowC * uPoolK * breath * exp(-r / uPoolR) * (1.0 - geo);
     c = mix(c, air, melt);
     // alpha carries linear depth for the defocus pass (shipped MESH_FS), and
     // melts to the void's own 3.0 so a melted pixel defocuses like the void
