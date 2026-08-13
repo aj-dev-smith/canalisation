@@ -15921,12 +15921,36 @@ function flDirPoseGlide(dir, F, u) {
 // at an interpolated radius rather than through it. It costs nothing: two poses
 // on the same bearing still give a straight radial move, which is what the
 // establishing crane and the bank's approach already were.
+// ⚠ AND WHICH WAY ROUND IS DECIDED ON THE CUT, WHICH IS THE FOURTH VERSION OF
+// THIS DIRECTOR'S OLDEST BUG. "The short way round" is not a continuous function
+// of two poses: at a half-turn it is a coin flip, and `wantEye` is recomputed
+// every frame (the orbit turns it, the dolly travels, the field is re-measured).
+// Two poses nearly antipodal — which `low` and `wide` are, one kneeling outside
+// the stand and one 90 units off the far side — sit exactly there, so a hair of
+// movement in the want swaps +179 degrees for -179 and the eye is thrown across
+// the field in one frame.
+//
+// It is on film, in BOTH builds, so it predates the crane: tools/flowers_clip.mjs
+// on ?garden=7&seed=1337 caught `low -> wide` at 191 and 434 units/s against
+// FL_DIR_VPEAK's 26, one sample wide, mid-blend, with the azimuth running
+// 221 -> 216 -> 204 -> 186 degrees and then jumping to 238 and climbing. The eye
+// moved 80 units between two frames.
+//
+// The fix is an unwrap rather than a freeze: the difference is still read from
+// the live want every frame, but on the branch this move STARTED on, so it can
+// drift continuously and can never jump by a turn. Same argument as the frozen
+// heading, the frozen establishing end, the frozen gap and the frozen lane —
+// nothing about a move in progress should be a function of what the plants did
+// while it was being flown.
 function flDirPolar(out, dir, F, w) {
   const ax = dir.fromEye.x - F.cx, az = dir.fromEye.z - F.cz;
   const bx = dir.wantEye.x - F.cx, bz = dir.wantEye.z - F.cz;
   const ra = Math.hypot(ax, az), rb = Math.hypot(bx, bz);
   const aa = Math.atan2(az, ax), ab = Math.atan2(bz, bx);
-  const d = ((ab - aa + Math.PI) % TAU + TAU) % TAU - Math.PI;
+  let d = ((ab - aa + Math.PI) % TAU + TAU) % TAU - Math.PI;
+  if (dir.arcD !== undefined) {
+    d = dir.arcD + (((d - dir.arcD + Math.PI) % TAU + TAU) % TAU - Math.PI);
+  }
   const r = ra + (rb - ra) * w, an = aa + d * w;
   out.set(F.cx + Math.cos(an) * r,
     dir.fromEye.y + (dir.wantEye.y - dir.fromEye.y) * w,
@@ -15995,6 +16019,8 @@ const FL_DIR_BRUSH = 3.0;
 // 8000 over a stand of seven is one vertex in ~200 and about 0.2 ms a scan
 // against a 500 ms scan interval; the crane's own solve is 17 samples over it.
 const FL_DIR_SOLIDN = 8000;
+// scratch for the solve, which runs once a cut and must not allocate in a frame
+const _arcE = { x: 0, y: 0, z: 0, set(a, b, c) { this.x = a; this.y = b; this.z = c; } };
 // ⚠ `+null` IS 0 AND 0 IS A LEGAL MARGIN, so this reads the parameter's
 // PRESENCE before its value. The first version did not, and every unswept run
 // of the page therefore flew at margin 0 while the swept ones flew at the number
@@ -16047,9 +16073,14 @@ function flDirLift(dir, w) { return (dir.liftA || 0) * flDirBump(w); }
 function flDirArc(dir, F) {
   dir.arcAt = dir.t0;
   dir.liftA = 0;
+  // the branch this move goes round on, taken once from the poses as they stand
+  // on the cut frame and then only ever unwrapped against (flDirPolar)
+  dir.arcD = ((Math.atan2(dir.wantEye.z - F.cz, dir.wantEye.x - F.cx)
+    - Math.atan2(dir.fromEye.z - F.cz, dir.fromEye.x - F.cx)
+    + Math.PI) % TAU + TAU) % TAU - Math.PI;
   if (!F.solid || !F.solid.length) return;
   const N = 21, m = flBrushKnob();
-  const e = new THREE.Vector3();
+  const e = _arcE;
   let A = 0;
   for (let i = 1; i < N - 1; i++) {
     const w = i / (N - 1), b = flDirBump(w);
