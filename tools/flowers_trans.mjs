@@ -109,7 +109,7 @@ const out = await pg.evaluate(([NS, closeMode]) => {
   // out-of-focus foreground that fr06.png is made of.
   const _cm = cam.clone(), _tg = new THREE.Vector3(), _v = new THREE.Vector4();
   const _mv = new THREE.Matrix4();
-  const GX = 32, GY = 20, grid = new Uint8Array(GX * GY);
+  const GX = 32, GY = 20, grid = new Uint8Array(GX * GY), all = new Uint8Array(GX * GY);
   const near = (x, y, z, tx, ty, tz) => {
     let d2 = 1e18, n3 = 0, vy = 0;
     _cm.position.set(x, y, z);
@@ -117,7 +117,7 @@ const out = await pg.evaluate(([NS, closeMode]) => {
     _cm.lookAt(_tg);
     _cm.updateMatrixWorld();
     _mv.multiplyMatrices(_cm.projectionMatrix, _cm.matrixWorldInverse);
-    grid.fill(0);
+    grid.fill(0); all.fill(0);
     const fd = Math.hypot(tx - x, ty - y, tz - z);
     const nearZ = 0.5 * fd;
     for (const p of cloud) {
@@ -125,17 +125,22 @@ const out = await pg.evaluate(([NS, closeMode]) => {
       const q = dx * dx + dy * dy + dz * dz;
       if (q < d2) { d2 = q; vy = p[1]; }
       if (q < 9) n3++;                      // vertices inside 3 units of the lens
-      if (q > nearZ * nearZ) continue;
       _v.set(p[0], p[1], p[2], 1).applyMatrix4(_mv);
       if (_v.w <= 0) continue;
       const nx = _v.x / _v.w, ny = _v.y / _v.w;
       if (nx < -1 || nx > 1 || ny < -1 || ny > 1) continue;
-      grid[Math.min(GY - 1, ((1 - ny) * 0.5 * GY) | 0) * GX
-        + Math.min(GX - 1, ((nx + 1) * 0.5 * GX) | 0)] = 1;
+      const c = Math.min(GY - 1, ((1 - ny) * 0.5 * GY) | 0) * GX
+        + Math.min(GX - 1, ((nx + 1) * 0.5 * GX) | 0);
+      all[c] = 1;
+      if (q <= nearZ * nearZ) grid[c] = 1;
     }
-    let cov = 0;
-    for (let i = 0; i < grid.length; i++) cov += grid[i];
-    return { d: Math.sqrt(d2), n3, cov: cov / (GX * GY), dy: y - vy };
+    // IS THERE ANYTHING IN THE PICTURE AT ALL — the other way a transition can
+    // be a bad two seconds, and the one a crane invents. `cov` is foreground;
+    // `ink` is any drawn vertex at any range, so a frame of empty sky scores
+    // near zero on both and reads as a hole in the film rather than a wall.
+    let cov = 0, ink = 0;
+    for (let i = 0; i < grid.length; i++) { cov += grid[i]; ink += all[i]; }
+    return { d: Math.sqrt(d2), n3, cov: cov / (GX * GY), ink: ink / (GX * GY), dy: y - vy };
   };
 
   // THE SUBJECT SCORE, re-implemented from 40_boot's flowerScore, which is a
@@ -249,7 +254,8 @@ const out = await pg.evaluate(([NS, closeMode]) => {
         const sky = typeof flDirSkyOver === 'function'
           ? flDirSkyOver(F, e.x, e.z, typeof flBrushKnob === 'function' ? flBrushKnob() : 4) : -1e9;
         samp.push({ w: w0, y: +e.y.toFixed(2), d: +nr.d.toFixed(2), n3: nr.n3,
-          cov: +nr.cov.toFixed(3), sur: +Math.max(-99, e.y - sky).toFixed(2),
+          cov: +nr.cov.toFixed(3), ink: +nr.ink.toFixed(3),
+          sur: +Math.max(-99, e.y - sky).toFixed(2),
           dy: +nr.dy.toFixed(2) });
         if (nr.d < worst) { worst = nr.d; worstW = w0; worstN = nr.n3; }
       }
@@ -269,16 +275,19 @@ const out = await pg.evaluate(([NS, closeMode]) => {
         // own lane. What this file is about is the middle, where nothing was
         // ever solved. [0.12, 0.88] is by eye and is only a reporting window;
         // the whole profile is printed below it either way.
-        let iw = 1e9, iwW = 0, iwN = 0, iwY = 0, cov = 0, covW = 0;
+        let iw = 1e9, iwW = 0, iwN = 0, iwY = 0, cov = 0, covW = 0, ink = 1, inkW = 0;
         for (const s of samp) {
           if (s.w < 0.12 || s.w > 0.88) continue;
           if (s.d < iw) { iw = s.d; iwW = s.w; iwN = s.n3; iwY = s.dy; }
           if (s.cov > cov) { cov = s.cov; covW = s.w; }
+          if (s.ink < ink) { ink = s.ink; inkW = s.w; }
         }
         rows.push({ to: sh.name, from: prevName, T: +T.toFixed(2), worst: +worst.toFixed(2),
           worstW: +worstW.toFixed(2), worstN, len: +len.toFixed(1),
           inner: +iw.toFixed(2), innerW: +iwW.toFixed(2), innerN: iwN, innerY: iwY,
           cov: +cov.toFixed(3), covW: +covW.toFixed(2),
+          ink: +ink.toFixed(3), inkW: +inkW.toFixed(2),
+          need: +(dir.arcNeed || 0).toFixed(1), cap: +(dir.arcCap || 0).toFixed(1),
           lift: +lift.toFixed(2), samp });
       }
       prevName = from;
@@ -296,7 +305,7 @@ console.log(`\nFIELD  cx ${f(out.F.cx, 1)} cz ${f(out.F.cz, 1)}  R ${f(out.F.R, 
 console.log(`       ${out.cloud} drawn points in 3D   subject ${out.subj ? `specimen ${out.subj.i} axis ${out.subj.ai} r ${f(out.subj.r)}` : 'none'}`);
 console.log(`       VPEAK ${out.vpeak} u/s, transition clamp [${out.trans.join(', ')}] s`);
 console.log(`\nTRANSITIONS — one full rotation, ${NS} samples each; the close-up's entrance modelled as ${out.arcClose ? 'an ARC (flDirBlendEye)' : 'a CHORD (the shipped hold-back)'}`);
-console.log('  move               trans  path len  peak u/s   INTERIOR clear (w)   v<3u    ends   fg cover (w)   lift   where that nearest vertex is');
+console.log('  move               trans  path len  peak u/s   INTERIOR clear (w)   v<3u    ends   fg cover (w)  least ink (w)   lift   where that nearest vertex is');
 let worstAll = 1e9, nBad = 0, sumT = 0;
 for (const r of out.rows) {
   worstAll = Math.min(worstAll, r.inner);
@@ -305,7 +314,8 @@ for (const r of out.rows) {
   console.log(`  ${(r.from + ' -> ' + r.to).padEnd(18)} ${f(r.T, 1).padStart(5)}  ${f(r.len, 1).padStart(8)}  ` +
     `${f(1.5 * r.len / r.T, 1).padStart(8)}   ${f(r.inner).padStart(7)} (${f(r.innerW)})` +
     ` ${String(r.innerN).padStart(5)}  ${f(r.worst).padStart(6)}    ` +
-    `${f(100 * r.cov, 0).padStart(3)}% (${f(r.covW)})  ${f(r.lift).padStart(5)}  ` +
+    `${f(100 * r.cov, 0).padStart(3)}% (${f(r.covW)})  ${f(100 * r.ink, 0).padStart(3)}% (${f(r.inkW)})  ${f(r.lift).padStart(5)}  ` +
+    `[need ${f(r.need, 1)} cap ${f(r.cap, 1)}]  ` +
     `${r.innerY > 0 ? 'below the lens by ' + f(r.innerY, 1) : 'ABOVE the lens by ' + f(-r.innerY, 1)}`);
 }
 console.log(`\n  WORST INTERIOR over the rotation ${f(worstAll)} units;  ${nBad}/${out.rows.length} transitions pass within 3 units of drawn tissue`);
@@ -323,6 +333,7 @@ for (const r of out.rows) {
   every(`  ${r.to.padEnd(8)}`, s => f(s.d, 1));
   every('    eye y ', s => f(s.y, 1));
   every('    cover ', s => f(100 * s.cov, 0) + '%');
+  every('    ink   ', s => f(100 * s.ink, 0) + '%');
   every('    model ', s => f(s.sur, 1));
 }
 console.log('');

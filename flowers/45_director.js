@@ -262,7 +262,7 @@ function flDirMake() {
     // would otherwise have gone through, solved once on the cut (flDirArc), and
     // — for the close-up alone, whose eye is the shipped framer's own state —
     // how much of that rise is currently sitting on the camera
-    liftA: 0, arcAt: -1, lifted: 0,
+    liftA: 0, arcAt: -1, lifted: 0, liftedT: 0,
   };
 }
 
@@ -352,22 +352,11 @@ function flDirField(specs) {
         if (!fr || !(org.len > 0.05)) continue;
         drawn.push([fr.o[0] + fr.x[0] * org.len * 0.5, fr.o[2] + fr.x[2] * org.len * 0.5]);
         drawn.push([fr.o[0] + fr.x[0] * org.len, fr.o[2] + fr.x[2] * org.len]);
-        // ⚠ AND IN `solid` AN ORGAN IS A CHAIN OF SPHERES, NOT A LINE OF
-        // POINTS, WHICH IS THE ONE CORRECTION THIS ARRAY MAKES TO `drawn`.
-        // Every point above is sampled along the organ's own AXIS, so a blade's
-        // WIDTH is invisible to it — and a lens does not meet a blade edge-on.
-        // Measured with tools/flowers_trans.mjs, which reads the real vertex
-        // buffers: the crane below found nothing to clear on a path whose true
-        // clearance to drawn geometry was 0.46 units, because the nearest AXIS
-        // sample was more than four away. So each organ sample carries a radius,
-        // and 0.25 of the organ's length is an ESTIMATE of a drawn half-width
-        // (this catalogue runs 0.19 to 0.5 of length, and a petal is about as
-        // wide as it is long). It is checkable rather than assumed: the harness
-        // measures against the vertices and this array is what the director
-        // acts on, so the two disagreeing is a visible result.
+        // `solid` gets the organ's axis too, as a floor for the case where a
+        // specimen has no buffers yet. What it is actually built from is below.
         for (const kk of [0.35, 0.7, 1.0]) {
           solid.push([fr.o[0] + fr.x[0] * org.len * kk, fr.o[2] + fr.x[2] * org.len * kk,
-            fr.o[1] + fr.x[1] * org.len * kk, org.len * 0.25]);
+            fr.o[1] + fr.x[1] * org.len * kk]);
         }
       }
     }
@@ -386,6 +375,40 @@ function flDirField(specs) {
     }
   }
   if (!n) return null;
+  // --- AND THE REST OF `solid` IS THE DRAWN SURFACE ITSELF. -----------------
+  //
+  // Everything above is a model of where tissue is: stations, and organs sampled
+  // along their own AXIS. That model is what `drawn` has always been and it is
+  // right for the questions `drawn` answers, which are all support functions in
+  // PLAN. It is wrong for "is the lens inside a plant", and the error is not
+  // small — a lens does not meet a blade edge-on, and the first version of the
+  // crane below found nothing to clear on a path whose true clearance to drawn
+  // geometry was 0.46 units, because the nearest axis sample was four away.
+  //
+  // Inflating each sample to a sphere was tried and it is the wrong repair: an
+  // estimated half-width over-states as often as it under-states, and on
+  // ?garden=7&seed=1337 it asked for a 36-unit crane where the true geometry
+  // wanted none. The buffers are right here. Every specimen's FlowerBuffers
+  // holds the triangles, petal grids and vein ribbons that were handed to the
+  // GPU, so the director can read the surface rather than guess at it — the same
+  // argument frameAxisFlower makes about framing from the DRAWN reach, where two
+  // hand-derived versions put the camera inside the corolla.
+  //
+  // Subsampled to a budget, because a field is 1.5 million vertices and this
+  // runs every 500 ms. A blade is thousands of them and one in a couple of
+  // hundred still bounds it: the query is a nearest-point, not a rasterisation.
+  {
+    let nv = 0;
+    for (const s of specs) if (s.B) nv += s.B.triN / 10 + s.B.petbN / 16 + s.B.segN / 12;
+    const sk = Math.max(1, Math.round(nv / FL_DIR_SOLIDN));
+    for (const s of specs) {
+      if (!s.B) continue;
+      const B = s.B;
+      for (let k = 0; k < B.triN; k += 10 * sk) solid.push([B.tri[k], B.tri[k + 2], B.tri[k + 1]]);
+      for (let k = 0; k < B.petbN; k += 16 * sk) solid.push([B.petb[k], B.petb[k + 2], B.petb[k + 1]]);
+      for (let k = 0; k < B.segN; k += 12 * sk) solid.push([B.seg[k], B.seg[k + 2], B.seg[k + 1]]);
+    }
+  }
   const med = (a) => {
     if (!a.length) return 0;
     const b = a.slice().sort((p, q) => p - q);
@@ -1390,16 +1413,20 @@ function flDirPolar(out, dir, F, w) {
 // out to 20 units, no achievable margin makes a stand of spacing 12 empty, and
 // the pictures where foliage crowds the edges are the good ones. What it is is
 // the distance at which the lens stops being INSIDE the plant. The ladder, on
-// ?garden=7&seed=21 with tools/flowers_trans.mjs, as (transitions lifted of six;
-// worst interior clearance; foreground cover of the two bad moves):
-//   brush  4   2/6   0.07   13% / 29%
-//   brush  6   2/6   0.27   11% / 24%     SHIPPED
-//   brush  8   4/6   0.27   11% / 24%
-// 8 buys nothing on the two moves that were broken and starts craning the two
-// that were already clear, which is the failure mode this mechanism has to avoid;
-// 4 leaves the traverse's exit still inside a plant. 6.0 units is 37 cm in
-// WORLD.unitM. ?brush=<m> sweeps it.
-const FL_DIR_BRUSH = 6.0;
+// ?garden=7&seed=21 with tools/flowers_trans.mjs, as (moves lifted of six; the
+// crane each one takes; the foreground cover of the two that were broken, which
+// was 20% and 46% before any of this):
+//   brush  3   2/6   21.9 / 8.6    10% / 23%      SHIPPED
+//   brush  4   2/6   29.4 / 10.2   12% / 22%
+//   brush  6   1/6   -    / 20.6   21% / 25%
+// 4 buys nothing over 3 and costs eight more units of crane; 6 asks 57 units on
+// the traverse's entrance, more than any stand allows, so that move keeps the
+// path it had. 3.0 units is 19 cm in WORLD.unitM. ?brush=<m> sweeps it.
+const FL_DIR_BRUSH = 3.0;
+// How many points of the drawn surface the field measurement keeps (flDirField).
+// 8000 over a stand of seven is one vertex in ~200 and about 0.2 ms a scan
+// against a 500 ms scan interval; the crane's own solve is 17 samples over it.
+const FL_DIR_SOLIDN = 8000;
 // ⚠ `+null` IS 0 AND 0 IS A LEGAL MARGIN, so this reads the parameter's
 // PRESENCE before its value. The first version did not, and every unswept run
 // of the page therefore flew at margin 0 while the swept ones flew at the number
@@ -1417,21 +1444,37 @@ function flBrushKnob() {
 }
 function flDirSkyOver(F, x, z, m) {
   let need = -1e9;
+  const r = m, r2 = m * m;
   for (const p of F.solid) {
     const dx = p[0] - x, dz = p[1] - z;
-    const r = m + (p[3] || 0);              // the sphere this sample stands for
-    const q = r * r - dx * dx - dz * dz;
+    const q = r2 - dx * dx - dz * dz;
     if (q <= 0) continue;
     const h = p[2] + Math.sqrt(q);
     if (h > need) need = h;
   }
   return need;
 }
-// the window, and its floor. Dividing a required excess by the window is how a
-// need at w = 0.2 sizes an amplitude that peaks at w = 0.5; near the ends that
-// division explodes, and the ends are poses rather than path, so the solve only
-// looks where the window is at least 0.36 — which is w in [0.1, 0.9].
-function flDirBump(w) { return 4 * w * (1 - w); }
+// THE WINDOW, AND IT HAS A FLAT TOP RATHER THAN A PEAK. A crane rises, HOLDS,
+// and comes down; `4w(1-w)` is a triangle with rounded corners and is at full
+// height for an instant. Two smoothsteps back to back are the shape a camera
+// operator actually flies, and they are also what makes the solve behave:
+// dividing a required excess by the window is how a need at w = 0.2 sizes an
+// amplitude that peaks in the middle, and under a parabola that division is 2.8x
+// at w = 0.1 and blows the amplitude past any cap the stand allows. Measured on
+// ?garden=7&seed=21 at the shipped margin, `bank -> glide` asked 24.4 units with
+// the parabola and 21.9 with this, on the same path — and 21.9 is inside what
+// the stand allows where 24.4 is not, so under the parabola that move keeps its
+// straight path and under this one it cranes.
+//
+// Both ends are smoothsteps, so the lift leaves and returns with zero slope in
+// `w`, which is on top of `w` itself being a smoothstep of elapsed time.
+//
+// The floor is 0.5: below it the window is small enough that the division is
+// again the thing deciding, and the path there is a second from a pose that has
+// been solved and is allowed to stand near tissue. It is w in [0.16, 0.84].
+function flDirBump(w) {
+  return smoothstep(0, 0.35, w) * smoothstep(1, 0.65, w);
+}
 function flDirLift(dir, w) { return (dir.liftA || 0) * flDirBump(w); }
 function flDirArc(dir, F) {
   dir.arcAt = dir.t0;
@@ -1442,25 +1485,40 @@ function flDirArc(dir, F) {
   let A = 0;
   for (let i = 1; i < N - 1; i++) {
     const w = i / (N - 1), b = flDirBump(w);
-    if (b < 0.36) continue;
+    if (b < 0.5) continue;
     flDirPolar(e, dir, F, w);
     const ex = flDirSkyOver(F, e.x, e.z, m) - e.y;
     if (ex > 0 && ex / b > A) A = ex / b;
   }
-  // ⚠ AND IT IS CAPPED AT THE FIELD'S MEDIAN HEIGHT, because the requirement is
-  // not always satisfiable and the satisfying answer is worse than the defect.
-  // One 49-unit Abyssal Frond standing on the path asks the eye to clear 49
-  // units on a 47-unit move: measured, that is a 42.9-unit crane, which is a
-  // helicopter and not a camera. `hTop` is the MEDIAN plant height, so the cap
-  // reads as "a crane may rise to the top of an ordinary plant in this stand" —
-  // above that the eye is over the field as a viewer reads it, and the one
-  // remaining spire is passed through its crown rather than its middle. The
-  // first version capped at `hHi`, the 85th percentile the establishing frame is
-  // solved from, and on a stand of seven that is the tall member itself.
-  if (A > 0) {
-    flDirPolar(e, dir, F, 0.5);
-    A = Math.min(A, Math.max(0, F.hTop - e.y));
-  }
+  // ⚠ AND WHEN IT CANNOT CLEAR, IT DOES NOT RISE AT ALL — THE CAP IS A KILL
+  // CRITERION AND NOT A CLAMP, which is the single most important line in this
+  // mechanism. The requirement is not always satisfiable: a path that runs the
+  // length of a 49-unit Abyssal Frond asks the eye to get over 49 units, and no
+  // move of this length has that in it. A clamp answers by rising as far as it
+  // is allowed, and that is the worst of the three options — measured on
+  // ?garden=7&seed=1337, `close -> low` wanted 39.4 units, took a clamp at 21.5,
+  // and flew the eye through the CROWN of the plant it could not clear:
+  // clearance 6.41 -> 1.67 units and foreground cover 8% -> 18%, a crane that
+  // made the shot worse than the straight path it replaced. BETWEEN the plants
+  // and OVER the plants are both fine; a third of the way up one is the height
+  // that is neither. So if the crane cannot do the job, the director keeps the
+  // move it already had, and the number is reported rather than acted on.
+  //
+  // The ceiling itself is `hHi` PLUS THE MARGIN, and both halves are derived.
+  // `hHi` is the 85th percentile of plant height — the statistic the establishing
+  // frame is already solved from, and chosen there for this same reason, that a
+  // stand of seven regularly hands one member a veto; rising above it is a
+  // helicopter and there is nothing up there to clear. The margin is on top of it
+  // because clearing a point AT that height means standing up to `m` above it,
+  // which is what the closed form says: a ceiling of exactly `hHi` forbids the
+  // one crane that gets over the field's own skyline. Measured on
+  // ?garden=7&seed=1337, `glide -> dolly` asked 32.4 against a bare `hHi` of 30.9
+  // and was killed by 5% — with the margin the ceiling is 33.9 and the move
+  // cranes.
+  flDirPolar(e, dir, F, 0.5);
+  dir.arcNeed = A;                          // what clearing it would have cost
+  dir.arcCap = Math.max(0, F.hHi + m - e.y);   // what this stand allows
+  if (A > dir.arcCap) A = 0;
   dir.liftA = A > 0.05 ? A : 0;
   // A LIFTED PATH IS A LONGER PATH, AND THE PACING LAW IS PEAK SPEED. flDirPace
   // priced this move off the straight-line distance between the poses on the cut
@@ -1496,9 +1554,31 @@ function flDirBlendEye(out, dir, F, w) {
 // and what a viewer sees is the stand from higher up for a couple of seconds.
 // It is the same argument the traverse makes about the orbit — a second motion
 // with nothing relating it to the first is two motions, not one.
+// ...BUT NOT ALL OF THE WAY, AND THIS IS THE ONE FRACTION IN THE MECHANISM.
+// FL_DIR_CRANE_AIM is how much of the eye's rise the aim takes with it, and the
+// dial has a defect at each end. Swept on ?garden=7&seed=21 over `bank -> glide`,
+// the move that cranes 21.9 units there, as (foreground cover / least ink — how
+// much of the frame has ANY drawn vertex in it at the emptiest sample):
+//   no crane   21% / 45%
+//   aim 0.0    20% / 44%   the aim stays down, the lens pitches into the canopy
+//                          it has just cleared, and the crane buys nothing
+//   aim 0.5    11% / 38%   SHIPPED
+//   aim 1.0    10% / 25%   the picture translates exactly and the top of the arc
+//                          is empty sky — read on film as three blank frames
+// Half takes nearly all of the cover and a third of the emptiness, which is the
+// composition a crane shot is actually cut for: the stand in the lower half of
+// the frame with sky above it. ?aim=<f> sweeps it.
+const FL_DIR_CRANE_AIM = 0.5;
+function flAimKnob() {
+  if (typeof location === 'undefined') return FL_DIR_CRANE_AIM;
+  const q = new URLSearchParams(location.search).get('aim');
+  if (q === null) return FL_DIR_CRANE_AIM;
+  const v = +q;
+  return isFinite(v) && v >= 0 && v <= 1 ? v : FL_DIR_CRANE_AIM;
+}
 function flDirBlendTgt(out, dir, w) {
   out.copy(dir.fromTgt).lerp(dir.wantTgt, w);
-  out.y += flDirLift(dir, w);
+  out.y += flAimKnob() * flDirLift(dir, w);
 }
 
 // Advance the shot clock. Returns the name of the shot to play this frame, and

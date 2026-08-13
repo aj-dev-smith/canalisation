@@ -503,10 +503,10 @@ function flBoot() {
         // into it, and it would still be coming back down halfway through the
         // hold. Taking last frame's offset off before the framer reads its own
         // eye leaves that state on the unlifted path, exactly.
-        if (director.lifted) {
+        if (director.lifted || director.liftedT) {
           scene.camera.position.y -= director.lifted;
-          target.y -= director.lifted;
-          director.lifted = 0;
+          target.y -= director.liftedT;
+          director.lifted = 0; director.liftedT = 0;
         }
         frameAxisFlower(sj.ai, specs[sj.i], flDirOutward(director, F, bb));
         framedAx = sj.i === 0 ? sj.ai : -1;
@@ -543,7 +543,8 @@ function flBoot() {
             target.lerp(director.fromTgt, 1 - w);
             radius = lerp(radius, director.fromR, 1 - w);
             director.lifted = flDirLift(director, w);
-            target.y += director.lifted;
+            director.liftedT = flAimKnob() * director.lifted;
+            target.y += director.liftedT;
             scene.controls.target.copy(target);
           }
         }
