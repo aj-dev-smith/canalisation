@@ -102,7 +102,14 @@ function flBoot() {
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
-  hint.textContent = 'drag to orbit · wheel to dolly\n?species= ?seed= ?speed= ?ff= ?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= ?aniso= ?garden=2..12 ?radius= ?shot=wide|bank|dolly|close|low';
+  // The gesture hint stays on the canvas; the URL-parameter catalogue does
+  // not — as one white-space:pre line it was wider than the viewport and ran
+  // straight through the HUD, so every still had a band of overstruck text
+  // along its bottom. A person composing URLs is in the console anyway.
+  hint.textContent = 'drag to orbit · wheel to dolly';
+  console.info('canalisation flowers — ?species= ?seed= ?speed= ?ff= '
+    + '?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= '
+    + '?aniso= ?garden=2..12 ?radius= ?shot=wide|bank|dolly|close|low');
   // The form rail. A form is decided at founding — every organ's identity is
   // read off sp the step it is founded — so switching means regrowing, and
   // the honest way to regrow deterministically is a reload with the form in
