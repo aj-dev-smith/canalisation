@@ -1430,7 +1430,7 @@ function flDirPolar(out, dir, F, w) {
 // ⚠ MOST TRANSITIONS MUST COME OUT UNTOUCHED, and that is the test this
 // mechanism has to pass rather than a hope: a director that cranes on every cut
 // has replaced one tic with another. Four of six are untouched on seed 21 and
-// four of six on seed 1337 — the two that lift are exactly the two the harness
+// five of six on seed 1337 — the ones that lift are exactly the ones the harness
 // says are inside a plant. The amplitude is solved ON THE CUT and held, like the
 // establishing frame's end, the low shot's gap and the traverse's lane: a lift
 // re-solved every frame against a stand that is still growing is a swerve.
@@ -1443,16 +1443,20 @@ function flDirPolar(out, dir, F, w) {
 // ?garden=7&seed=21 with tools/flowers_trans.mjs, as (moves lifted of six; the
 // crane each one takes; the foreground cover of the two that were broken, which
 // was 20% and 46% before any of this):
-//   brush  3   2/6   21.9 / 8.6    10% / 23%      SHIPPED
-//   brush  4   2/6   29.4 / 10.2   12% / 22%
-//   brush  6   1/6   -    / 20.6   21% / 25%
-// 4 buys nothing over 3 and costs eight more units of crane; 6 asks 57 units on
-// the traverse's entrance, more than any stand allows, so that move keeps the
-// path it had. 3.0 units is 19 cm in WORLD.unitM. ?brush=<m> sweeps it.
+//   brush  3   2/6   22.0 / 10.2   11% / 23%      SHIPPED
+//   brush  4   2/6   23.5 /  9.8   10% / 22%
+//   brush  6   1/6   -    / 20.6   21% / 25%   (measured under an earlier rule)
+// 4 costs a unit and a half of extra crane for nothing a number can see; 6 asked
+// 57 units on the traverse's entrance, more than any stand allows, so that move
+// kept the path it had. ⚠ The 6 row was taken before flDirRise below stopped the
+// solve craning over things the path passes UNDER, so it is an upper bound on
+// what 6 would ask now rather than a measurement of it; 3 and 4 are current.
+// 3.0 units is 19 cm in WORLD.unitM. ?brush=<m> sweeps it.
 const FL_DIR_BRUSH = 3.0;
 // How many points of the drawn surface the field measurement keeps (flDirField).
 // 8000 over a stand of seven is one vertex in ~200 and about 0.2 ms a scan
-// against a 500 ms scan interval; the crane's own solve is 17 samples over it.
+// against a 500 ms scan interval. The crane's solve walks it once per path
+// sample per pass — 21 to 81 samples, at most three passes, once a cut.
 const FL_DIR_SOLIDN = 8000;
 // scratch for the solve, which runs once a cut and must not allocate in a frame
 const _arcE = { x: 0, y: 0, z: 0, set(a, b, c) { this.x = a; this.y = b; this.z = c; } };
