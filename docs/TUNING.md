@@ -1705,3 +1705,233 @@ toward its asymptote (0.570 → 0.742 → 0.794 cells/tu) rather than decaying.
 If you want a genuinely self-limiting lesion you need something that breaks
 translation invariance — clearance that rises with cumulative damage is the
 obvious candidate and it is not built.
+
+## The flower field (`flowers/`, `?garden=N`, 2026-08-12)
+
+The flowers piece grows a whole field now. Its numbers live here for the same
+reason everything else in this file does, with one caveat at the top: **almost
+every constant in this section is environment or staging, not chemistry.** Where
+a plant stands, where the camera stands, how thick the air is and how coarse a
+distant blade is drawn are the `37_wind.js` category. Nothing here touches what a
+plant *is*, and a wrong value can only make the scene wrong, never the physics.
+
+The full argument for each is in `flowers/README.md` ("A GARDEN"); this is the
+table, plus the two things that must not be dialled.
+
+| knob | file | ships | may I move it? |
+|---|---|---|---|
+| `FL_GARDEN_SPACING` | `35_garden.js` | 12 | ⚠ **a stated fraction of a measurement** — see below |
+| `FL_FIELD_PACK` | `35_garden.js` | 0.83 | derived: `R = s sqrt(1.5 N / 2.19)` off the dart-throwing saturation density |
+| `FL_GARDEN_STAGGER` | `35_garden.js` | 1200 steps | taste — but re-take any field profile after moving it |
+| `FL_GARDEN_COHORT` | `35_garden.js` | `max(2, min(4, ceil(n/3)))` | taste; it exists so the opening frames are a field |
+| `FL_STEP_BUDGET` | `35_garden.js` | 8 | ⚠ it is the world clock's rate limit — see below |
+| `FL_RECAP_HZ` | `35_garden.js` | `1.78 * 4` | **no. Nyquist against the wind's fastest gust** |
+| blade-mesh cap | `28_lod.js` | 1 quad/pixel | **no. Nyquist against the raster** |
+| `FL_HAZE` | `25_ground.js` | `[2.0, 3.0, 1.5, 5.0]` | by looking, in `uRef`'s category (`?haze=G,H,P,N`) |
+| `FL_SKY_LEAD` | `25_ground.js` | 0.35 | measured — see below (`?sky=`) |
+| `FL_POOL` | `25_ground.js` | `[1.0, 5.0]` | the 5.0 is the solo page's shipped `exp(-r*0.20)` re-spelled; **a field's length scale is not in here** and must not be pasted in — see below (`?pool=K,R`) |
+| `FL_DIR_SHOTS` holds | `45_director.js` | 16/12/26/18/16/9 s | by eye, and only by eye. Six shots now; ~127 s of cycle |
+| `FL_DIR_ORBIT_HOLD` | `45_director.js` | 25 s | by eye. The solo page's 6 s is wrong for a field: a viewer who drags is walking around *in* a place |
+| `FL_DIR_HERO` | `45_director.js` | 1.25 | ⚠ **it is paying for a limitation** — delete it the day the sight-line cull follows the subject instead of specimen 0 |
+| `FL_DRIFT` | `45_director.js` | 0.0075 /s | **by eye**, `uRef`'s category — but it is the one rate the whole film is quoted in; see below |
+| `FL_DIR_VPEAK` | `45_director.js` | 26 u/s | **derived** — it reproduces both hand-set transition times it replaced |
+| `FL_GLIDE_K` | `45_director.js` | 3 | stated, and stated as a ceiling: at 1 the traverse is indistinguishable from the drift every other shot carries |
+| `FL_LOW_SKY` | `45_director.js` | 0.62 | by eye, and it says so in the file |
+| `FL_RACK` | `45_director.js` | `[0.35, 1.35, 1.2, 0.45]` | the amplitude is the lens's own depth of field (`uRange`), not a choice; the window and the caps are by eye |
+| `FL_POLLEN.minAng` | `18_pollen.js` | 0.004 | **by eye**, off a measured ladder — see below (`?pol=`) |
+| `FL_POLLEN.fogK` | `18_pollen.js` | 0.45 | by eye, and it is the one weight that could **not** be taken from the shipped fog |
+
+### `FL_GARDEN_SPACING` — 12 is 62% of what the sweep says, deliberately
+
+Measured, not chosen: 8 flowering species x 4 forms x 5 seeds grown to 3000 steps,
+horizontal reach taken off the **drawn streams** (`scratch/g2_placement/`, table in
+`seedsweep.out`, 160 cells).
+
+| | p10 | med | p75 | p90 | max |
+|---|---|---|---|---|---|
+| `maxR` outermost vertex | 3.6 | 9.7 | 14.4 | 23.2 | 70.9 |
+| `r90` the body | 2.2 | 5.0 | 7.5 | 12.1 | 20.4 |
+
+12 is full clearance of two median **bodies** (2 x 5.0) with margin and **62% of
+full clearance of two median arms** (2 x 9.7 = 19.4). The other end was measured
+and rejected by looking: at 19-44 units apart, plants 20-48 units tall stop being a
+stand and read as a row of isolated specimens. The shipped `plantGarden`'s 2.5 was
+~5x too small in the direction that shows — at `garden=7&seed=21` two specimens had
+grown *through* each other.
+
+**Do not "fix" the overlap that remains by raising it.** The tail is not a species
+property and it is not bounded in time: an Ember Creeper columbine reaches `maxR`
+7.4 at seed 21 and 65.9 at seed 31697, and sampled every 200 steps that specimen
+goes 11.9 (step 1000) → 28.8 → 44.4 → 70.9 (step 3200), still climbing linearly.
+Reproduce with
+`node scratch/g2_placement/arc.mjs '{"species":"Ember Creeper","form":"columbine","seed":31697,"end":3200}'`
+(re-run 2026-08-12, reproduces every figure). No fixed spacing keeps a creeper off
+its neighbours; that is `organBudget` and apical control's business, not
+placement's.
+
+### `FL_STEP_BUDGET` — the pool that slows garden time instead of the frame rate
+
+The pool is `max(FL_STEP_BUDGET, nAct)` `plant.step()` calls a frame, and each
+active specimen may spend `floor(pool / nAct)` of it. A solo page never feels it (1
+active, 8 ≥ the 6-step frame cap). **A field does, and the effect lands on the
+clock rather than the frame rate:** at N = 12 every plant is allowed exactly one
+step a frame against the solo page's six, so the world runs ~6x slower per
+wall-clock second and a garden of twelve takes ~6x as long to reach bloom. That is
+a deliberate trade — a heavy frame slows garden time rather than killing fps — but
+it is a statement about how long a viewer waits, and **it has not been watched.**
+
+### The two that are Nyquist, and are not dials
+
+`FL_RECAP_HZ` and the blade-mesh pixel cap look like quality knobs and are not.
+`FL_RECAP_HZ = 1.78 * 4` is four samples per period of the wind's fastest gust mode
+(`37_wind.js`); below ~3.6 Hz the air judders and reads as a solver bug, which is
+the same bound `tools/blender_seq.mjs` states about its frame stride and
+`15_petal.js` states about its ripple. The blade cap is one quad per pixel, off the
+drawing buffer's own height and the camera's own fov. **Lowering either to buy
+frames is the vein-cull mistake in a new place** — it makes the piece cheaper by
+making it a different piece, and unlike a taste constant there is no argument
+available for where the new value should sit.
+
+### `FL_SKY_LEAD` — 0.35, and what a plain mean costs
+
+A garden's atmosphere is blended across the species standing in it. Averaging
+palettes in RGB cancels hue against hue: on the field at `garden=7&seed=21` the
+plain mean fog has saturation **0.261 against a member mean of 0.598**, and
+`keyCol` **0.090 against 0.328** — near-grey. `flFieldPal` keeps the weighted
+mean's luminance and hue direction and rescales its chroma back to the members'
+mean, clamped so no channel goes negative; that puts blended fog saturation at
+**0.527**.
+
+The hero's extra weight over an equal share is then the only free number here, and
+it is set against a measurement rather than a preference: over 40 fields of seven,
+the mean pairwise angle between two gardens' fog **hues** is **84° at lead 1.0, 64°
+at 0.35 and 27° at 0.0**. A pure field mean gives every garden nearly the same sky —
+0.35 keeps about two thirds of the between-garden variety while still being the
+field's air rather than the hero's.
+
+### The film's one rate: `FL_DRIFT`, and the two numbers derived off it (2026-08-13)
+
+`FL_DRIFT = 0.0075` — the picture translating by 0.75% of its own width per second —
+is by eye and is in `uRef`'s category, but it is worth more than a taste constant
+because **everything else about the camera's motion is quoted against it.** Two
+consequences fall straight out of it being *screen-referred*: a lateral drift is
+distance-scaled (4.4 cm/s at the establishing shot's 88.7 units, 0.4 cm/s at the
+close-up's 8, the same speed on screen), and an **orbit is therefore a constant
+angular rate** — 0.46 °/s, independent of everything — which is why the orbit is a
+term in the shot *heading* rather than in each pose.
+
+It replaced three of six shots holding **absolutely still**: measured over 120 s at
+`?garden=7&seed=21&ff=3000`, the camera spent **15.4% of its samples** moving slower
+than a thousandth of a frame width per second, and the per-shot slow-decile drift
+before → after was `wide` 0.101 → 0.805, `bank` 0.021 → 0.580, `low` 0.015 → 0.485,
+`close` 0.873 → 0.723, `dolly` 2.114 → 3.635 %frame/s. ⚠ **The close-up was never
+the offender** and is now marginally *slower* than it was, because its three
+exponential lerps converge so slowly that it always crept. Know that before trying
+to make the close-up move more.
+
+⚠ **Do not take the "0.00 → 0.49-0.81" that the first write-up of this quoted.** The
+left-hand column was reasoned rather than measured — the per-shot statistic was added
+to `tools/flowers_clip.mjs` *after* the baseline run — and the baseline was then
+re-run from the previous build with the same instrument for the same 150 s. The real
+numbers are the ones above, and one of them is a correction rather than a refinement.
+
+**`FL_DIR_VPEAK = 26 u/s` is derived and that is the reason to trust it.** The
+transitions used to be 5.0 s for four shots and a hand-added 7.5 s for `wide`, and
+the comment that set them did the arithmetic out loud — so the constant actually
+being held fixed was the *peak speed*, and the durations are what it implies:
+`trans = 1.5 * distance / VPEAK`, clamped to [3.5, 9.0] s. That gives **5.02 s and
+7.85 s** against the 5.0 and 7.5 set by hand, and it caps the whip the fixed
+transition allowed (peak 44.2 → 26.6 u/s). 26 u/s is 1.63 m/s in `WORLD.unitM` — a
+walk. It is a law rather than two numbers because the distances are not fixed:
+`?garden=12` is a 107-unit field where `?garden=3` is 31.
+
+**`FL_GLIDE_K = 3` is the traverse's whole speed.** `v = FL_GLIDE_K * FL_DRIFT *
+(frame width at the aim distance)` = 0.7-0.9 u/s on the shipped field (4.6-5.7 cm/s; the
+spread is which aim distance the lane solves to, so quote the screen rate). Measured
+over 285 s of film the six shots' steady screen rates are **0.605 / 0.781 / 0.965 /
+1.137 / 2.131 / 3.748 %frame/s** — the glide at 2.84x `FL_DRIFT`, second-fastest under
+the dolly. Chosen as a ceiling: at `K = 1` a traverse is indistinguishable from the
+drift every other shot already carries.
+
+⚠ **A held frame must not be a function of what the plants did while it was held**,
+and that is a rule rather than a constant. The establishing heading is the field's
+plan **diameter**, which is *not continuous in a growing stand* — one arm past the old
+extreme swaps which pair of hull points is furthest apart and swings the answer tens
+of degrees between two 500 ms measurements, which at a 90-unit standoff is 47 units of
+eye and, through `40_boot`'s 12%-a-frame lerp, **336 u/s against VPEAK's 26**. Worst
+sampled eye speed over 290 s of film, as each fix landed: **239.5 → 196.0 → 168.1 →
+37.7 u/s**, with samples over 50 u/s going 7 → 7 → 6 → none. Every per-shot decision —
+heading, end, subject, gap, lane — is taken **on the cut** and held.
+
+### `minAng` and `fogK` — a mote is an angle, and a mote's fog is not the tissue's
+
+Measured before anything moved: at the establishing shot **all 320 live grains were
+drawn at exactly 1.00 px** (p50 = p90 = p99 = max = 1.00, zero variance), the whole
+population against the rasteriser's clamp. `psize` is floored at `minAng x (distance to
+the eye)` now, re-derived every frame from the eye — the vein width floor's argument and
+the Blender bridge's `px_ref`, applied to a grain, and `FL_POLLEN.size = 0.022` stays as
+the *near* floor under it.
+
+`minAng = 0.004` is an eye decision, taken off a ladder at 1x / 3.2x / 6.8x / 11x the
+old world size on the low, bank and wide shots: 3.2x and 6.8x are still dots you have to
+hunt for; 11x is where the plume reads immediately as motes between the corollas, and it
+put the bank shot's median at 5.6 device px. Drawn size, device px at 2200x1560
+(p50 / p90 / max, grains over 2 px of 320 alive):
+
+| shot | before | after |
+|---|---|---|
+| `wide` | 1.00 / 1.00 / 1.00, 0 | **5.75 / 7.00 / 7.41, 320** |
+| `low` | 1.00 / 1.00 / 1.40, 0 | **5.97 / 7.20 / 9.27, 320** |
+| `bank` | — | **5.85 / 7.18 / 8.01, 320** |
+
+Stated as `psize` per world unit of distance it is a fraction of the **frame**, not a
+pixel count, so it does not change with display density. Total drawn light at the wide
+shot goes 164 → 3095 px², 0.09% of a 3.4M-pixel frame; **`bright` is deliberately not
+lowered against it**, because dimming a mote to pay for seeing it is the move that put
+this mechanism at the 1-px clamp to begin with.
+
+`fogK = 0.45` is the one number here that could not be taken from the shipped fog.
+`uFogD`/`uFogNear` come straight off the scene's own fog uniforms through `flFog`'s own
+formula, but the tissue's 0.80 is a mix *toward the fog colour* — distant tissue is
+veiled, not extinguished — and a mote is additively blended with no veil to be mixed
+into, so the same weight spent on it is a fade to black. At 0.80 the wide shot read
+correctly and the bank shot lost the plume it had just been given. Shot at 0.0 / 0.45 /
+0.80. `?pol=rate,beyond,size,minAng,fogK` sweeps all five and
+`?pol=0.05,12,0.022,0,0` is the pre-floor renderer exactly.
+
+### `FL_POOL` — the length scale is the clearing's, and the pool is airlight
+
+The ground's glow was `exp(-r * 0.20)`: **a 5-unit pool written for one plant at the
+origin.** In a field the plants stand at r = 12-26, where that has decayed to 0.6%, so
+the stand was lit by nothing — measured by rendering the same frame with the ground
+hidden and taking the difference per band, where **eight of twelve bands came back
+exactly zero** (`tools/flowers_floor.mjs`). ⚠ **The melt was not the cause**, which is
+what the same tool's closed-form profile said: it is 0.75-0.93 where the plants stand,
+not 1.0.
+
+A field's length scale is therefore not a constant in this file at all — it is
+`rim + FL_GARDEN_SPACING`, the same clearing radius `FlPollen` independently arrives at
+(26.4 + 12 = 38.4 on the shipped field, so the pool is 1/e exactly at the edge of the
+story the grains may drift into). With no plan it is `FL_POOL[1] = 5.0` and the solo
+page does not move — the same by-construction no-op as `flFieldPal`.
+
+**And it is airlight, not albedo, which is a rejection and not bookkeeping.** Ground
+contribution per band, bottom four, of 255:
+
+| | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|
+| before | 0.31 | 1.83 | 5.64 | 10.06 |
+| flat pool, **rejected** | 2.11 | 11.49 | 20.62 | 24.76 |
+
+The flat pool lit the establishing shot correctly and turned an overhead into a sheet of
+magenta with the plants as silhouettes, because a flat pool is a statement about the
+*floor* and is therefore loudest where the floor fills the frame. Riding the melt makes
+it a statement about the **air**: 18% survives that overhead against 75-93% of the
+establishing shot. Wide frame mean pixel 46.52 → 49.34; `tools/flowers_horizon.mjs` at
+its three heights, no pool → shipped, 100.29 → 101.39, 54.37 → 60.47, 59.83 → 64.01
+(the flat pool put that last one at 78.59). `?pool=K,R` sweeps both from one build.
+
+The pool also **breathes with the sky**, off `flSky`'s own shipped
+`(0.85 + 0.15 sin(uT * 0.0007))` — a 9.0 s period at ±15%, no new uniform, no new
+number, and it can only ever scale the pool down. ⚠ **Nobody has watched that move**; a
+still cannot see a 9-second breath at all.

@@ -69,6 +69,14 @@ inside **single** quotes, so it never interpolated.
   construct before it takes a single step. Both are now paid off a slice per frame.
   501ms worst gap → 149ms.
 
+- `nan_check.mjs <seconds> [garden] [seed] [species]` — **is the main page making
+  NaN in its HDR buffers?** `src/60_render.js` does `normalize(vN)` unguarded on
+  geometry that carries zero normals, which is exactly what put a one-frame black
+  square on `flowers.html`. Reduces the scene and defocus targets on the GPU after
+  every draw and classifies each 8x8 block as NaN / Inf / absurd. **The answer is
+  no, over 133,731 frames**; the section below has the mechanism, the controls and
+  what would change it. Exits non-zero if it ever finds one.
+
 - `veinlod_shot.mjs OUTDIR [species] [seed] [waitMs]` — **before/after for the vein
   level of detail**, on the hero specimen at the shipped camera, which is the frame that
   change puts at risk. Flips `app.veinLOD`, which is the whole switch: `false` restores
@@ -200,6 +208,313 @@ inside **single** quotes, so it never interpolated.
   grows a different plant and the species numbers move by more than any change
   you are trying to measure — the first two baseline runs of this tool disagreed
   about which species was worst, because they were not looking at the same plants.
+
+### The flowers page has its own four (2026-08-12)
+
+`flowers.html` is a separate build with its own boot, its own handle
+(`window.__fl` rather than `window.app`) and, since `?garden=N`, its own field.
+None of the tools above can drive it.
+
+- `flowers_shot.mjs out.png '<query>'` — one capture of the flower piece, at any
+  URL the page understands: `'garden=7&seed=21&ff=3000&speed=0&shot=wide'` is the
+  garden's wide shot at bloom, frozen. It drains `?ff=` and waits for the camera
+  to *settle* rather than for a fixed time, prints stream counts and the HUD line,
+  and checks the mean pixel so a black PNG cannot be reported as a picture.
+  Headed ANGLE-on-Metal on darwin, for the reason at the top of this file.
+
+  ⚠ **It counted the hero twice until 2026-08-12** — `__fl.B` *is* `garden[0].B`
+  once a garden exists — and reported 998 organs for 771, 10.34M tri floats for
+  8.18M. Nothing on the page disagreed; `test/flowers_capture.mjs`, which reaches
+  the same quantities down a different path, did. **A capture tool's totals are a
+  second implementation of the page's bookkeeping and should be treated as one.**
+- `flowers_perf.mjs ['<query>'] [seconds]` — the rAF gap sampler, `garden_hitch`'s
+  lesson applied to this page: **a harness that waits cannot see a freeze**, so the
+  sampler runs *inside* the page. 30 s of LIVE growth (it refuses `?ff=`, which
+  would bury the number), median / p95 / p99 / worst / fps. It **prints and does
+  not judge** — this piece has no frame budget yet, and `garden_hitch`'s verdict
+  line outliving its scene is the reason not to invent one.
+- `flowers_horizon.mjs <outprefix> '<query>' [cams]` — the ground, from three
+  camera heights. It exists because the boot's framer owns the camera and picks
+  one height, so no other tool here can answer "does the ground melt from a low
+  camera": it wraps `scene.render` and overrules the framer before every draw.
+  Default eyes are 0.35 (across the field), 3.5 (the shipped framing) and 26
+  (down onto the disc, where the geometric rim is nearest to being in frame).
+- `flowers_floor.mjs <outprefix> '<query>'` — **how much of the picture is the
+  ground worth.** `flowers_horizon` asks whether the ground melts; this asks
+  whether it is *there*. "The field floats in void" is a claim about a difference,
+  so it takes the difference: the same settled frame rendered three ways
+  (everything / ground hidden / ground alone), read back, reported per horizontal
+  band. On the pre-pool build **eight of twelve bands came back exactly zero**,
+  which no amount of looking at the composite will tell you — a dark floor and a
+  dark void are the same pixels. It also prints the melt/fog profile along the
+  view ray from the material's own uniforms, which is what corrected the first
+  diagnosis (the melt is 0.75-0.93 where the plants stand, not 1.0; the pool of
+  light was a 5-unit pool at the origin in a clearing of radius 26).
+
+  ⚠ **`dMax` is not a second opinion on `dMean`.** Alpha carries linear depth for
+  the defocus pass, so hiding the ground changes what is behind a silhouette and
+  the blur moves; the large maxima are that, at organ edges, and not floor.
+- `flowers_motes.mjs '<query>'` — **what size is a grain on the screen.** It walks
+  the live pollen population and evaluates `FL_PT_VS`'s **own** `gl_PointSize`
+  expression per grain, so the histogram is the rasteriser's number rather than an
+  estimate of it. That is how the plume turned out to be invisible: p50 = p90 =
+  p99 = max = **1.00 px** at the establishing shot, the whole population against
+  the clamp with zero variance, which is a thing no screenshot reports. It also
+  reports `inFrame` (**zero is a real answer** and the close-up returns it — a
+  population can be entirely out of the picture, which is a framing question and
+  not a size one) and `lightPx2`, the population's total drawn light, which is the
+  unit "keep the total light sane" has to be argued in.
+
+  ⚠ **Say which pixel you mean.** It prints device *and* CSS pixels, because
+  `gl_PointSize` is device and at dpr 2 the two readings support opposite
+  conclusions.
+
+- `flowers_clip.mjs <outdir> '<query>' <seconds>` — **the page as a FILM.** Every
+  other tool here hands you a frame, and a frame cannot answer the one question
+  the garden director exists to answer: is the camera saying anything, or has it
+  arrived at a pose and stopped. This one records the tab with Playwright's own
+  `recordVideo` — so what lands in the `.webm` is what a viewer would have seen,
+  HUD and hitches included, at the browser's frame timing rather than a
+  harness's — and *at the same time* samples `window.__fl.state()` at 4 Hz.
+
+  It is the sampler that makes it an instrument. It reports camera speed in world
+  units/s **and in frame widths/s**, because "gentle" is only meaningful on
+  screen; the **stationary fraction**, which is the freeze-frame defect stated as
+  a number (a director with no perpetual drift scores 15% of its running time
+  under 0.1 %frame/s, one with drift scores 0.0); the **drift** as the slow decile
+  inside each shot, which is what the camera does once it has arrived; and
+  `capMs`/`capN`, because camera motion is one of the two things that dirty a
+  stream and a perpetual drift must not thrash the recapture. The raw samples go
+  to `track.json` so a question the summary does not answer does not cost another
+  two-minute run.
+
+  The `?ff=` pre-roll cannot be kept out of the recording — a video belongs to the
+  context and starts when the context does — so it is trimmed off into `clip.webm`
+  with ffmpeg, and `raw.webm` is kept. Extract frames with
+  `ffmpeg -i clip.webm -vf fps=1 f%03d.png` and *read them*: consecutive frames a
+  second apart are the only evidence that the camera language is continuous.
+
+Their headless counterpart is `test/flowers_capture.mjs`, which profiles a whole
+field's capture cost per specimen, per organ kind and per stream without a
+browser — and it grows the field `flGardenPlan` plans *with the germination
+stagger*, so it is the page's field and not a different one.
+
+### Six probes for a one-frame flash, and why there are six
+
+AJ reported "glitchy flashes on flowers". Six instruments were needed to convict
+it, each answering the question the previous one raised, and none of them could
+have been skipped — the mechanism turned out to be **rasterisation**, which is
+two layers below where every plausible first guess pointed. The whole story,
+with numbers, is the last section of [flowers/README.md](../flowers/README.md);
+what belongs here is what each tool is *for*, because they generalise:
+
+- `flowers_glitch.mjs '<query>' <seconds> <outdir>` — the one that sees what a
+  person sees. Tile-diffs the canvas per frame from a rAF registered after the
+  app's, excludes camera-motion frames, and saves the glitch frame at full
+  resolution **the frame it happens**. A screenshot loop cannot catch 16 ms.
+- `flowers_peak.mjs '<query>' <seconds> [outdir]` — the HDR scene target's peak,
+  every frame, for the price of one small `readPixels`: a max-reduce over 8x8
+  blocks into a byte target as `log2(1+L)/16`. **Its real trick is attribution
+  in the same frame** — on a spike it re-renders each stream solo, with geometry,
+  camera and uniforms still exactly as they were, so the bisect cannot be
+  confounded by the flash not recurring. Five separate runs collapse to one.
+- `flowers_scan.mjs '<query>' [seconds]` — the CPU side: extremes and non-finites
+  per stream per specimen, reported with the *organ* the offending vertex belongs
+  to. Its first version checked only colour and emissive and missed that the
+  minimum normal length was zero. **Scan every field, not the suspects.**
+- `flowers_term.mjs '<query>' <seconds>` — one debug fragment shader per TERM of
+  the tri shader, each reduced through the same max pass, so every term is
+  measured on the same fragment that produced the spike. This is where a varying
+  turned out to be five to thirty times outside the hull of its own vertex
+  values, which is what moved the search from shading to interpolation.
+- `flowers_kind.mjs '<query>' <seconds>` — the same idea one level finer:
+  `FlowerBuffers` records `[tri0, tri1)` per organ, so the tri stream can be
+  re-rendered **one organ kind at a time**. Leaf, never stem.
+- `flowers_sliver.mjs '<query>' <seconds>` — projects every triangle on the spike
+  frame, finds the ones covering the flash block, and reports screen area, world
+  area and organ. Screen-and-world area both zero is a triangle that was emitted
+  degenerate; screen-only is one seen edge-on, and projection preserves
+  collinearity so the two separate cleanly.
+- `flowers_black.mjs '<query>' <seconds>` — a one-question tool for the *second*
+  artefact (a one-frame black square): read the canvas twice in the same frame
+  and see whether the two readers agree. They do, 376 out of 376, so it is in the
+  drawing buffer and not in the instrument. ⚠ **Its collapse test is not specific
+  and its counts are not event counts** — at seed 1337 it flags 232 tiles in
+  2,613 frames, in runs of six consecutive frames falling 60 → 25, which is a
+  camera cut. Use `flowers_hole.mjs` for the artefact itself.
+
+### The black square — convicted, and it was ours
+
+The second artefact turned out to be a **NaN**, and the chain below is what named
+it. The full story is in `flowers/30_scene.js` above `FL_GUARD`; these four are
+the instruments, and they were each built because the previous one could not
+answer the next question.
+
+- `flowers_hole.mjs '<query>' <seconds> <outdir>` — **which pass.** The
+  artefact's own signature as three conditions (near black, still camera, one
+  frame, recovers) instead of one, plus a GPU reduce of *every* post target —
+  scene, bright, bloom, defocus — read back per frame. At seed 1337: 8 confirmed
+  holes in 4,026 frames, the DEFOCUS target collapsing with the screen on 7 of 8
+  and carrying non-finite texels on all 8, while the scene target's luminance at
+  the same tile does not move.
+- `flowers_nan.mjs '<query>' <seconds>` — **which texel, and NaN or Inf.** Exact
+  coverage (one output texel per 8x8 source block, taps at texel centres), and it
+  classifies without `isnan()`, which GLSL ES 1.0 does not have: NaN fails every
+  comparison, ±Inf fails exactly one. 69 frames of 4,921 carried a NaN in
+  rtScene's **colour**, one 8x8 block at a time, never Inf, never in alpha, and
+  **never** a NaN in the defocus target without one in the scene. `HIDE=` bisects
+  by mesh; hide `tri` and it is zero.
+- `flowers_vn.mjs '<query>' <seconds>` — **which term.** Rewrites `FL_TRI_FS` at
+  runtime, keeping the shipped discard and intercepting only what the discard
+  cannot see. 83 markers, every one of them `|vN| == 0`, and **zero unexplained
+  NaN** left over.
+- `flowers_zeron.mjs` — **headless, no GPU.** Walks both captured streams' vertex
+  normals in Node. 15,560 of 915,792 vertices carry a normal of exactly zero, the
+  count matching the no-area triangles `10_capture.js` drops species for species,
+  and the population is a **gap**: a normal is 0, or it is 1 to within 1e-7.
+- `flowers_guard.mjs '<query>' <seconds>` — **does the fix change the picture.**
+  Both guards against the *same* frame; `CONTROL=1` renders the new one twice.
+  0 changed blocks in 3,921 frames against a control floor of 0, and 38 blocks
+  where the old guard was non-finite and the new one is not.
+
+Three things worth keeping from that sequence. **A GPU-side reduce is cheap
+enough to run every frame** — it is the only way to measure an HDR buffer a
+person can only see through a tone map. **Attribution belongs inside the frame
+that misbehaved**, not in a second run with something switched off. And **run the
+control first**: the guard A/B had two floors it could not see, one from Three
+deep-copying a cloned material's uniforms (every block changed, by up to 84 —
+what a moving scene shaded from a frozen camera looks like) and one from the
+opaque render list sorting by material id, so a clone with *identical* source
+still moved 75 blocks a frame. Only a control could tell those from a result.
+
+⚠ **The 128 px was an eyeball and it sent the first hypothesis to the GPU.** The
+square measures **112 x 112 px** in six of eight captured frames, and 112 is
+*derived*: the bloom chain is three separable 5-tap blurs at radii 1, 2.6 and 4.2
+at half resolution, so its impulse support is 3.2308 x 7.8 = 25.2 half-res texels
+each way — 101 full-res px — plus the source block and the bilinear downsample.
+It is the post chain's own footprint, not a tile size. Nor is the missing bloom
+comb evidence against the bloom path: a comb is what a *finite* impulse leaves at
+sparse taps, and a NaN has no magnitude to comb with.
+
+### And the main page does NOT have it — measured, not assumed
+
+`nan_check.mjs <seconds> [garden] [seed] [species]` is the same question asked of
+`canalisation.html`, because `src/60_render.js`'s `MESH_FS` does `normalize(vN)`
+with **no guard of any kind**, on the same `blade()` geometry, through the same
+post chain. Every ingredient, never searched. The obvious alternative — "the main
+page's tone map must clamp it" — is ruled out mechanically rather than by eye:
+strip comments and whitespace from both comp shaders and they differ in exactly
+one token, `max(c, 0.0)` against `max(c, vec3(0.0))`, which is a GLSL ES 1.0
+requirement. And `CONTROL=1` draws the black square on this page, so the chain
+works here; only the trigger is missing.
+
+**133,731 frames across nine configurations found nothing** — solo hero, a garden
+of seven at seed 1337, three named species including a fully grown `Ashfall
+Spire`, 4x the fragment samples at `DPR=2`, and 18,000 frames parked on a blade
+base filling the frame. Not one non-finite texel, not one one-frame hole.
+
+The reason is structural and it is in `blade()`. At `u = 0` the half-width is
+zero, so all `MV+1` grid vertices of that row are the **same point**, `Pv - P` is
+the zero vector, and `v3norm` returns an exactly-zero normal. Per quad in that
+row you get one triangle with **two** zero normals — whose area is identically
+zero, because two of its corners coincide — and one with **one**, which is drawn.
+So the locus where the interpolant is exactly zero is either a collapsed edge
+that rasterises nothing, or a single vertex a sample would have to hit to within
+float32. `node tools/nan_check.mjs geom` is that count and takes no browser:
+13,924 of 13,925 two-zero triangles have area exactly
+0 (the last, one needle, has 1.05e-6). The main page carries **more** zero
+normals than flowers — 7.38% of vertices against 1.70% — and `flowers_zeron.mjs`
+shows the *drawable* population is the same triangles species for species
+(Cathedral Fern 1,230 on both), so the difference between the pages is framing
+and rasterisation, not geometry.
+
+`MARK=1` is why the guard was not ported anyway, and it is a better A/B than any
+picture: it paints the fragments the guard **would** discard instead of
+discarding them, and 29,381 frames marked zero blocks. The guard is a proven
+no-op here today. What would change that: anything giving a two-zero triangle
+area (a blade base with width, a tessellation change in `blade()`, vertex
+jitter), MSAA on the scene target, or a driver that flushes a small interpolant
+to zero. Run this file again after any of them.
+
+Two things it is worth copying rather than relearning. **`CONTROL=1` is the
+positive control and its first version could not fire**: it wrote
+`normalize(vec3(0.0))`, ANGLE folded the compile-time constant away, and a clean
+run would have been read as "the probe works and the page is fine". It builds the
+zero vector out of a uniform that is never written. With it patched in the page
+draws the black square perfectly — same axis-aligned hole, on `canalisation.html`
+— which is the proof that the *chain* is identical and only the trigger is
+missing. And **the exit code flips under `CONTROL` and `MARK`**, because a
+shipped-shader run is bad if it finds something and a control run is bad if it
+finds nothing.
+
+⚠ The screen half of this tool contributes **nothing** on a garden run or a
+forced close-up: its still-camera condition never holds, so no candidate is ever
+raised. `darkest collapse seen 999/255` means "this half was inert", not "clean".
+The buffer scan is what ran everywhere.
+
+- `flowers_ident.mjs '<query>' [pageA] [pageB]` — **is every flower in the field
+  the hero's, and did giving each its own change the page that only ever had one
+  plant?** Prints a pigment table straight off the petal materials — a bullseye
+  threshold and a spot-atlas digest per member — and exits non-zero if two
+  members share a program. Given a second html it also compares the two frames
+  pixel for pixel. `NOPOL=1` empties the pollen first, `PNG=<prefix>` writes both
+  frames and a 16x-amplified diff map.
+
+  **It is also the cautionary tale on this page about A/B pixel comparison, and
+  it fell into both traps in one sitting.** Reading the WebGL canvas back with
+  `drawImage` — no `preserveDrawingBuffer` — returns an already-cleared buffer,
+  so its first version reported `mean 0.0000, IDENTICAL` for the solo page (right
+  answer, no evidence), for a garden of seven (wrong answer) and for a build
+  against itself. **Three identicals in a row at max delta exactly 0.0 is what a
+  broken instrument looks like, not a clean result**; it screenshots now and
+  refuses a black frame, the same guard `flowers_shot.mjs` carries. And
+  `FlowerScene.render(t)` takes wall time into `uT`, which drives the sky's glow
+  breath, the ground pool's breath and the grain hash — two runs of the SAME
+  build disagreed over 97% of the frame by a mean of 12/255, four times the
+  effect being measured. **Pin the clock as well as the camera**, and pin the
+  camera to *exact* equality: at a 1e-4 tolerance the easing framer and the
+  easing depth of field left 0.141% of the frame moving.
+
+### And one for the framing, because "wastes a quarter" is a claim about a number
+
+- `flowers_frame.mjs '<query>'` — **where in the frame is the field.** A still
+  tells you a shot looks lopsided; it does not tell you by how much, or whether
+  the next seed is lopsided the same way. This measures it three ways that can
+  disagree with each other, which is the point:
+
+  **INK** reduces the drawn canvas to a grid and reports the ink centroid, the
+  share in each half, and the dead margin from each edge. ⚠ That margin is a
+  QUANTILE of the ink, not a threshold on it — these palettes have a lit sky and
+  a grain, so "the first column above 1% of peak" returns zero from both edges on
+  a frame a person calls half empty. **GEOM** projects every drawn station of
+  every specimen through the live camera: the NDC span the plants occupy, and
+  each specimen's clearance from the eye, in two forms (plan distance minus reach
+  against the true nearest station — a disc over-states an arm by its own
+  length). **LAW** runs the director's own pure functions — `flDirClearance`,
+  `flDirGap`, `flDirCorridor` — on the heading the camera is actually standing
+  on, so a pose's arithmetic can be read against the picture it produced.
+
+  Its **SWEEP** is the half that is about what the director *could* have done: it
+  stands the establishing eye on every heading of a 4-degree grid, projects the
+  field through each, and prints the fill. That is where the establishing frame's
+  heading came from — 0.584 of the frame's half-width from the covariance
+  heading, 0.777 from the widest one, at the same distance. It also runs
+  `flEstabSolve` per heading beside the stations, and **their disagreement is
+  informative**: the solver reports 0.86 from every heading because it returns
+  the distance at which the width condition is met, and the camera never stands
+  there when the height condition binds.
+
+  It re-implements 40_boot's `flowerScore` so the subject ranking can be printed
+  with its base term. ⚠ **That is a second implementation and it will drift**: if
+  the ranking here stops agreeing with the subject the page picks, suspect this
+  copy first.
+
+⚠ **Symlinking `node_modules` into a worktree: `ln -sfn`, and never from the repo
+root.** The advice under `clip.mjs` above is right and it is sharp: run
+`ln -sfn /abs/path/to/node_modules node_modules` **from inside the worktree**.
+Without `-n`, and from the wrong directory, it replaces the real `node_modules`
+with a link to itself and every tool on this page dies with `ERR_MODULE_NOT_FOUND`
+on `playwright`. PITFALLS 2026-08-12.
 
 ---
 

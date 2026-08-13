@@ -1001,3 +1001,144 @@ wiring-up. It is a *meristem* mechanism. `20_meristem.js` runs `'grad'`, where
 
 `test/infected.mjs` section 4 asserts this rather than commenting it, so the
 byte-identical rows are a confirmed derivation rather than a suspicious null.
+
+## `ln -s` from the repo root ATE `node_modules`, and every browser tool died with it (2026-08-12)
+
+A worktree has no `node_modules`, so the standing advice (tools/README) is to
+symlink the real one in. An agent ran
+
+```bash
+ln -s /Users/aj/Code/xenobotany/node_modules node_modules      # from the MAIN repo
+```
+
+**from the repository root instead of from its worktree**, where `node_modules` was
+the real directory and the link's own target. What was left was a self-referential
+broken symlink where the dependency tree had been, and every Playwright tool in
+`tools/` — `flowers_shot`, `flowers_perf` and `flowers_horizon` with them — failed
+with `ERR_MODULE_NOT_FOUND` on `playwright`, which reads as "the harness is broken"
+rather than as "the dependencies are gone". (`ln -s` into an existing directory
+places the link *inside* it; with `-f` it replaces. Either way the safe form is the
+same and the safe cwd is the same.)
+
+Two rules, and the second is the one that saves you:
+
+- **`ln -sfn`, always.** `-n` stops the link being created inside an existing
+  directory link and `-f` replaces rather than nests.
+- **Run it from the worktree, never from the repo root.** `cd` into the worktree
+  first and use the absolute path as the *source* only. Nothing a worktree agent
+  does should write to the main working copy at all, and this is the one command
+  that can do it by accident.
+
+Recovery is `npm i`, which is cheap; noticing is the expensive half, because the
+failure surfaces three tools later in something that looks unrelated.
+
+## A profile of a field is a profile of that field's germination schedule (2026-08-12)
+
+`test/flowers_capture.mjs` grows the field `flGardenPlan` plans, *with* the stagger,
+which is correct and is the whole reason it reproduces the page. It also means the
+profile moves when the plan moves — and the plan moved on the same branch as the
+profile.
+
+The per-kind table quoted in `flowers/28_lod.js` was taken with
+`FL_GARDEN_STAGGER = 2400` and uniform-random `startAt`s. Shipped, it is 1200 with a
+first cohort, so every member is *older* and carries more leaf. Re-running the
+identical command on the identical seed: floral organs still dominate (74%, quoted as
+"70%"), but **the petal stream is 46.7% of emitted floats and not 58%**, and *sepals
+overtake petals* in the per-kind ms. Nothing failed, nothing warned, and both numbers
+are correct measurements of different fields.
+
+So: state the plan a field profile was taken under, and re-take it when the plan
+changes. The same applies to any garden number in the shipped app —
+`plantGarden`'s head starts are the same kind of schedule.
+
+## A comparison guard is not NaN-safe, so the guard against bad varyings could not see the worst one (2026-08-13)
+
+`flowers/30_scene.js` grew a guard against corrupt interpolation:
+
+```glsl
+if (length(vN) > 1.01) discard;   // every vertex normal is unit, so this is a theorem
+```
+
+It is a correct test and it fixed the artefact it was written for. It is also **blind to
+a NaN**, because *every* comparison against a NaN is false — `>`, `<`, `==` and `!=`
+alike — so the fragments carrying the worst corruption on the page sailed through the
+guard built specifically to stop corruption. Those fragments came from vertices with a
+normal of exactly zero (2.30% of the captured stream), where `normalize()` divides by
+zero; the NaN then went into an HDR target, through a bloom chain that spreads it over a
+rectangle, and through `aces()` and `pow()`, which both pass it. What a viewer saw was a
+112 x 112 px hole of pure black for one frame.
+
+**The fix is to write the guard as the negation of the valid band**, which is NaN-safe by
+construction because the negation of a false comparison is true:
+
+```glsl
+if (!(length(vN) > 0.0 && length(vN) <= 1.01)) discard;
+```
+
+Two things generalise past this shader:
+
+- **State the band you accept, not the failure you imagine.** `> 1.01` names one failure;
+  `!(in [0, 1.01])` names the contract. They are the same test for every finite non-zero
+  value, and they differ exactly on the values nobody thought of.
+- **A zero end closes with an exact comparison, not an epsilon**, when the population is a
+  gap. Here a normal is 0 or it is 1 to within 1e-7 with nothing in between, so 0 is a bit
+  pattern rather than a small number, and an epsilon would have been a second dial to
+  argue about.
+
+Related, and the same shape: GLSL ES 1.0 **has no `isnan()`**. If you need to classify,
+use the asymmetry — a NaN fails every comparison, ±Inf fails exactly one.
+
+## Run the control first: three A/B probes on a live page whose "result" was their own floor (2026-08-13)
+
+`flowers.html` drifts its camera perpetually, breathes its sky on wall time and moves
+every blade in a wind field, so **anything that compares two renders is measuring the page
+unless it pins the page.** Three separate probes returned confident numbers that were
+noise, and each was caught only by running the control — the identical build against
+itself — before believing the result.
+
+| the design | its floor |
+|---|---|
+| screenshot build A, screenshot build B, diff | two sessions of the **unchanged** build differ by a mean **9.5/255**, with 43% of pixels past 8 |
+| swap in a `ShaderMaterial.clone()` with one line changed | Three **deep-copies the uniform block** on clone, so the copy stops tracking the live uniforms: every block changed, by up to **84** — a moving scene shaded from a frozen camera |
+| ...even with identical source | Three sorts the opaque render list **by material id**, so a clone draws at a different point in the list and coplanar surfaces swap: **75 changed blocks a frame** |
+| `drawImage` the WebGL canvas into a 2D canvas to read it back | with no `preserveDrawingBuffer` that hands back a **cleared** buffer, and the probe reported `mean 0.0000, IDENTICAL` for a garden of seven *and* for a build compared against itself |
+
+What survived: toggle `fragmentShader` on **one** material object (same id, same sort,
+both programs cached after the first frame), render both into the **same** frame, take the
+readback with a real screenshot and refuse a frame whose mean pixel is black — and pin the
+clock as well as the camera, because `FlowerScene.render(t)` takes wall time into `uT`
+(two runs of one build disagreed over 97% of the frame by a mean **12/255**, four times
+the effect being measured). Pin the camera to **exact** equality: a 1e-4 tolerance left
+0.141% of the frame moving, which is a floor a whisper-level change can hide under.
+
+This is the same rule `test/venation.mjs` learned from the other direction — a control run
+first would have caught its unreachable maximum — and it is worth stating as a habit: **on
+a live page, take the control before the measurement, not after the result surprises you.**
+
+## A channel drawn at the rasteriser's clamp is invisible, and no screenshot reports it (2026-08-13)
+
+The pollen in `flowers/18_pollen.js` was correct — shed rate, Stokes settling, advection
+by the one wind field, all conserved by `test/flowers_pollen.mjs` — and it did not reach
+the screen. `tools/flowers_motes.mjs` evaluates the point pass's **own** `gl_PointSize`
+expression per live grain, and at the establishing shot returned **p50 = p90 = p99 = max =
+1.00 px** across all 320 live grains: the entire population pinned against the
+rasteriser's minimum point size, with zero variance.
+
+That is a specific kind of invisible and it is worth naming, because it is the sibling of
+"a computed-but-undrawn channel is a view waiting to happen":
+
+- **A clamped channel looks exactly like a working one in a still.** There *were* dots on
+  the screen. Nothing was missing, nothing was black, no assertion could fire.
+- **The tell is zero variance, and only an instrument that computes the drawn quantity can
+  see it.** A screenshot cannot separate "300 grains, all at 1 px" from "300 grains, sized
+  correctly, and they happen to be far away".
+- **Check the clamp whenever you size anything in screen space** — point size, line width,
+  a pixel floor. This project has three such floors already (the vein width `MINW`, the
+  Blender bridge's `px_ref`, the blade-mesh cap) and each one is a place a population can
+  pile up against a limit.
+
+The fix was to make the drawn size an **angle** rather than a length (`minAng x distance`,
+re-derived from the eye every frame), which is the vein width floor's own argument; the
+same population then draws at a median 5.75-5.97 device px with all 320 grains over 2 px.
+⚠ **And do not report the size without saying which pixel you mean**: the tool prints
+device *and* CSS pixels because at dpr 2 the two readings support opposite conclusions.

@@ -5,3 +5,4 @@ shots/
 .DS_Store
 export/
 tools/__pycache__/
+node_modules
