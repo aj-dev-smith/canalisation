@@ -1407,13 +1407,15 @@ function flDirPolar(out, dir, F, w) {
 // A crane over the canopy that descends onto the new pose is what a camera
 // operator does when the direct path is through a hedge, and it costs one term:
 //
-//     eye.y += A * 4w(1-w)
+//     eye.y += A * flDirBump(w)
 //
-// zero at both ends (the poses are solved and must not move), one at the middle,
-// and — because `w` is already a smoothstep of elapsed time — with zero
+// zero at both ends (the poses are solved and must not move), one across the
+// middle, and — because `w` is already a smoothstep of elapsed time — with zero
 // VELOCITY at both ends too, so a lifted move begins and ends exactly as gently
 // as an unlifted one. `A` is not chosen: it is the smallest amplitude for which
-// no sample of the path has anything drawn within FL_DIR_BRUSH of it.
+// nothing the field draws is within FL_DIR_BRUSH of any sample of the path, and
+// the samples are spaced at half that margin so there is no gap between them to
+// thread.
 //
 // THE HEIGHT ONE POINT OF THE PATH NEEDS IS A CLOSED FORM, and it is
 // flDirClearance's derivation turned on its side. That one asks how far ALONG a
@@ -1511,8 +1513,22 @@ function flDirArc(dir, F) {
     - Math.atan2(dir.fromEye.z - F.cz, dir.fromEye.x - F.cx)
     + Math.PI) % TAU + TAU) % TAU - Math.PI;
   if (!F.solid || !F.solid.length) return;
-  const N = 21, m = flBrushKnob();
+  const m = flBrushKnob();
   const e = _arcE;
+  // ⚠ THE SAMPLE SPACING IS SET BY THE MARGIN, not by a round number, and that
+  // is not a nicety: a fixed 21 samples on a 100-unit path is 5 units apart,
+  // wider than the 3-unit margin, so the solve can thread the path between two
+  // samples and declare a canopy cleared that it flies straight through. Half
+  // the margin means no gap in the path is unexamined. The base path is measured
+  // first with a pass that touches no geometry, and the count is capped: a solve
+  // is one pass over F.solid per sample and it runs on a cut frame.
+  let L0 = 0, qx = 0, qy = 0, qz = 0;
+  for (let i = 0; i <= 20; i++) {
+    flDirPolar(e, dir, F, i / 20);
+    if (i) L0 += Math.hypot(e.x - qx, e.y - qy, e.z - qz);
+    qx = e.x; qy = e.y; qz = e.z;
+  }
+  const N = Math.max(21, Math.min(81, Math.round(2 * L0 / Math.max(0.5, m)) + 1));
   let A = 0;
   for (let i = 1; i < N - 1; i++) {
     const w = i / (N - 1), b = flDirBump(w);
@@ -1616,6 +1632,24 @@ function flDirBlendTgt(out, dir, w) {
 // sets dir.cut on the frame a new shot begins (which is when the subject is
 // re-picked and the transition's start pose is frozen). A shot's total length
 // is flDirTrans(dir) + hold, so nothing ever cuts mid-transition.
+//
+// ⚠ THE HOLD IS ALREADY THE DWELL AFTER THE MOVE, AND THAT IS WORTH SAYING
+// BECAUSE IT HAS BEEN READ THE OTHER WAY. `low` holds 9 s against a transition
+// the pacing law can price anywhere from 3.5 to 9 s, which is a third to a half
+// of the SEGMENT — but not of the dwell: this line adds the two rather than
+// taking the move out of the hold, so a shot that took nine seconds to arrive
+// still gets every second of its hold. Measured rather than argued, on
+// ?garden=7&seed=21 with tools/flowers_clip.mjs, which reports each segment's
+// wall-clock length and where the camera stopped moving inside it: `low` runs
+// 12.3 s of which the move is 3.3, in the build before the crane and in the
+// build after it. The camera trails the blend by the 0.12-a-frame damping in
+// 40_boot, which is about 0.15 s at 60 fps and is the only part of the dwell
+// the move actually eats.
+//
+// So neither of the two repairs someone might reach for is needed, and both
+// would cost: lengthening the hold pushes a rotation the crane has already
+// taken from 126 to 130 s further out, and starting the hold clock on arrival
+// is what this line does.
 function flDirClock(dir, now) {
   const sh = FL_DIR_SHOTS[dir.shot];
   const el = (now - dir.t0) / 1000;
