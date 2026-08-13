@@ -349,6 +349,10 @@ function flBoot() {
         director.field = flDirField(specs);
         director.scan = now;
       }
+      // the lens the perpetual drift is measured in — a rate in frame widths
+      // per second is only a rate once somebody has read the frame off the
+      // camera. Every frame, since a resize changes the aspect.
+      flDirLens(director, scene.camera);
     }
     if (focus === 'flower') {
       // In a garden the override means the best flower IN THE FIELD, not on
@@ -441,6 +445,10 @@ function flBoot() {
       if (director.cut || !director.subj || !specs[director.subj.i].S) {
         director.subj = flDirPick(specs, scene.camera.position, flowerScore, F);
         director.pickT = now;
+        // and how long to hold on it: a subject-bearing shot stretches or
+        // shrinks its hold by up to a third with how good this one is against
+        // the ones this director has picked before (45_director.js)
+        if (director.cut) flDirDwell(director, director.subj ? director.subj.score : 0);
       } else if (now - director.pickT > 6000) {
         director.pickT = now;
         const cur = flDirScoreOf(specs, director.subj.i, director.subj.ai, flowerScore, F);
@@ -462,6 +470,10 @@ function flBoot() {
           director.fromEye.copy(scene.camera.position);
           director.fromTgt.copy(target);
           director.fromR = radius;
+          // pace the arrival off the distance to the corolla, like every other
+          // move — the four field poses do this from inside themselves, and
+          // this one has no pose function to do it in
+          flDirPace(director, bb.c[0], bb.c[1], bb.c[2]);
         }
         frameAxisFlower(sj.ai, specs[sj.i], flDirOutward(director, F, bb));
         framedAx = sj.i === 0 ? sj.ai : -1;
@@ -501,8 +513,11 @@ function flBoot() {
         director.fromTgt.copy(target);
         director.fromR = radius;
       }
-      const sh = FL_DIR_SHOTS[director.shot];
-      const u = Math.min(1, director.el / (flDirTrans(director) + sh.hold));
+      // how far through the whole shot we are — the director's own number now,
+      // because the dolly's travel is a function of it and the shot clock cuts
+      // on it, and a hold that stretches with its subject made those two
+      // different quantities computed in two files
+      const u = flDirU(director);
       let rWant;
       if (name === 'dolly') { rWant = flDirPoseDolly(director, F, bb, u); dofPlan = { k: 0.35, min: 1.5 }; }
       else if (name === 'low') { rWant = flDirPoseLow(director, F); dofPlan = { k: 0.45, min: 3.0 }; }
@@ -778,7 +793,6 @@ function flBoot() {
     // director's range law — tight in a flower close-up, the subject's own
     // scale otherwise — eased so a focus change racks rather than snaps
     const fDist = scene.camera.position.distanceTo(target);
-    scene.compU.uFocus.value = fDist;
     // In a field the subject is the thing being FRAMED and everything nearer
     // is foreground: the range is scheduled off the focal distance per shot
     // (45_director.js sets dofPlan), so the plants the dolly passes blur
@@ -792,6 +806,16 @@ function flBoot() {
         : Math.max(2.0, radius * 0.62));
     dofR = dofR === undefined ? dofT : dofR + (dofT - dofR) * 0.05;
     scene.compU.uRange.value = dofR;
+    // AND THE FOCUS RACKS, in a garden. It is set below the range rather than
+    // above it because the rack's amplitude is the range — one depth of field,
+    // so a shot enters with its subject soft and pulls onto it as the move
+    // lands (flDirFocus). On the solo page and while a drag owns the camera
+    // this is the shipped `uFocus = distance to what you are looking at`.
+    // `resume` is set while a drag owns the camera and cleared on the frame
+    // control comes back: a viewer turning the camera themselves gets the
+    // shipped lens, not a rack frozen wherever the shot clock stopped.
+    scene.compU.uFocus.value = (gardenN && director && !director.resume && framedShot !== 'focus')
+      ? flDirFocus(director, fDist, dofR) : fDist;
     // THE GROUND EXISTS NOW (25_ground.js), and the framing laws predate it:
     // on a tall specimen the wide shot happily walked the eye to y = -16 and
     // shot up through the floor — invisible against a void, a screen-filling
