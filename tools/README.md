@@ -69,6 +69,14 @@ inside **single** quotes, so it never interpolated.
   construct before it takes a single step. Both are now paid off a slice per frame.
   501ms worst gap → 149ms.
 
+- `nan_check.mjs <seconds> [garden] [seed] [species]` — **is the main page making
+  NaN in its HDR buffers?** `src/60_render.js` does `normalize(vN)` unguarded on
+  geometry that carries zero normals, which is exactly what put a one-frame black
+  square on `flowers.html`. Reduces the scene and defocus targets on the GPU after
+  every draw and classifies each 8x8 block as NaN / Inf / absurd. **The answer is
+  no, over 133,731 frames**; the section below has the mechanism, the controls and
+  what would change it. Exits non-zero if it ever finds one.
+
 - `veinlod_shot.mjs OUTDIR [species] [seed] [waitMs]` — **before/after for the vein
   level of detail**, on the hero specimen at the shipped camera, which is the frame that
   change puts at risk. Flips `app.veinLOD`, which is the whole switch: `false` restores
@@ -358,6 +366,58 @@ each way — 101 full-res px — plus the source block and the bilinear downsamp
 It is the post chain's own footprint, not a tile size. Nor is the missing bloom
 comb evidence against the bloom path: a comb is what a *finite* impulse leaves at
 sparse taps, and a NaN has no magnitude to comb with.
+
+### And the main page does NOT have it — measured, not assumed
+
+`nan_check.mjs <seconds> [garden] [seed] [species]` is the same question asked of
+`canalisation.html`, because `src/60_render.js`'s `MESH_FS` does `normalize(vN)`
+with **no guard of any kind**, on the same `blade()` geometry, through a comp
+shader that is character-for-character the one flowers transliterated. Every
+ingredient, never searched.
+
+**133,731 frames across nine configurations found nothing** — solo hero, a garden
+of seven at seed 1337, three named species including a fully grown `Ashfall
+Spire`, 4x the fragment samples at `DPR=2`, and 18,000 frames parked on a blade
+base filling the frame. Not one non-finite texel, not one one-frame hole.
+
+The reason is structural and it is in `blade()`. At `u = 0` the half-width is
+zero, so all `MV+1` grid vertices of that row are the **same point**, `Pv - P` is
+the zero vector, and `v3norm` returns an exactly-zero normal. Per quad in that
+row you get one triangle with **two** zero normals — whose area is identically
+zero, because two of its corners coincide — and one with **one**, which is drawn.
+So the locus where the interpolant is exactly zero is either a collapsed edge
+that rasterises nothing, or a single vertex a sample would have to hit to within
+float32. `node tools/nan_check.mjs geom` is that count and takes no browser:
+13,924 of 13,925 two-zero triangles have area exactly
+0 (the last, one needle, has 1.05e-6). The main page carries **more** zero
+normals than flowers — 7.38% of vertices against 1.70% — and `flowers_zeron.mjs`
+shows the *drawable* population is the same triangles species for species
+(Cathedral Fern 1,230 on both), so the difference between the pages is framing
+and rasterisation, not geometry.
+
+`MARK=1` is why the guard was not ported anyway, and it is a better A/B than any
+picture: it paints the fragments the guard **would** discard instead of
+discarding them, and 29,381 frames marked zero blocks. The guard is a proven
+no-op here today. What would change that: anything giving a two-zero triangle
+area (a blade base with width, a tessellation change in `blade()`, vertex
+jitter), MSAA on the scene target, or a driver that flushes a small interpolant
+to zero. Run this file again after any of them.
+
+Two things it is worth copying rather than relearning. **`CONTROL=1` is the
+positive control and its first version could not fire**: it wrote
+`normalize(vec3(0.0))`, ANGLE folded the compile-time constant away, and a clean
+run would have been read as "the probe works and the page is fine". It builds the
+zero vector out of a uniform that is never written. With it patched in the page
+draws the black square perfectly — same axis-aligned hole, on `canalisation.html`
+— which is the proof that the *chain* is identical and only the trigger is
+missing. And **the exit code flips under `CONTROL` and `MARK`**, because a
+shipped-shader run is bad if it finds something and a control run is bad if it
+finds nothing.
+
+⚠ The screen half of this tool contributes **nothing** on a garden run or a
+forced close-up: its still-camera condition never holds, so no candidate is ever
+raised. `darkest collapse seen 999/255` means "this half was inert", not "clean".
+The buffer scan is what ran everywhere.
 
 - `flowers_ident.mjs '<query>' [pageA] [pageB]` — **is every flower in the field
   the hero's, and did giving each its own change the page that only ever had one
