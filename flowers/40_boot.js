@@ -494,6 +494,11 @@ function flBoot() {
           // above is given it too. The eye stops a few units short of it.
           director.wantEye.set(bb.c[0], bb.c[1], bb.c[2]);
           flDirArc(director, F);
+          // and nothing of the last crane is on the camera at a cut — the eye
+          // here is the pose the previous shot ended on. Dropped rather than
+          // subtracted, so a close-up interrupted by a drag cannot leave an
+          // offset to be taken off a camera that no longer carries it.
+          director.lifted = 0; director.liftedT = 0;
         }
         // ⚠ AND ON THIS SHOT THE CRANE IS AN OFFSET RATHER THAN A PATH. Every
         // other shot rebuilds its eye from a pose function every frame, so a

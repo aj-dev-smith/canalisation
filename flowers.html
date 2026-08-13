@@ -14130,6 +14130,11 @@ function flBoot() {
           // above is given it too. The eye stops a few units short of it.
           director.wantEye.set(bb.c[0], bb.c[1], bb.c[2]);
           flDirArc(director, F);
+          // and nothing of the last crane is on the camera at a cut — the eye
+          // here is the pose the previous shot ended on. Dropped rather than
+          // subtracted, so a close-up interrupted by a drag cannot leave an
+          // offset to be taken off a camera that no longer carries it.
+          director.lifted = 0; director.liftedT = 0;
         }
         // ⚠ AND ON THIS SHOT THE CRANE IS AN OFFSET RATHER THAN A PATH. Every
         // other shot rebuilds its eye from a pose function every frame, so a
@@ -15990,9 +15995,10 @@ function flDirPolar(out, dir, F, w) {
 // heading the eye must stand for a cylinder of radius `margin` around it to be
 // empty; this asks how far UP. A drawn point at plan offset dp from the path and
 // height y is inside the sphere of radius m about an eye at height ye whenever
-// dp < m and |ye - y| < sqrt(m^2 - dp^2), so the eye clears it from above at
-// y + sqrt(m^2 - dp^2), and the answer is the largest such height over the
-// field. One pass over F.solid per sample; 2402 points on this garden.
+// dp < m and |ye - y| < sqrt(m^2 - dp^2), so an eye inside that sphere leaves it
+// from above at y + sqrt(m^2 - dp^2) — and an eye that is already outside it is
+// left alone, which is the correction in flDirRise and the thing that keeps a
+// move passing UNDER a canopy from being craned over it.
 //
 // ⚠ MOST TRANSITIONS MUST COME OUT UNTOUCHED, and that is the test this
 // mechanism has to pass rather than a hope: a director that cranes on every cut
@@ -16038,17 +16044,37 @@ function flBrushKnob() {
   const v = +q;
   return isFinite(v) && v >= 0 ? v : FL_DIR_BRUSH;
 }
-function flDirSkyOver(F, x, z, m) {
-  let need = -1e9;
-  const r = m, r2 = m * m;
-  for (const p of F.solid) {
-    const dx = p[0] - x, dz = p[1] - z;
-    const q = r2 - dx * dx - dz * dz;
-    if (q <= 0) continue;
-    const h = p[2] + Math.sqrt(q);
-    if (h > need) need = h;
+// ⚠ AND IT ONLY CLIMBS OUT OF WHAT IT IS IN, WHICH IS NOT THE SAME AS CLIMBING
+// OVER WHAT IS NEAR. The first version asked the eye to be above everything
+// within `m` in PLAN, and a path that passes comfortably UNDER a canopy is then
+// asked to get over it: measured on ?garden=7&seed=1337, `close -> low` has a
+// true clearance of 6.41 units to anything drawn and the solve still wanted a
+// 21-unit crane, which took the clearance to 2.95 and the foreground cover from
+// 7% to 20%. It made a clean move worse in order to satisfy a requirement the
+// move never violated. Passing beneath a plant is a perfectly good shot.
+//
+// So a point only pushes the eye when the eye is INSIDE its sphere — |dy| <
+// sqrt(m^2 - dp^2) with dp < m — and then it pushes to the top of it. Rising
+// out of one sphere can put the eye inside a higher one, so the walk repeats;
+// four passes, and on this field it converges in one or two.
+function flDirRise(F, x, z, y0, m) {
+  const m2 = m * m;
+  let y = y0;
+  for (let it = 0; it < 4; it++) {
+    let top = y;
+    for (const p of F.solid) {
+      const dx = p[0] - x, dz = p[1] - z;
+      const q = m2 - dx * dx - dz * dz;
+      if (q <= 0) continue;
+      const sp = Math.sqrt(q);
+      if (y <= p[2] - sp || y >= p[2] + sp) continue;
+      const t = p[2] + sp;
+      if (t > top) top = t;
+    }
+    if (top <= y + 1e-4) break;
+    y = top;
   }
-  return need;
+  return y;
 }
 // THE WINDOW, AND IT HAS A FLAT TOP RATHER THAN A PEAK. A crane rises, HOLDS,
 // and comes down; `4w(1-w)` is a triangle with rounded corners and is at full
@@ -16097,13 +16123,26 @@ function flDirArc(dir, F) {
     qx = e.x; qy = e.y; qz = e.z;
   }
   const N = Math.max(21, Math.min(81, Math.round(2 * L0 / Math.max(0.5, m)) + 1));
+  // ⚠ AND THE SOLVE IS ITERATED, because a crane can fly into something the
+  // unlifted path was under. The requirement is evaluated at the height the eye
+  // will ACTUALLY be at, which depends on the amplitude being solved for, so one
+  // pass answers the question the old path asked rather than the new one — and
+  // the new path is higher everywhere except at its ends. Three passes, each one
+  // starting from the amplitude the last found; it settles on the first or
+  // second here, and the kill criterion below catches the case where it does not.
   let A = 0;
-  for (let i = 1; i < N - 1; i++) {
-    const w = i / (N - 1), b = flDirBump(w);
-    if (b < 0.5) continue;
-    flDirPolar(e, dir, F, w);
-    const ex = flDirSkyOver(F, e.x, e.z, m) - e.y;
-    if (ex > 0 && ex / b > A) A = ex / b;
+  for (let pass = 0; pass < 3; pass++) {
+    let A2 = A;
+    for (let i = 1; i < N - 1; i++) {
+      const w = i / (N - 1), b = flDirBump(w);
+      if (b < 0.5) continue;
+      flDirPolar(e, dir, F, w);
+      const y = e.y + A * b;
+      const ex = flDirRise(F, e.x, e.z, y, m) - y;
+      if (ex > 0 && A + ex / b > A2) A2 = A + ex / b;
+    }
+    if (A2 <= A + 1e-3) break;
+    A = A2;
   }
   // ⚠ AND WHEN IT CANNOT CLEAR, IT DOES NOT RISE AT ALL — THE CAP IS A KILL
   // CRITERION AND NOT A CLAMP, which is the single most important line in this
