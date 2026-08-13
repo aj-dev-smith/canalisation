@@ -10632,6 +10632,44 @@ function v3cross3(o, a, b) {
 // carry no organ identity at all — the Blender bridge had to cluster on vertex
 // colour to tell a petal from a leaf. Since we own the draw loop, we can just
 // write it down.
+//
+// And a fourth, which is a BUG FIX and is why AJ's "glitchy flashes on flowers"
+// stopped. A blade is a quad grid over a parametrisation whose half-width
+// collapses to a point at the leaf's base, so the whole first column of quads
+// arrives as two coincident vertices and one distant one: a segment wearing
+// three vertices, with EXACTLY zero area, up to 14 px long on screen. Measured
+// on `garden=7&seed=21`: 6.7-8.5% of every frame's tri stream (1,256 of 18,628
+// triangles at the low end, 4,497 of 66,674 at the high) has world-space area
+// exactly 0. Every one of those is emitted by `blade()`, so leaves, sepals and
+// stamens all carry them.
+//
+// A triangle with no area has no barycentric denominator. The rasteriser still
+// lights the odd fragment on one — fixed-point snapping and the fill rules see
+// to that — and its varyings come out as finite-over-nothing: measured at the
+// flash, vC 7.07 where the buffer's largest colour is 1.29, vE 4.70 where the
+// largest emissive is 0.83, |vN| 32.9 where every normal is unit, and the
+// emissive term vC*vE*3 at 710 against a legitimate ceiling near 3. One texel
+// of the HDR scene target then holds 8,863 against a frame-peak median of 2.4,
+// and the half-res bloom chain spreads that impulse into its own sparse impulse
+// response — three separable 5-tap blurs at radii 1, 2.6 and 4.2 give a comb of
+// bars about 4 px apart over a ~64-100 px square. That square, for one frame,
+// is the artefact. `tools/flowers_peak.mjs` and its four siblings are the
+// chain of measurements; `tools/flowers_glitch.mjs` is the before/after.
+//
+// So: A TRIANGLE WITH NO AREA IS NOT DRAWN. Nothing legitimate is lost — a
+// zero-area triangle cannot cover a pixel correctly, and its only contribution
+// to the picture was the corrupt fragment — and the tri stream gets ~7% smaller
+// for free. What is dropped is COUNTED rather than silent, for the same reason
+// the shipped `Buffers` counts its own drops, and `parity.test.mjs` reconciles
+// against the count rather than being loosened to accommodate it.
+
+// Below this, a triangle's cross product is not small, it is zero: the test is
+// |e1 x e2| <= FL_DEGEN * max(|e1|^2, |e2|^2), which is dimensionless and so
+// says the same thing about a 40-unit frond and a 0.1-unit stamen. float32
+// carries ~1e-7 relative precision, so 1e-9 is a floor at the ARITHMETIC and
+// not a threshold with taste in it — everything it removes has three vertices
+// that are bit-identical or collinear below what the format can represent.
+const FL_DEGEN = 1e-9;
 class FlowerBuffers extends Buffers {
   constructor() {
     super();
@@ -10641,6 +10679,7 @@ class FlowerBuffers extends Buffers {
     this.petbN = 0;
     this.organs = [];                        // [{ meta, tri0,tri1, seg0,seg1, pt0,pt1 }]
     this._open = null;
+    this.degen = { tri: 0, pet: 0 };         // triangles with no area, dropped
   }
   reset() {
     super.reset();
@@ -10648,6 +10687,19 @@ class FlowerBuffers extends Buffers {
     this.petbN = 0;
     this.organs.length = 0;
     this._open = null;
+    this.degen.tri = 0; this.degen.pet = 0;
+  }
+  // The completed triangle ending at `n` in `arr`, stride `st` floats a vertex,
+  // position first: does it enclose anything? Both streams emit independent
+  // triangles three vertices at a time, so a stride-aligned test is exact.
+  _noArea(arr, n, st) {
+    const k = n - st * 3;
+    const ax = arr[k + st] - arr[k], ay = arr[k + st + 1] - arr[k + 1], az = arr[k + st + 2] - arr[k + 2];
+    const bx = arr[k + st * 2] - arr[k], by = arr[k + st * 2 + 1] - arr[k + 1], bz = arr[k + st * 2 + 2] - arr[k + 2];
+    const cx = ay * bz - az * by, cy = az * bx - ax * bz, cz = ax * by - ay * bx;
+    const a2 = ax * ax + ay * ay + az * az, b2 = bx * bx + by * by + bz * bz;
+    const s = (a2 > b2 ? a2 : b2) * FL_DEGEN;
+    return cx * cx + cy * cy + cz * cz <= s * s;
   }
   _grow(name) {
     const old = this[name];
@@ -10701,6 +10753,9 @@ class FlowerBuffers extends Buffers {
   vert(p, n, c, e) {
     if (this.triN + 10 > this.tri.length) this._grow('tri');
     super.vert(p, n, c, e);
+    if (this.triN % 30 === 0 && this._noArea(this.tri, this.triN, 10)) {
+      this.triN -= 30; this.degen.tri++;
+    }
   }
   point(p, c, s) {
     if (this.ptN + 7 > this.pt.length) this._grow('pt');
@@ -10719,6 +10774,7 @@ class FlowerBuffers extends Buffers {
     s[n++] = dd; s[n++] = q; s[n++] = u; s[n++] = v;
     s[n++] = dev; s[n++] = lib || 0;
     this.petbN = n;
+    if (n % 48 === 0 && this._noArea(s, n, 16)) { this.petbN = n - 48; this.degen.pet++; }
   }
   // seg2() in the parent funnels through here, so PIN needles arrive free.
   ribbon(a, b, side, w0, w1, c, e) {
@@ -12175,11 +12231,38 @@ const FL_TRI_VS = `
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
+// THE INTERPOLATION CONTRACT, ENFORCED — and it is a theorem, not a threshold.
+//
+// A near-degenerate triangle has no barycentric denominator, so the rasteriser
+// hands its fragments varyings from OUTSIDE the hull of their own vertex
+// values. Measured at one of AJ's flashes: vC 7.07 where the buffer's largest
+// colour is 1.29, vE 4.70 where the largest emissive is 0.83, and the emissive
+// term vC*vE*3 at 710 against a legitimate ceiling of about 3 — one HDR texel
+// at 8,863 against a frame-peak median of 2.4, which the half-res bloom chain
+// then spreads into the ~64-100 px comb of bars that is the visible artefact.
+// 10_capture.js kills the triangles that are emitted with no area at all; what
+// is left is legitimate geometry seen EDGE-ON, which cannot be removed because
+// a leaf has to be drawable from the side.
+//
+// Every vertex normal in both streams is unit length (v3norm), and perspective-
+// correct interpolation is a convex combination, so |vN| <= 1 holds for every
+// correctly interpolated fragment with no tolerance in it. Measured on the
+// corrupt ones: 6.4 to 32.9. Splitting the shaded colour on that test puts the
+// WHOLE spike above it (56.10 at the peak block) and leaves 0.69 below it, so
+// the invariant names the bad fragments exactly and costs the picture nothing.
+// The 1.01 is a float32 allowance — the normals are stored to ~1e-7 — and not
+// a dial: raising it does not make anything look better, it only lets the flash
+// back. A fragment that fails is not dim, it is MEANINGLESS, so it is dropped
+// rather than clamped.
+const FL_GUARD = `
+  if (length(vN) > 1.01) discard;
+`;
 const FL_TRI_FS = `
   varying vec3 vP; varying vec3 vN; varying vec3 vC; varying float vE;
   uniform vec3 uEye, uKey, uKeyCol, uAmbTop, uAmbBot;
   ${FL_FOG}
   void main() {
+    ${FL_GUARD}
     vec3 N = normalize(vN);
     vec3 V = normalize(uEye - vP);
     if (dot(N, V) < 0.0) N = -N;
@@ -12236,6 +12319,7 @@ const FL_PET_FS = `
   uniform sampler2D uSpots;
   ${FL_FOG}
   void main() {
+    ${FL_GUARD}
     vec3 N = normalize(vN);
     vec3 V = normalize(uEye - vP);
     if (dot(N, V) < 0.0) N = -N;

@@ -35,11 +35,38 @@ const FL_TRI_VS = `
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
+// THE INTERPOLATION CONTRACT, ENFORCED — and it is a theorem, not a threshold.
+//
+// A near-degenerate triangle has no barycentric denominator, so the rasteriser
+// hands its fragments varyings from OUTSIDE the hull of their own vertex
+// values. Measured at one of AJ's flashes: vC 7.07 where the buffer's largest
+// colour is 1.29, vE 4.70 where the largest emissive is 0.83, and the emissive
+// term vC*vE*3 at 710 against a legitimate ceiling of about 3 — one HDR texel
+// at 8,863 against a frame-peak median of 2.4, which the half-res bloom chain
+// then spreads into the ~64-100 px comb of bars that is the visible artefact.
+// 10_capture.js kills the triangles that are emitted with no area at all; what
+// is left is legitimate geometry seen EDGE-ON, which cannot be removed because
+// a leaf has to be drawable from the side.
+//
+// Every vertex normal in both streams is unit length (v3norm), and perspective-
+// correct interpolation is a convex combination, so |vN| <= 1 holds for every
+// correctly interpolated fragment with no tolerance in it. Measured on the
+// corrupt ones: 6.4 to 32.9. Splitting the shaded colour on that test puts the
+// WHOLE spike above it (56.10 at the peak block) and leaves 0.69 below it, so
+// the invariant names the bad fragments exactly and costs the picture nothing.
+// The 1.01 is a float32 allowance — the normals are stored to ~1e-7 — and not
+// a dial: raising it does not make anything look better, it only lets the flash
+// back. A fragment that fails is not dim, it is MEANINGLESS, so it is dropped
+// rather than clamped.
+const FL_GUARD = `
+  if (length(vN) > 1.01) discard;
+`;
 const FL_TRI_FS = `
   varying vec3 vP; varying vec3 vN; varying vec3 vC; varying float vE;
   uniform vec3 uEye, uKey, uKeyCol, uAmbTop, uAmbBot;
   ${FL_FOG}
   void main() {
+    ${FL_GUARD}
     vec3 N = normalize(vN);
     vec3 V = normalize(uEye - vP);
     if (dot(N, V) < 0.0) N = -N;
@@ -96,6 +123,7 @@ const FL_PET_FS = `
   uniform sampler2D uSpots;
   ${FL_FOG}
   void main() {
+    ${FL_GUARD}
     vec3 N = normalize(vN);
     vec3 V = normalize(uEye - vP);
     if (dot(N, V) < 0.0) N = -N;
