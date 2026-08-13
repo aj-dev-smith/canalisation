@@ -251,8 +251,8 @@ const out = await pg.evaluate(([NS, closeMode]) => {
         px = e.x; py = e.y; pz = e.z;
         // and how much of that height is the crane rather than the path
         if (typeof flDirLift === 'function') lift = Math.max(lift, flDirLift(dir, w));
-        const sky = typeof flDirSkyOver === 'function'
-          ? flDirSkyOver(F, e.x, e.z, typeof flBrushKnob === 'function' ? flBrushKnob() : 4) : -1e9;
+        const sky = typeof flDirRise === 'function'
+          ? flDirRise(F, e.x, e.z, e.y, typeof flBrushKnob === 'function' ? flBrushKnob() : 3) : -1e9;
         samp.push({ w: w0, y: +e.y.toFixed(2), d: +nr.d.toFixed(2), n3: nr.n3,
           cov: +nr.cov.toFixed(3), ink: +nr.ink.toFixed(3),
           sur: +Math.max(-99, e.y - sky).toFixed(2),
