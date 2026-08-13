@@ -3777,6 +3777,287 @@ person watching for a few seconds. Two specific things a still cannot referee: t
 recession and no visible ground (looked at, 2026-08-12), and the world clock slows
 ~6x at N = 12 because the step pool divides by the number of active plants.
 
+## Two defects with one cause, and the guard that could not see the worse one (2026-08-13)
+
+AJ watched `flowers.html` and said "glitchy flashes on flowers... every now and again".
+That is the fifth time on this project that a person watching for a few seconds has been
+the deciding instrument, and this time it took **twelve instruments over two rounds** to
+convict — six for the flash (`glitch`, `peak`, `scan`, `term`, `kind`, `sliver`) and six
+for a second artefact found while gating the fix (`black`, `hole`, `nan`, `vn`, `zeron`,
+`guard`) — because the two turned out to be **the same null geometry reaching the screen
+through two different holes.**
+
+### The mechanism, which is one line of `blade()` in `src/50_geom.js`
+
+The blade's parametrisation collapses its half-width to a point at the leaf base, so the
+first column of quads arrives as two coincident vertices and one distant one — a segment
+wearing three vertices. Two things follow, and each one is a defect:
+
+- **The triangle has no barycentric denominator.** The rasteriser lights the odd fragment
+  on it anyway, by fixed-point snapping and the fill rules, and hands that fragment
+  varyings computed as finite-over-nothing. Measured at a flash: `vC` **7.07**, `vE`
+  **4.70**, `|vN|` **32.9** where every vertex normal is unit, and `vC*vE*3` at **710**
+  against a legitimate ceiling near 3. **A varying outside the hull of its own vertex
+  values is a statement about interpolation, not about shading**, which is what killed
+  both plausible-sounding suspects ("clamp the anther glow"; "it must be the pollen",
+  falsified early by `?pol=0,12,0.05`, which flashes at the same rate). The triangles
+  covering a flash have screen area 0 and **world** area 0 while spanning up to 14 px,
+  and they are **6.7-8.5% of the whole tri stream** in a grown field (1,256 of 18,628 at
+  the low end, 4,497 of 66,674 at the high; the parity gate's two isolated specimens read
+  3.2% and 4.1%).
+- **The vertices carry a normal of exactly zero.** `tools/flowers_zeron.mjs` counts them
+  in Node with no GPU at all: **15,560 of 915,792** captured vertices (2.30%; 14,485 of
+  629,364 in the tri stream alone), matching the no-area triangles species for species,
+  and the population is a **gap** — a normal is 0, or it is 1 to within 1e-7, with
+  nothing in between. A triangle carrying one of those still has *area*, so it is drawn
+  normally, and a fragment that lands on the vertex divides by zero in `normalize()` and
+  writes a **NaN** into the HDR scene target.
+
+**The bloom chain is the magnifier in both cases**, which is why one bad fragment is a
+64-112 px event. Three separable 5-tap blurs at radii 1, 2.6 and 4.2, at half res: on a
+finite impulse that leaves a *sparse* comb of bars ~4 px apart (the "grid noise"), and on
+a NaN — which has no magnitude to comb with — it leaves a solid rectangle, because a
+separable blur's support is a rectangle. Support is `3.2308 x (1 + 2.6 + 4.2) = 25.2`
+half-res texels each way, ~101 full-res px, and the black square measures **112 x 112 in
+six of eight** captured frames. It had been read off the screen as "~128 px, suspiciously
+like a GPU tile", and that eyeball sent the first hypothesis to the driver.
+
+### What each fix is, and why the first one was not enough
+
+1. `flowers/10_capture.js` **drops a triangle with no area** and counts what it dropped —
+   scale-free, `|e1 x e2| <= 1e-9 * max(|e1|², |e2|²)`, a floor at float32's own arithmetic
+   rather than a dial. The parity gate **reconciles against the count** instead of being
+   loosened for it (`shipped 267,420 == captured 249,540 + petal 9,360 + no-area 8,520`,
+   exactly), 20 checks → **24**.
+2. **That alone took the scene peak 7,779 → 1,772 and the flash rate 3/75 s → 9/130 s**,
+   and stopped there, because the residual is legitimate geometry seen **edge-on** and a
+   leaf has to be drawable from the side. So `30_scene.js` enforces the interpolation
+   contract, and the test is a **theorem rather than a threshold**: every vertex normal is
+   unit and perspective-correct interpolation is a convex combination, so `|vN| <= 1`
+   holds for every correctly interpolated fragment. Splitting the shaded colour on that
+   test put the whole spike above it (56.10 at the peak block) and **0.69** below: a
+   fragment that fails is not dim, it is meaningless.
+3. **And the guard written in step 2 could not see the NaN**, which is the sharpest thing
+   in this entry. `if (length(vN) > 1.01) discard;` — added specifically against corrupt
+   interpolation — **never fires on a NaN, because every comparison against a NaN is
+   false.** Rewritten as the negation of the valid band,
+   `if (!(length(vN) > 0.0 && length(vN) <= 1.01)) discard;`, it closes the zero end with
+   an *exact* comparison (the measured population is a gap, so 0 is a bit pattern and not
+   a small number) and is NaN-safe. For any finite `|vN| > 0` the two forms are the same
+   test, which is a claim about arithmetic and was therefore measured rather than asserted.
+
+Measured, `garden=7 ff=2200`, 90 s of peak probe per cell:
+
+| | seed 21 before | after | seed 1337 before | after |
+|---|---|---|---|---|
+| frame-peak median | 2.38 | 1.84 | 6.72 | 1.97 |
+| frame-peak p99 | 369.5 | **5.2** | 439.9 | **19.1** |
+| frame-peak max | 7778.7 | **20.0** | 8124.5 | **175.9** |
+
+and for the second hole, at seed 1337: non-finite texels in `rtScene` **69 frames of
+4,921 → 0 of 4,040**, confirmed one-frame holes **8 of 4,026 → 0 of 4,027**. Seeds 21 and
+4242 carry 0 non-finite under *both* guards, which is why the black square only ever
+appeared at one seed. `tools/flowers_glitch.mjs`: 0 confirmed spikes in 1,955 frames at
+seed 21 and 0 in 2,164 at seed 4242, against a 3-per-75 s baseline.
+
+The chain of probes is written up in `tools/README.md`, and the shape of it is the lesson:
+each one exists because the previous one could not answer the next question, and two of
+them were **wrong in a way only the next one could show**. `flowers_black`'s collapse test
+flags 232 tiles in 2,613 frames in runs of six consecutive frames — which is a camera cut,
+not an artefact. `flowers_hole`'s "the scene target is clean" was a claim it was not
+entitled to make: it samples 64 texels per 69x65 tile, and one bad texel in ninety is
+exactly what it would miss. `flowers_nan` has exact coverage and classifies rather than
+counting, with no `isnan()` (GLSL ES 1.0 has none — a NaN fails every comparison, ±Inf
+fails exactly one), and `HIDE=` bisected it to the tri stream. `flowers_vn` then named the
+term by rewriting `FL_TRI_FS` at runtime: **83 markers, all of them `|vN| == 0`**, with
+zero unexplained NaN left over.
+
+### ⚠ The fix is flowers-side and the cause is not
+
+`blade()` is `src/50_geom.js` and **both pages call it**, so `canalisation.html` is still
+emitting the same triangles with the same zero normals into the same bloom chain. Nothing
+here was changed in `src/`, deliberately — this work owned `flowers/` — and the shipped
+page's exposure was measured separately. **The real fix is at the source**, in the
+parametrisation, and it is booked in ROADMAP rather than patched, because a degenerate
+first quad column is arguably load-bearing for how a blade meets its petiole and removing
+it is a decision about geometry rather than a bug fix.
+
+### The instrument floors, and every one of them was found by running a control first
+
+Three separate A/B designs on this page returned a confident number that was the probe's
+own noise. They are worth listing together because they are the same mistake in three
+costumes — **an A/B on a live page measures the page's liveness unless you pin it.**
+
+- **A drifting camera and moving air.** Two sessions of the *unchanged* build differ by a
+  mean **9.5/255 with 43% of pixels past 8**. So the guard A/B renders both shaders
+  against the **same frame** rather than comparing two runs.
+- **`ShaderMaterial.clone()` deep-copies the uniform block.** The cloned material stopped
+  tracking the live ones, so **every block changed, by up to 84** — what a moving scene
+  shaded from a frozen camera looks like.
+- **Three sorts the opaque render list by material id.** A clone with *identical* source
+  therefore draws at a different point in the list, coplanar surfaces swap, and it
+  reported **75 changed blocks a frame**. Toggling `fragmentShader` on one material object
+  keeps the id and the sort.
+- And from the pigment A/B: `drawImage` off a WebGL canvas with no `preserveDrawingBuffer`
+  hands back a **cleared** buffer and reports `IDENTICAL` for everything — including for a
+  build compared against itself. `FlowerScene.render(t)` also takes **wall time** into
+  `uT`, which drives the sky breath, the pool breath and the grain hash, so two runs of
+  one build disagreed over 97% of the frame by a mean **12/255**, four times the effect
+  being measured. Pin the clock as well as the camera, and pin the camera to *exact*
+  equality: a 1e-4 tolerance left 0.141% of the frame moving.
+
+With the controls in: **0 blocks in 3,921 frames where both guards are finite and
+disagree**, against a control floor of 0, and 38 blocks where the old guard was
+non-finite and the new one is not.
+
+## The camera learned where to stand, and one clock had been wrong all along (2026-08-13)
+
+Five smaller results from the same round, kept because three of them are corrections of
+something already written down and one is a rejection.
+
+### One air, N clocks — a bug that had been in `plantGarden` since the garden shipped
+
+`Plant` samples `windAt` at `this.time`, which is a **life** clock starting at zero at
+germination, while the field's `t` is a **wall** clock. So in `canalisation.html`'s garden
+a member given a 2600-step head start spent its whole life bending to air from 2600 steps
+in its neighbours' future, and in `flowers.html` a member germinated at world step 900 read
+air 900 steps stale. **One field, evaluated at N different moments: a gust could never
+cross the stand as one event**, which is exactly the class of defect `37_wind.js` exists to
+prevent — and `18_pollen.js` had already said so in a comment and deliberately not copied
+the bug.
+
+The fix is a `windPhase` on `Plant`, zero by default so every harness and both solo pages
+are bit-identical; `plantGarden` sets it to (scene clock − warm) so a head start converges
+onto the hero's wall clock exactly as its debt pays down, the flowers boot sets `startAt`,
+and a regrown hero inherits the scene clock rather than resetting the weather — the same
+argument `windU` already records ("the weather outlives the specimen"). Gates: smoke 73/73,
+stem 82/82, wind 27/27, flowers parity 20/20 (24/24 after the capture change above).
+**This is not a SCIENCE.md item**: it is an offset in *when* the environment is read, not a
+new prior.
+
+### The establishing heading was a covariance, and it should have been a diameter
+
+The wide shot stood on the minor axis of the plan covariance **of the origins**, which is
+the right idea measured on the wrong thing: a covariance of origins weights a 20-station
+seedling exactly like a 252-station Abyssal Frond and knows nothing about what either of
+them *reaches*. What the width condition wants is the heading whose across-frame extent is
+largest, and on the field's plan hull that has a closed form — the extent in a direction
+is a support width, its maximum is the set's **diameter**, and it is attained along the
+diameter, so the camera stands perpendicular to it.
+
+Measured with the new `tools/flowers_frame.mjs`, standing the establishing eye on every
+heading in turn: the field covers **0.584** of the frame's half-width from the covariance
+heading and **0.777** from the widest, at the same distance. A third of the picture, for a
+heading that was already being chosen. Drawn stations across the frame, before → after:
+`garden=7 seed=21` 1.173 → **1.526**; `seed=31` 1.281 → **1.519**; `garden=9 seed=101`
+1.690 → **1.739**; `garden=3 seed=7` 1.204 → 1.191, **correctly a no-op** because a stand
+of three is round and the two statistics agree.
+
+Three things were built wrong first, all the same mistake — **a summary standing in for the
+thing it summarises**:
+
+- **A disc cannot answer a directional question.** The first heading law put a disc on each
+  origin; one dominating disc has the same width in every direction, the sweep came back
+  flat and the argmax fell on rounding. The hull is exact and is a dozen vertices.
+- **A disc cannot say where an arm is either.** Clearance computed off discs-of-reach stood
+  the low camera 67.1 units out where the stations ask for 25.2, because one 43-unit
+  trailing arm becomes a 43-unit *circle* the eye must leave in every direction. An arm is
+  thin.
+- **A maximum is not a skyline.** Pitching the low shot off the tallest thing in the field
+  (a 49-unit Abyssal Frond, 50° up from a kneeling eye) photographed an empty sky with
+  foliage in two corners. It is p85 now, the same statistic and the same reason as `hHi`.
+
+The low shot's own arithmetic had been disagreeing with its comment for a round: it claimed
+to kneel *outside* the field where a silhouette reads, while measuring worst canopy
+clearance at **minus 4.1 units** — the eye inside an Ember Creeper that reaches 43.3 — with
+two thirds of the field off the sides and 54% of the ink in the top half. Solved rather than
+stated (`flDirClearance` for the standoff, the skyline at `FL_LOW_SKY` for the pitch): ink
+in the top half 0.537 → **0.288**, nearest drawn station 17.6 → 20.1.
+
+⚠ **And a diameter is not continuous in a growing stand**, which produced a teleport that
+took three attempts to convict because two other suspects have the same signature. One arm
+reaching past the old extreme swaps which pair of hull points is furthest apart and swings
+the heading tens of degrees between two 500 ms measurements; at a 90-unit standoff that is
+47 units of eye, and a 12%-a-frame lerp makes it 5.6 units in a frame — **336 u/s against a
+26 u/s peak**. Worst sampled eye speed over 290 s of film, as each fix landed: **239.5 →
+196.0 → 168.1 → 37.7 u/s**, with samples over 50 u/s going 7 → 7 → 6 → none, and the wide
+shot's own mean speed falling 15.0 → 8.2 u/s with nothing else changed. Every per-shot
+decision is now taken **on the cut** and held. The general form is worth keeping: **a held
+frame must not be a function of what the plants did while it was held.**
+
+### Rejected: a flat pool of light on the floor
+
+The establishing shot had no visible ground and the melt was the obvious suspect. It was
+not: measured along the view ray from the ground material's own uniforms, the melt is
+**0.75-0.93 where the plants stand**, not 1.0. What had taken the floor was a **5-unit
+glow at the origin** on a page whose plants stand at r = 12-26, where it has decayed to
+0.6% — a constant written when this page held one plant.
+
+Giving it the clearing's own length scale fixes the reach. The interesting half is *how*
+it is added. A flat pool — the glow added to the floor's colour, above the fog and above
+the melt — was built first and measured, and it is a statement about the **floor**, so it
+is loudest where the floor fills the frame: it lit the establishing shot correctly and
+turned an overhead shot into a sheet of magenta with the plants as silhouettes. Ground
+contribution per band (bottom four, of 255): before **0.31 / 1.83 / 5.64 / 10.06**, flat
+pool **2.11 / 11.49 / 20.62 / 24.76**. Riding the melt instead makes it a statement about
+the **air** — 18% of it survives that overhead against 75-93% of the establishing shot,
+which is the right way round, and it is the airlight integral written out rather than a
+second exponent chosen by eye. `tools/flowers_horizon.mjs` at eye 26: shipped 64.01, flat
+pool 78.59.
+
+Two instruments came out of it and both are in `tools/README.md`. `flowers_floor.mjs`
+renders the same settled frame three ways and takes the **difference**, because "the field
+floats in void" is a claim about a difference and a dark floor and a dark void are the same
+pixels — eight of twelve bands came back exactly zero on the pre-pool build, which no
+amount of looking at the composite would have said. And `flowers_motes.mjs` evaluates the
+point pass's *own* `gl_PointSize` expression per grain, which is how the pollen turned out
+to be drawn at p50 = p90 = p99 = max = **1.00 px**: the whole population against the
+rasteriser's clamp, with zero variance. **A channel drawn at the clamp is invisible in a
+way no screenshot reports** — it looks exactly like a channel that is working. Floored at a
+constant *angular* size instead (the vein width floor's argument applied to a mote), the
+same population draws at a median 5.75-5.97 px with all 320 grains over 2 px.
+
+### Every flower is its own, and the page was already paying for it
+
+The bullseye threshold and the baked spot atlas are **per-specimen** quantities — one
+number and three reaction-diffusion fields off that plant's own seed — and both arrived in
+the garden as scene-wide uniforms drawn once from the hero, so a field of seven species
+wore one specimen's pigment program seven times. Worse than redundant: `20_draw.js` has
+always run `flSpotsRun` for whatever petal it is drawing, whoever owns it, so `garden=7`
+was already baking **twenty-one** Mimulus fields and uploading three. **The other eighteen
+were computed, paid for and discarded** — this draws what the page was already spending.
+
+The mechanism is a split draw rather than a wider vertex: `uploadMany` already knows each
+buffer's extent, so N geometry groups against N materials sharing uniform objects makes a
+per-specimen uniform honest with the vertex format, the capture and the parity gate
+**untouched** (24/24), at N−1 extra draw calls a frame against ~700 already. Measured: 7
+distinct thresholds spanning 0.2829-0.7909 against one 0.5771 for everybody, 7 distinct
+atlases, 0 collisions; the solo page is **0.0000/255 mean delta** against a pre-change
+build at seeds 21 and 4207. ⚠ **It reads at a close-up (7.56% of the frame at 0.554/255)
+and not at a bank shot (1.32% at 0.041/255), and that is the design** — round 2 turned this
+stack down deliberately after full strength read as maroon blotches. The fix for "you
+cannot see it at fifty units" is the director, not the gain.
+
+### The close-up would rather have a flower with pollen around it, and it loses
+
+A plume term was added to the subject score and then measured against the base term it
+multiplies. On `?garden=7&seed=21` it loses, and the honest headline is that it *should*:
+
+    [2] 33 petals  base 13.68  plume 0.80  product 9.67
+    [5]  5 petals  base  2.14  plume 1.40  product 2.43
+    [4]  7 petals  base  2.28  plume 1.40  product 1.74
+
+Nothing defensible closes a factor of six — a 33-petal corolla really is the best flower in
+that field. What it cannot do is **shed**, and the reason is structural: Sulphur Rosette has
+`whorlBands: false`, so all 33 of its floral organs carry the `petal` flag and
+`FlPollen._sources` (which skips petals) finds no anther on it at all, against 23 stamens of
+76 on the Abyssal Frond. **The showiest corolla and the shedding corollas are different
+flowers for a reason.** The framing half of the idea was rejected on a measurement too: at
+seed 31 the subject's own plume sits at mean height 26.8 against a corolla at 17.2 — nine
+units above a frame about five units tall — because a grain drifts ~0.32 units per unit of
+plant time and lives a long time, so by the time there are grains, they are gone. `inFrame`
+at the close-up is still **0 of 320**, reported and not softened.
+
 ## The main page has the same normalize(0) and does not fire (2026-08-12)
 
 `flowers.html`'s one-frame black square was convicted the same day as

@@ -199,35 +199,42 @@ priority.** The list below is the priority.
    one and a sweep that mixes them reports cost going *down* as the specimen gets
    bigger. Numbers at the end of the 2026-07-30 and 2026-07-31 JOURNAL entries.
 0f. **WHAT THE FLOWER FIELD OWES (`flowers/`, `?garden=N`, landed 2026-08-12).** The
-   flowers page is a garden now: N specimens on one ground in one wind under a four-shot
-   director. It is built, gated (`flowers/parity.test.mjs` 20/20, `test/smoke.mjs` 73/73)
-   and written up in `flowers/README.md`; what follows is the debt, ranked, and the first
-   item is the one that decides whether any of the rest is worth doing.
+   flowers page is a garden now: N specimens on one ground in one wind under a **six-shot**
+   director. It is built, gated (`flowers/parity.test.mjs` **24/24**, `test/smoke.mjs`
+   73/73) and written up in `flowers/README.md`; what follows is the debt, ranked, and the
+   first item is the one that decides whether any of the rest is worth doing. **Three of
+   the six items below closed on 2026-08-13** and are kept with their answers, because two
+   of them closed differently from how this list expected.
 
-   0f-i. **NOBODY HAS WATCHED IT AT FRAMERATE IN A REAL BROWSER.** Every judgement about
-   this field — the spacing, the shot list, the ground, the sky, the LOD — is a still or
-   a headless number. This project's own record says that is the weakest evidence it
-   accepts and that the deciding instrument has four times been a person watching for a
-   few seconds (a wind at vibration frequencies, an upside-down crown, a Charlie Brown
-   tree, an invisible pathogen). **Watch a garden of 5, 7 and 12 through at least two
-   full shot cycles before building anything below.** `node tools/flowers_perf.mjs
-   'garden=7&seed=21'` is the sampler, and it prints without judging on purpose.
+   0f-i. **NOBODY HAS WATCHED A FULL SHOT ROTATION AT FRAMERATE.** ⚠ *Partly discharged,
+   and in the most useful way possible:* AJ watched the page and reported "glitchy flashes
+   on flowers", which was two real rasterisation defects nothing here was looking for
+   (JOURNAL 2026-08-13, and the fifth time an eye has been the deciding instrument on this
+   project). That was a person watching *the page*; it was not a person sitting through the
+   film. Every judgement about the shot list, the holds, the drift, the ground, the sky and
+   both LOD terms still rests on stills, headless numbers and one 290 s recording sampled at
+   4 Hz. **Watch a garden of 5, 7 and 12 through at least two full shot cycles before
+   building anything below.** `node tools/flowers_perf.mjs 'garden=7&seed=21'` is the
+   sampler, and it prints without judging on purpose; `tools/flowers_clip.mjs` records.
 
-   0f-ii. **The wide shot does not read as a field.** Looked at 2026-08-12:
-   `?garden=7&seed=21&ff=3000&shot=wide` is a wall of near canopy with nothing receding
-   behind it and no ground in frame. The pose is honest about its own reasoning — the
-   distance is set by the subject (`d = 2.4 hTop`) after a first version that distanced
-   off the ring and photographed the inside of a hedge — but neither version accounts for
-   **canopy reach**, and this catalogue's tail is enormous (one creeper at `maxR` 70.9).
-   The field is measured from *origins* plus a 3.0 canopy margin; measuring it from the
-   drawn bounds instead is the obvious next try, and it is cheap.
+   0f-ii. **The wide shot does not read as a field.** ⚠ *Improved, not answered.* The
+   heading was the minor axis of the plan covariance of the **origins**, which knows nothing
+   about what a specimen reaches; it is the field's plan **diameter** now, taken off the
+   convex hull of every drawn station, and the camera stands perpendicular to it. Drawn
+   stations across the frame went 1.173 → **1.526** at `garden=7&seed=21` (0.584 → 0.777 of
+   the frame's half-width at the same distance), and the low shot is out of the canopy with
+   sky above the bank. **What is still true is the recession**: the field is measured from
+   stations plus reach percentiles, this catalogue's tail is enormous (one creeper at `maxR`
+   70.9), and whether the wide frame now reads as a *place* is a question for 0f-i.
 
-   0f-iii. **Pollen is the hero's alone.** `pollen.step(S, ...)` takes specimen 0, so
-   six sevenths of a flowering field shed nothing. It is one of the few channels that
-   says "this place is alive" rather than "this plant is alive". *(Being looked at in
-   parallel; if it has landed, this item is done and the follow-up is cost — grains are
-   points and points are the cheapest thing in the buffer, but seven fields of them are
-   still seven.)*
+   0f-iii. ~~**Pollen is the hero's alone.**~~ **DONE.** One population walks every
+   germinated specimen; a grain is not part of a plant. ⚠ **And the follow-on was not cost,
+   it was visibility**: every grain was being drawn at exactly 1.00 px, the whole population
+   against the rasteriser's clamp with zero variance, which is a thing no screenshot
+   reports. A mote is an angle now (`minAng`, TUNING). What remains is a *framing* problem
+   and it is honest: at the close-up `inFrame` is **0 of 320**, because the subject on that
+   seed structurally cannot shed (`whorlBands: false` makes all 33 of its floral organs
+   petals) and the field's plumes belong to the other six, four frame-heights up.
 
    0f-iv. **The solo page inherited the ground, and that is a TASTE CALL for AJ.** The
    ground is unconditional, so the signature Nightglass Parasol close-up goes from a moon
@@ -239,11 +246,14 @@ priority.** The list below is the priority.
    rather than air. `?haze=G,H,P,N` sweeps it in one session. **This wants an eye, not a
    sweep.**
 
-   0f-v. **Every member wears the hero's bullseye and the hero's spots.** `uBull` and the
-   spot atlas are scene-wide uniforms, so a whole field's petals sample one specimen's
-   pigment pattern — whisper-level, wrong per species, and the fix is a per-specimen
-   uniform plus a wider atlas. Written up in `40_boot.js` where it happens; listed here so
-   it is not rediscovered.
+   0f-v. ~~**Every member wears the hero's bullseye and the hero's spots.**~~ **DONE
+   2026-08-13**, and it cost nothing: `20_draw.js` was already baking 21 Mimulus fields for
+   `garden=7` and uploading 3, so the other 18 were computed, paid for and thrown away. N
+   geometry groups against N materials sharing uniform objects, vertex format and parity
+   gate untouched. 7 distinct thresholds spanning 0.2829-0.7909 against one 0.5771 for
+   everybody; solo page 0.0000/255 against a pre-change build. ⚠ It reads at a close-up and
+   not at a bank shot, **which is the design** — the fix for "you cannot see it at fifty
+   units" is the director, not the gain.
 
    0f-vi. **Garden time slows with N, and the knob is a pool.** The step budget is
    `max(8, nAct)` calls a frame, so at N = 12 each plant gets one step a frame against a
@@ -252,6 +262,33 @@ priority.** The list below is the priority.
    rather than fps) and nobody has sat through it. Raising the pool trades it straight
    back for frame rate; the honest fix is the same one the main app owes (#10b): a grown
    specimen should not pay full simulation cost to pattern tissue that will never change.
+0g. **`blade()` EMITS NULL GEOMETRY, AND BOTH PAGES DRAW IT (`src/50_geom.js`, new
+   2026-08-13).** The blade's parametrisation collapses its half-width to a point at the
+   leaf base, so the first column of quads is two coincident vertices and one distant one.
+   Measured: **6.7-8.5% of a grown field's tri stream has zero screen *and* zero world
+   area**, and **2.30% of captured vertex normals are exactly zero** (15,560 of 915,792;
+   the population is a gap — 0, or 1 to within 1e-7). Both reach the screen. A zero-area
+   triangle has no barycentric denominator, so the odd fragment the rasteriser lights on it
+   gets varyings computed as finite-over-nothing (`vC*vE*3` at 710 against a ceiling near
+   3); a zero normal makes `normalize()` write a **NaN**. Each is then magnified by the
+   bloom chain into a ~100 px screen-axis-aligned artefact — a comb of bars for the first,
+   a solid black rectangle for the second, one frame each.
+
+   **`flowers.html` has both fixed and `canalisation.html` has neither**, because that work
+   owned `flowers/` and fixed it downstream: the capture drops no-area triangles and the
+   shaders discard fragments outside the interpolation contract. The shipped page emits the
+   same geometry into the same bloom chain, so its exposure is a question of seeds and
+   framing rather than of kind.
+
+   **The fix wanted here is at the source and it is a decision, not a patch.** Not emitting
+   a degenerate first quad column changes how a blade meets its petiole, which is geometry
+   this project takes seriously; giving those vertices a well-defined normal instead is
+   smaller and may be enough. Either way it is cheap to *measure* — `tools/flowers_zeron.mjs`
+   counts both populations headless with no GPU, and it walks the shipped `drawSpecimen`
+   streams, so it can be pointed at the main page's buffers as they are. Do this before
+   adding any downstream guard to `60_render.js`: **a guard is what the other page did, and
+   it left the cause in place.** ⚠ And if you do add one, write it as the negation of the
+   valid band — PITFALLS 2026-08-13, a comparison guard cannot see a NaN.
 1. **[#10b's remainder](#10-a-garden-2026-07-29)** — its headline half is 0a above. What
    is left is not about frames: a species picker that samples with replacement (a stand
    of seven from a catalogue of eight came out as four distinct species), and a director
@@ -697,6 +734,17 @@ standing inside the garden. All three in PITFALLS.
    off rather than solve this. A garden wants shots of its own, and that is the same
    question #6 is holding — what the *film* is, once there is more than one plant in
    it.
+
+**Fixed on the way past, 2026-08-13, and it was never on this list because nobody had
+noticed it: every member of a garden was reading the air at a different moment.**
+`Plant` samples `windAt` at `this.time`, a **life** clock starting at zero at
+germination, while the scene's is a **wall** clock — so a member given a 2600-step head
+start bent all its life to air from 2600 steps in its neighbours' future, and a gust
+could never cross the stand as one event. `Plant.windPhase` (zero by default, so every
+harness and the solo page are bit-identical) is set by `plantGarden` to the scene clock
+minus the pre-paid head start, and converges onto the hero's wall clock exactly as the
+debt pays down. Gates unchanged: smoke 73/73, stem 82/82, wind 27/27. **Not a
+SCIENCE.md item** — an offset in *when* the environment is read, not a new prior.
 
 Not on this list, deliberately: **do not widen the vein cull to buy frames.** It is
 anchored so the subject keeps every ribbon it always had, and loosening that anchor
