@@ -487,6 +487,26 @@ function flBoot() {
           // move — the four field poses do this from inside themselves, and
           // this one has no pose function to do it in
           flDirPace(director, bb.c[0], bb.c[1], bb.c[2]);
+          // ...and solve the crane over the same move (45_director.js). The
+          // framer has not run yet on this frame, so the eye is still where the
+          // last shot left it: the corolla is the only statement of where this
+          // move is GOING that exists on a cut frame, which is why the pacing
+          // above is given it too. The eye stops a few units short of it.
+          director.wantEye.set(bb.c[0], bb.c[1], bb.c[2]);
+          flDirArc(director, F);
+        }
+        // ⚠ AND ON THIS SHOT THE CRANE IS AN OFFSET RATHER THAN A PATH. Every
+        // other shot rebuilds its eye from a pose function every frame, so a
+        // lift that returns to zero brings the camera back with it. The
+        // close-up's eye IS the shipped framer's state — three exponential
+        // lerps toward a corolla — so a lift added to it is a lift integrated
+        // into it, and it would still be coming back down halfway through the
+        // hold. Taking last frame's offset off before the framer reads its own
+        // eye leaves that state on the unlifted path, exactly.
+        if (director.lifted) {
+          scene.camera.position.y -= director.lifted;
+          target.y -= director.lifted;
+          director.lifted = 0;
         }
         frameAxisFlower(sj.ai, specs[sj.i], flDirOutward(director, F, bb));
         framedAx = sj.i === 0 ? sj.ai : -1;
@@ -511,9 +531,19 @@ function flBoot() {
         {
           const w = smoothstep(0, 1, Math.min(1, director.el / flDirTrans(director)));
           if (w < 0.999) {
-            scene.camera.position.lerp(director.fromEye, 1 - w);
+            // ...and the hold-back is the SAME BLEND the field poses use now
+            // (flDirBlendEye), with the framer's own eye as the far end. It was
+            // a straight lerp between two world positions, which is the chord
+            // through the middle of the stand that the polar blend was written
+            // to remove — and this was the one shot still flying it. fr06.png is
+            // a frame of it.
+            director.wantEye.copy(scene.camera.position);
+            flDirBlendEye(_poseE, director, F, w);
+            scene.camera.position.copy(_poseE);
             target.lerp(director.fromTgt, 1 - w);
             radius = lerp(radius, director.fromR, 1 - w);
+            director.lifted = flDirLift(director, w);
+            target.y += director.lifted;
             scene.controls.target.copy(target);
           }
         }
@@ -554,7 +584,9 @@ function flBoot() {
       // the target still lerps straight, because an aim has nothing to collide
       // with and an arced aim is a swerve
       flDirBlendEye(_poseE, director, F, w);
-      _poseT.copy(director.fromTgt).lerp(director.wantTgt, w);
+      // and the aim rises with the eye when the move cranes over a canopy
+      // (flDirBlendTgt): a crane is a translation, not a swing
+      flDirBlendTgt(_poseT, director, w);
       scene.camera.position.lerp(_poseE, 0.12);
       target.lerp(_poseT, 0.12);
       radius += (lerp(director.fromR, rWant, w) - radius) * 0.12;
