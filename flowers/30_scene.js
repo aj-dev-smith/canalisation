@@ -378,24 +378,38 @@ class FlowerScene {
     this.scene.add(this.triMesh);
 
     // --- petal stream ---
+    // EVERY FLOWER IN THE FIELD USED TO BE THE HERO'S. The bullseye threshold
+    // and the baked spot field are per-SPECIMEN quantities — one number and
+    // three reaction-diffusion fields off that plant's own seed — and both
+    // arrived here as scene-wide uniforms, so a field of seven species showed
+    // one specimen's pigment program seven times. Worse than redundant: every
+    // member's own spot fields were already being BAKED (20_draw.js runs
+    // flSpotsRun for whatever petal it is drawing, whoever owns it) and then
+    // thrown away, so the field was paying for variation it refused to draw.
+    //
+    // The petal stream is one concatenated buffer (uploadMany), so a uniform
+    // cannot vary inside it. Three routes were on the table and the fourth won:
+    //   - widen the vertex format 16 -> 17 floats with a per-specimen scalar.
+    //     Ripples through 10_capture.js, the strides here, and parity.test.mjs.
+    //   - grow the atlas to rows-per-member and carry a row offset. Same
+    //     ripple, because a row offset is a per-VERTEX quantity too.
+    //   - hash the petal's world position in-shader. Free, but per-PLACE and
+    //     not per-seed: two members standing near each other would match, and
+    //     a member's flowers would not be stable if it were ever moved.
+    //   - SPLIT THE DRAW. uploadMany already walks the list and knows each B's
+    //     extent, so N geometry groups against N materials makes a per-
+    //     specimen uniform an honest per-specimen uniform, with the vertex
+    //     format, the capture and the gate all untouched. It costs N-1 extra
+    //     draw calls a frame at N <= 12, against ~700 for the streams already.
+    // With one member there is one group and one material — cleared back to a
+    // bare single draw below — so the solo page is the page it was.
     this.petCap = 1 << 18;
     this.petArr = new Float32Array(this.petCap);
     this.petGeo = new THREE.BufferGeometry();
     this._bindPet();
-    this.petMat = new THREE.ShaderMaterial({
-      vertexShader: FL_PET_VS, fragmentShader: FL_PET_FS,
-      side: THREE.DoubleSide,
-      uniforms: { ...this.triMat.uniforms, uBull: { value: 0.59 }, uSpots: { value: null } },
-    });
-    // 3-row atlas for the per-library-petal spot fields, filled as they bake
     this._spotRes = FL_SPOT_RES;
-    this._spotData = new Float32Array(this._spotRes * this._spotRes * 3);
-    this._spotTex = new THREE.DataTexture(
-      this._spotData, this._spotRes, this._spotRes * 3,
-      THREE.RedFormat, THREE.FloatType);
-    this._spotTex.minFilter = THREE.LinearFilter;
-    this._spotTex.magFilter = THREE.LinearFilter;
-    this.petMat.uniforms.uSpots.value = this._spotTex;
+    this._petMats = [];
+    this.petMat = this._petMatFor(0);        // member 0 is the hero
     this.petMesh = new THREE.Mesh(this.petGeo, this.petMat);
     this.petMesh.frustumCulled = false;
     this.scene.add(this.petMesh);
@@ -610,16 +624,48 @@ class FlowerScene {
     this.polGeo.setDrawRange(0, nFloats / 7);
   }
 
-  // Install a baked spot field into the atlas row for one library petal.
-  // flSpotsRun bakes out[a*res+b] with a = u-index; the texture samples
+  // One petal material per member of the field. Same shader source, so Three
+  // hands them all the same compiled program; the LIGHT and FOG uniforms are
+  // spread by REFERENCE off triMat, which is what keeps one per-frame write to
+  // uEye/uFogNear reaching every member. Only uBull and uSpots are that
+  // member's own. Created on first use — the boot's bullseye pass makes one
+  // per PLANNED member (32x96 floats of atlas each, 12 kB, 147 kB at N = 12),
+  // and a garden of two never allocates the other ten.
+  _petMatFor(mem) {
+    let m = this._petMats[mem];
+    if (m) return m;
+    // 3-row atlas for this member's library petals, filled as they bake
+    const res = this._spotRes;
+    const data = new Float32Array(res * res * 3);
+    const tex = new THREE.DataTexture(data, res, res * 3,
+      THREE.RedFormat, THREE.FloatType);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    m = new THREE.ShaderMaterial({
+      vertexShader: FL_PET_VS, fragmentShader: FL_PET_FS,
+      side: THREE.DoubleSide,
+      uniforms: { ...this.triMat.uniforms, uBull: { value: 0.59 }, uSpots: { value: tex } },
+    });
+    m._spotData = data; m._spotTex = tex;
+    this._petMats[mem] = m;
+    return m;
+  }
+
+  // The bullseye threshold for one member. The boot draws it from Todesco's
+  // trimodal distribution off that member's OWN seed.
+  setBull(mem, v) { this._petMatFor(mem).uniforms.uBull.value = v; }
+
+  // Install a baked spot field into one member's atlas row for one library
+  // petal. flSpotsRun bakes out[a*res+b] with a = u-index; the texture samples
   // x = u, so the write is the transpose.
-  setSpots(lib, out) {
+  setSpots(mem, lib, out) {
     const res = this._spotRes;
     if (lib < 0 || lib > 2) return;
+    const m = this._petMatFor(mem);
     for (let a = 0; a < res; a++)
       for (let b = 0; b < res; b++)
-        this._spotData[(lib * res + b) * res + a] = out[a * res + b];
-    this._spotTex.needsUpdate = true;
+        m._spotData[(lib * res + b) * res + a] = out[a * res + b];
+    m._spotTex.needsUpdate = true;
   }
 
   // Push one captured frame into the GPU-side buffers.
@@ -629,7 +675,13 @@ class FlowerScene {
   // garden path. One list of copies per stream, caps grown by doubling as
   // ever; with a single B this is `upload` exactly, byte for byte, which is
   // what keeps the solo page the same page.
-  uploadMany(list) {
+  //
+  // `mems` is the parallel list of MEMBER INDICES — the boot filters out
+  // members that have not germinated, so a list position is not a member
+  // number, and the petal stream now needs the member number to pick that
+  // specimen's pigment material. Omitted, it defaults to list order, which is
+  // the identity for the solo page.
+  uploadMany(list, mems) {
     let tn = 0, pn = 0, sn = 0, qn = 0;
     for (const B of list) { tn += B.triN; pn += B.petbN; sn += B.segN; qn += B.ptN; }
 
@@ -648,10 +700,26 @@ class FlowerScene {
       this.petArr = new Float32Array(this.petCap);
       this._bindPet();
     }
+    // ...and the petal stream is cut into one GROUP per member as it is
+    // concatenated, so each specimen's petals are drawn with its own bullseye
+    // threshold and its own spot atlas. drawRange still covers the whole
+    // stream; Three intersects it with each group.
     o = 0;
-    for (const B of list) { this.petArr.set(B.petb.subarray(0, B.petbN), o); o += B.petbN; }
+    this.petGeo.clearGroups();
+    const pmat = [];
+    for (let i = 0; i < list.length; i++) {
+      const B = list[i];
+      this.petArr.set(B.petb.subarray(0, B.petbN), o);
+      if (B.petbN > 0) this.petGeo.addGroup(o / 16, B.petbN / 16, i);
+      pmat.push(this._petMatFor(mems ? mems[i] : i));
+      o += B.petbN;
+    }
     this._petIB.needsUpdate = true;
     this.petGeo.setDrawRange(0, pn / 16);
+    // One member is the shipped single draw, groups and all removed — not an
+    // optimisation, a guarantee that the solo page did not become a new path.
+    if (pmat.length === 1) { this.petGeo.clearGroups(); this.petMesh.material = pmat[0]; }
+    else this.petMesh.material = pmat;
 
     if (sn > this.segCap) {
       while (this.segCap < sn) this.segCap *= 2;
