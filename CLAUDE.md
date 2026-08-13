@@ -94,13 +94,17 @@ node tools/views_shot.mjs shots           # every render view, wide and close
 GARDEN=7 node tools/clip.mjs shots/g 10   # record the stand moving
 ```
 
-The flower page has its own three, because none of the above can drive it (`window.__fl`,
-not `window.app`):
+The flower page has its own set, because none of the above can drive it (`window.__fl`,
+not `window.app`). These six are the ones you reach for; `tools/README.md` has the other
+nine, which came out of hunting a one-frame flash and generalise past this page:
 
 ```bash
 node tools/flowers_shot.mjs shots/g.png 'garden=7&seed=21&ff=3000&speed=0&shot=wide'
 node tools/flowers_perf.mjs 'garden=7&seed=21'     # rAF gaps, 30s of LIVE growth; prints, does not judge
 node tools/flowers_horizon.mjs shots/h 'garden=7'  # does the ground melt? three camera heights
+node tools/flowers_clip.mjs shots/cine 'garden=7' 90   # the page as a FILM, camera sampled at 4Hz
+node tools/flowers_frame.mjs 'garden=7&shot=wide'  # WHERE in the frame is the field
+node tools/flowers_motes.mjs 'garden=7&shot=bank'  # what SIZE is a grain, in the rasteriser's own number
 ```
 
 **THERE IS A PATH TRACER NOW, AND IT IS A BRIDGE RATHER THAN A SECOND RENDERER
@@ -858,16 +862,16 @@ as a feature list; read it before touching anything in `flowers/`.
 
 ```bash
 node flowers/build.js         # -> flowers.html (single file, no server, no CDN)
-node flowers/parity.test.mjs  # THE GATE: captured streams == shipped drawSpecimen (20/20)
+node flowers/parity.test.mjs  # THE GATE: captured streams == shipped drawSpecimen (24/24)
 open 'flowers.html?garden=7'  # a FIELD: N specimens, one wind, one ground, one clock
 ```
 
 `?garden=N` (2..12) plans N specimens with `flGardenPlan` (`flowers/35_garden.js`), gives
 each its own species, seed, floral form and germination date, stands them on a real
-ground (`25_ground.js`) and points a four-shot director at them (`45_director.js`).
+ground (`25_ground.js`) and points a **six-shot** director at them (`45_director.js`).
 Without the parameter the page is the single specimen it always was — every one of those
-paths is a no-op at N < 2 by construction. Five things to know before touching it, all
-with numbers in TUNING and JOURNAL 2026-08-12:
+paths is a no-op at N < 2 by construction. Seven things to know before touching it, all
+with numbers in TUNING and JOURNAL 2026-08-12 and 2026-08-13:
 
 - **The capture cost was FLORAL, not leaf, and this file's own diagnosis pointed the
   wrong way.** 70% of a field capture is floral organs, because `20_draw.js` hands every
@@ -895,11 +899,34 @@ with numbers in TUNING and JOURNAL 2026-08-12:
   N = 12 each plant gets one step a frame against the solo page's six and the world clock
   runs ~6x slower. That is deliberate — a heavy frame slows garden time instead of
   killing fps — and it has not been watched.
-- **NOBODY HAS WATCHED THE FIELD AT FRAMERATE IN A REAL BROWSER.** Every judgement so far
-  is a still or a headless number, which this file spends two thousand words explaining
-  is the weakest evidence this project accepts. The `wide` shot at
-  `garden=7&seed=21&ff=3000` is a wall of near canopy with no recession and no visible
-  ground; that was found by looking at one PNG, and there will be more of them.
+- **NOTHING IN THE FILM STOPS MOVING, AND ONE RATE SAYS SO.** Three of the poses used to
+  be recomputed identically every frame — 15.4% of samples moving slower than a thousandth
+  of a frame width a second, which reads as a paused shot rather than a held one. Every
+  shot now drifts at `FL_DRIFT` = 0.75% of the picture's width per second (by eye, `uRef`'s
+  category), so an orbit is a constant 0.46 °/s at any distance; transitions are paced by
+  `1.5 * distance / FL_DIR_VPEAK` (**derived** — 26 u/s reproduces both hand-set durations
+  it replaced); and a sixth shot, `glide`, traverses the stand's widest **clear lane** at
+  3x the drift. ⚠ **A held frame must not be a function of what the plants did while it
+  was held**: the establishing heading is the field's plan *diameter*, which is not
+  continuous in a growing stand (one arm past the old extreme = 336 u/s of eye), so every
+  per-shot decision is taken on the cut and held.
+- **A CHANNEL DRAWN AT THE RASTERISER'S CLAMP IS INVISIBLE, AND NO SCREENSHOT SAYS SO.**
+  All 320 live pollen grains were drawn at exactly 1.00 px — p50 = p99 = max, zero
+  variance. A mote is an **angle** now (`minAng x distance`, the vein width floor's
+  argument), and the same population draws at a median ~5.8 device px. The floor of light
+  on the ground was the same shape of bug from the other end: the glow pool's 5-unit
+  length scale was written for one plant at the origin, on a page whose plants stand at
+  r = 12-26. It is the clearing's radius now, added as **airlight** — a flat pool was
+  built, measured and rejected for lighting an overhead shot magenta.
+- **A PERSON HAS WATCHED IT, AND WHAT THEY SAW WAS TWO RASTERISATION BUGS.** "Glitchy
+  flashes on flowers" convicted `blade()` in `src/50_geom.js`: ~7% of the tri stream has
+  zero area and 2.30% of vertex normals are exactly zero, and the bloom chain magnifies
+  one bad fragment into a ~100 px square. **Both fixes are flowers-side and the cause is
+  still in `src/`** — ROADMAP 0g. Two lessons are in PITFALLS: **a comparison guard is not
+  NaN-safe** (the guard added against corrupt interpolation was the one thing that could
+  not see the worst of it), and **run the control first** (three A/B probes on this page
+  returned their own floor as a result). **Nobody has still sat through a full shot
+  rotation at framerate**, which is what 0f-i actually asks for.
 
 ### Where the work goes next
 
