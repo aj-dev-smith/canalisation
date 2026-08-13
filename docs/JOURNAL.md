@@ -3776,3 +3776,105 @@ person watching for a few seconds. Two specific things a still cannot referee: t
 `wide` shot at `garden=7&seed=21&ff=3000` photographs a wall of near canopy with no
 recession and no visible ground (looked at, 2026-08-12), and the world clock slows
 ~6x at N = 12 because the step pool divides by the number of active plants.
+
+## The main page has the same normalize(0) and does not fire (2026-08-12)
+
+`flowers.html`'s one-frame black square was convicted the same day as
+`normalize(vN)` on a vertex normal of exactly zero, and `flowers/30_scene.js`
+now carries a NaN-safe guard. The obvious follow-up is that **`src/60_render.js`
+line 97 does `normalize(vN)` with no guard of any kind**, on the same geometry —
+`blade()` in `src/50_geom.js` is shared — through its own bloom and defocus
+chain. So `canalisation.html` might have been flashing black squares at people
+for months, and nobody had ever looked.
+
+**It is not.** `tools/nan_check.mjs` is the probe and the answer is measured
+rather than reasoned: **133,731 frames, nine configurations, zero non-finite
+texels and zero one-frame holes.** Solo hero; a garden of seven at seed 1337
+(the seed that fired on flowers); `Ashfall Spire`, `Cathedral Fern` at seed 21
+and `Abyssal Frond` at seed 4242; `DPR=2` for four times the fragment samples;
+and 18,000 frames parked on a blade base filling the frame at `dist 2.2`.
+
+### The ingredient is there, and there is three times more of it
+
+This is not a case of the main page having different geometry. `node
+tools/nan_check.mjs geom` walks the shipped tri stream through the shipped
+`drawSpecimen`: **41,775 zero normals in 565,932 vertices, 7.38%**, against the
+flowers stream's 1.70%. No non-unit normals anywhere. The population is the same
+gap `flowers_zeron.mjs` found — a normal is 0, or it is 1 to within 1e-7.
+
+### What decides it is where the zero locus IS, and it comes out of `blade()`
+
+At `u = 0` a blade's half-width is zero, so all `MV+1` grid vertices of that row
+are the **same point**. `Pv - P` is then the zero vector, the cross product is
+zero, and `v3norm` returns an exactly-zero normal. Per quad in that row the
+emitter writes one triangle with **two** zero normals and one with **one**:
+
+| | count | with area |
+|---|---|---|
+| one zero normal | 13,925 | 13,925 |
+| two zero normals | 13,925 | **1** (1.05e-6, a single needle) |
+
+A two-zero triangle has a zero-normal **edge** — a set of positive measure where
+every fragment on it would divide by zero — and it has area identically zero,
+because two of its corners are the same point. It rasterises nothing. A one-zero
+triangle is drawn, but its zero-normal locus is a single **vertex**: an exactly
+zero interpolant needs a sample to land on it to within float32, and anywhere
+near it the normal is small-but-finite, so `normalize()` returns a garbage
+direction rather than a NaN. **The dangerous case is invisible and the visible
+case is a point.**
+
+flowers.html wins that coincidence rarely too — 69 frames of 4,921 at seed 1337,
+none at seeds 21 or 4242 — and its drawable zero-normal population is the same
+triangles species for species (Cathedral Fern 1,230 on both; its
+`10_capture.js` drops the no-area ones this page keeps, and a no-area triangle
+draws nothing either way). So the difference between the two pages is framing and
+rasterisation, not geometry, and it is a difference of degree in something already
+rare.
+
+### The alternatives were ruled out mechanically, not by eye
+
+"The main page's tone map must be clamping it" is the first hypothesis and it is
+wrong. Strip comments and whitespace from both comp shaders and they differ in
+**exactly one token** — `max(c, 0.0)` against `max(c, vec3(0.0))`, which is a
+GLSL ES 1.0 requirement. Same `aces()`, same `clamp`, same `pow`, same
+`mix(scene, dof, coc)`, same three-blur bloom and two-blur defocus. And with
+`CONTROL=1` patching a deliberate NaN into this page's own `MESH_FS`, the black
+square appears exactly as it does on flowers. **The chain works here; only the
+trigger is missing.**
+
+### So the guard was not ported, and MARK=1 is why that costs nothing either way
+
+`MARK=1` paints the fragments the guard **would** discard instead of discarding
+them, so the `huge` classifier counts them directly. **29,381 frames — including
+a fully grown conifer and the macro blade base — marked zero blocks.** That is a
+better A/B than any picture could be here, because the wind never stops and the
+director drifts perpetually, so a screenshot differ has a floor far above the
+artefact. Porting the guard is free and buys nothing today; the argument for
+doing it anyway is that the two pages' shaders would then agree, which matters
+because one is a transliteration of the other.
+
+**What would change the answer, and should send someone back to this file:**
+anything that gives a two-zero triangle area (a blade base with width, a
+tessellation change in `blade()`, vertex jitter), MSAA on the scene target, or a
+driver that flushes a small interpolant to zero.
+
+### Two instrument lessons, and the first one nearly cost the whole result
+
+**The first positive control could not fire.** It wrote `normalize(vec3(0.0))` —
+a compile-time constant. ANGLE folded it away, the control came back clean, and
+that would have been read as "the probe works and the page is fine", which is the
+exact failure the control exists to rule out. It now builds the zero vector out
+of a uniform that is never written, so it is zero at runtime and unknown at
+compile time. **A control that cannot reach its interesting value is the same
+mistake as `test/venation.mjs`'s first metric, arriving in a GPU probe.**
+
+**The exit code flips under `CONTROL` and `MARK`**, because a shipped-shader run
+is bad if it finds something and a control run is bad if it finds nothing.
+
+⚠ And the screen half of that probe — `flowers_hole.mjs`'s near-black /
+still-camera / recovers-next-frame signature — **contributes nothing on a garden
+run or a forced close-up**, because its still-camera condition never holds. It
+printed `darkest collapse seen 999/255`, which means "this half never raised a
+candidate", not "clean". The buffer scan is the instrument that ran everywhere,
+and reading the inert half as a result would have doubled the apparent evidence
+for free.

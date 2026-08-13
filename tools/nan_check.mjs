@@ -14,9 +14,18 @@
 //
 // `src/60_render.js`'s MESH_FS does `normalize(vN)` with NO guard of any kind,
 // on the SAME geometry — `blade()` in `src/50_geom.js` is shared — through its
-// own bloom+defocus chain, whose comp shader is character-for-character the one
-// flowers transliterated. Both pages therefore had the same suspect and only one
-// had ever been searched.
+// own bloom+defocus chain. Both pages therefore had the same suspect and only
+// one had ever been searched.
+//
+// THE OBVIOUS ALTERNATIVE EXPLANATIONS ARE RULED OUT MECHANICALLY, NOT BY EYE.
+// "Maybe the main page's tone map clamps the NaN" is the first thing to check
+// and it is wrong: strip comments and whitespace from both comp shaders and they
+// differ in exactly one token — `max(c, 0.0)` against `max(c, vec3(0.0))`, which
+// is a GLSL ES 1.0 requirement and not a semantic difference. Same `aces()`, same
+// `clamp`, same `pow`, same `mix(scene, dof, coc)`, same three-blur bloom and
+// two-blur defocus. And it is not the threshold either: `CONTROL=1` patches a
+// deliberate NaN into this page's MESH_FS and the black square appears, so the
+// whole chain works here. Only the trigger is missing.
 //
 // THE ZERO NORMALS ARE THERE, AND THE MAIN PAGE HAS MORE OF THEM. Counted
 // headlessly first, which is the cheap half of the question: across the nine

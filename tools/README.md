@@ -371,9 +371,13 @@ sparse taps, and a NaN has no magnitude to comb with.
 
 `nan_check.mjs <seconds> [garden] [seed] [species]` is the same question asked of
 `canalisation.html`, because `src/60_render.js`'s `MESH_FS` does `normalize(vN)`
-with **no guard of any kind**, on the same `blade()` geometry, through a comp
-shader that is character-for-character the one flowers transliterated. Every
-ingredient, never searched.
+with **no guard of any kind**, on the same `blade()` geometry, through the same
+post chain. Every ingredient, never searched. The obvious alternative — "the main
+page's tone map must clamp it" — is ruled out mechanically rather than by eye:
+strip comments and whitespace from both comp shaders and they differ in exactly
+one token, `max(c, 0.0)` against `max(c, vec3(0.0))`, which is a GLSL ES 1.0
+requirement. And `CONTROL=1` draws the black square on this page, so the chain
+works here; only the trigger is missing.
 
 **133,731 frames across nine configurations found nothing** — solo hero, a garden
 of seven at seed 1337, three named species including a fully grown `Ashfall
