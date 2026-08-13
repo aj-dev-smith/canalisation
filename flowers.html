@@ -15815,6 +15815,20 @@ function flDirGrowth(dir, F) {
 // degrees flDirGap's own comment measures as its typical correction on a stand
 // of seven. It is the same bargain that file strikes: search for the nearest
 // good answer, not the best one anywhere.
+// WHERE ALONG ITS OWN LINE THE CHORD SITS, in units of R. This is the traverse's
+// `t0` window placed on the mass, made discrete: the chord is 1.9 R long and
+// sliding it by +-0.45 R moves which half of the stand the camera is abreast of
+// without changing the standoff, the travel or the eye height — so the shot's
+// construction is untouched and only its framing moves.
+//
+// IT WAS A/B'D RATHER THAN ASSUMED, because it is the one term here that changes
+// the track's geometry (with an offset the eye's distance from the field's middle
+// runs 41.5 -> 57.4 rather than 46.8 -> 49.0). Blur wall over the dwell, median
+// over eight bearings, tools/flowers_hold.mjs:
+//     heading search only            seed 21  10%      seed 1337  21%, 3/104 wall
+//     heading + this offset          seed 21   5%      seed 1337  19%, 0/104 wall
+// The offset is what removes the last literal walls on 1337 and takes that seed's
+// peak from 41% to 33%. [0] restores the heading-only behaviour exactly.
 const FL_DOLLY_OFFS = [-0.45, 0, 0.45];
 function flDirDollySolve(dir, F, bb, D) {
   const a0 = flDirAng(dir, F);

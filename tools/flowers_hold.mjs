@@ -17,9 +17,16 @@
 // So this walks the HOLD rather than the transition. For every shot in one full
 // rotation it steps the dwell — the pose re-solved every sample, exactly as
 // 40_boot re-solves it every frame, so the dolly's travel, the glide's traverse,
-// the establishing crane and every shot's orbit all happen — and reports the
-// same three numbers flowers_trans reports about a move: clearance to drawn
-// vertices, foreground cover, and how much of the frame has any ink in it.
+// the establishing crane and every shot's orbit all happen.
+//
+// IT REPORTS TWO FAILURES AND THEY ARE OPPOSITE ONES. A frame can be a WALL
+// (unreadable foreground over half of it) or a HOLE (nothing at readable range
+// at all), and a repair for either will find the other if only one is being
+// counted — which is exactly what happened here, twice, and is written up in
+// flDirFrameLoad. Both come off the same three-way classification of every frame
+// cell by its NEAREST drawn surface: nearer than uFocus - uRange is a wall,
+// inside the band is readable, beyond uFocus + uRange is at full blur and then
+// hazed. 50% and 10% are the reporting thresholds and both are by eye.
 //
 // ⚠ IT MEASURES THE POSE AND NOT THE CAMERA. 40_boot damps the camera 12% of the
 // way to the want each frame, so the first fraction of a second of a hold is
@@ -37,9 +44,14 @@
 // Both are true: they are different bearings. So this walks ROTATIONS, and the
 // answer is a distribution rather than a number.
 //
-// THE CLOUD, the rasteriser and the GL recipe are flowers_trans.mjs's, verbatim,
-// for the reason that file gives: the drawn vertex buffer is the width of a
-// blade and every model of one is optimistic.
+// ⚠ AND THE RECONSTRUCTION IS STILL NOT THE FILM. It samples eight bearings of a
+// frozen field; a 200 s film samples two bearings of a growing one. Where they
+// disagree about whether a change helped, the live mode is the one to believe —
+// a 7x improvement in the reconstruction once corresponded to no change at all
+// on film, and finding out why is the whole story in flDirFrameLoad.
+//
+// THE GL recipe is flowers_trans.mjs's, verbatim, and so was the vertex-sampled
+// cloud until the control below replaced it.
 import { chromium } from 'playwright';
 import { pathToFileURL } from 'url';
 import { platform } from 'os';
