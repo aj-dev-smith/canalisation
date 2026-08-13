@@ -920,6 +920,14 @@ export class App {
         const p = this._plan.shift();
         const S = this.makeSpecimen(p.name, p.seed, p.origin, p.wind);
         S.warm = p.warm; S.debt = p.warm;
+        // One air, ONE CLOCK. The head start is a compressed life, so once the
+        // debt is paid this member's `time` sits `warm` ahead of the moment it
+        // was planted — without this offset it would spend the rest of its life
+        // sampling wind from `warm` steps in the future of everyone else's.
+        // While the debt is still paying down the member's wall clock lags by
+        // exactly the debt remaining and converges to the hero's as it lands,
+        // which is the least-surprising thing a compressed life can do.
+        S.plant.windPhase = this.plant.time + this.plant.windPhase - p.warm;
         this.garden.push(S);
         if (spent()) return false;
       }
@@ -960,6 +968,10 @@ export class App {
     // so `WIND_DEFAULTS`) decides, and a regrow must not silently return the scene
     // to a calm the viewer had turned up out of. `makeSpecimen` reads it.
     const spec = this.makeSpecimen(name, seed);
+    // A regrown hero starts its life clock at zero, but the scene's wall clock
+    // has moved on — a garden's members keep theirs, and the air is one field.
+    // The new specimen picks up the scene clock where the old one left it.
+    if (this.plant) spec.plant.windPhase = this.plant.time + this.plant.windPhase;
     this.hero = spec;
     // Mirror the hero onto the App. Everything that predates the garden reads
     // these — the HUD, the director, the close-up modes, `80_main.js`, every

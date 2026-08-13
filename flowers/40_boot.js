@@ -649,6 +649,10 @@ function flBoot() {
         if (s.S || s.startAt > step) continue;
         const p = s.plan;
         const M = App.prototype.makeSpecimen.call(env, p.name, p.seed, p.origin, wind);
+        // One air, one clock: this member's life clock starts at zero but the
+        // world is at `startAt`, so without the phase it would bend to wind
+        // from `startAt` steps ago for its whole life (40_plant.js windPhase).
+        M.plant.windPhase = s.startAt;
         if (q.get('hold') !== 'none') M.plant.sp.senesceHold = true;
         s.form = flApplyForm(M, p.name, p.seed, q);
         s.S = M; s.B = new FlowerBuffers();

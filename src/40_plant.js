@@ -1309,6 +1309,17 @@ export class Plant {
     this.leaves = new LeafPool(prm, this.sp, seed);
     this.axes = [];
     this.time = 0;
+    // WHERE THIS PLANT'S CLOCK SITS IN THE SCENE'S. `windAt` is a wall clock
+    // over one field, but `this.time` is a LIFE clock — it starts at zero at
+    // germination — so in a garden every member was sampling the air at a
+    // different moment: a specimen given a 2600-step head start bent to wind
+    // from 2600 steps ago, and a gust never crossed the stand as one event.
+    // The scene that plants a garden sets this to (scene clock at germination
+    // minus any pre-paid head start), so `this.time + this.windPhase` is the
+    // same wall clock for every specimen once it has grown into the scene.
+    // Zero for a solo page, which keeps every harness and the shipped single
+    // specimen bit-identical.
+    this.windPhase = 0;
     this.florigen = 0;
     // one transport stream for the whole organism, built before the first shoot
     // taps into it
@@ -1649,7 +1660,8 @@ export class Plant {
         // The wind where the blade is, resolved on the blade's own chord and normal.
         // The frame is this step's, one layout old, which is what every other
         // per-organ quantity here uses.
-        windAt(_wind, w, o.frame.o[0], o.frame.o[1], o.frame.o[2], this.time);
+        windAt(_wind, w, o.frame.o[0], o.frame.o[1], o.frame.o[2],
+          this.time + this.windPhase);
         flapStep(o.flapSt,
           v3dot(_wind, o.frame.z), v3dot(_wind, o.frame.y), dt);
         o.flap = o.flapSt.phi;
@@ -1700,7 +1712,7 @@ export class Plant {
       if (!a.rest) continue;
       a.tagOrgansForBend(S);
       a.bend.sync(a.rest, a.radii, a.rest.length, a.organs, S);
-      a.bend.step(dt, w, this.time, WORLD);
+      a.bend.step(dt, w, this.time + this.windPhase, WORLD);
     }
     // `axes` is in creation order and a branch is always created after the axis it
     // came off, so this is already parents-first.

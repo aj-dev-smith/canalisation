@@ -6984,6 +6984,17 @@ class Plant {
     this.leaves = new LeafPool(prm, this.sp, seed);
     this.axes = [];
     this.time = 0;
+    // WHERE THIS PLANT'S CLOCK SITS IN THE SCENE'S. `windAt` is a wall clock
+    // over one field, but `this.time` is a LIFE clock — it starts at zero at
+    // germination — so in a garden every member was sampling the air at a
+    // different moment: a specimen given a 2600-step head start bent to wind
+    // from 2600 steps ago, and a gust never crossed the stand as one event.
+    // The scene that plants a garden sets this to (scene clock at germination
+    // minus any pre-paid head start), so `this.time + this.windPhase` is the
+    // same wall clock for every specimen once it has grown into the scene.
+    // Zero for a solo page, which keeps every harness and the shipped single
+    // specimen bit-identical.
+    this.windPhase = 0;
     this.florigen = 0;
     // one transport stream for the whole organism, built before the first shoot
     // taps into it
@@ -7324,7 +7335,8 @@ class Plant {
         // The wind where the blade is, resolved on the blade's own chord and normal.
         // The frame is this step's, one layout old, which is what every other
         // per-organ quantity here uses.
-        windAt(_wind, w, o.frame.o[0], o.frame.o[1], o.frame.o[2], this.time);
+        windAt(_wind, w, o.frame.o[0], o.frame.o[1], o.frame.o[2],
+          this.time + this.windPhase);
         flapStep(o.flapSt,
           v3dot(_wind, o.frame.z), v3dot(_wind, o.frame.y), dt);
         o.flap = o.flapSt.phi;
@@ -7375,7 +7387,7 @@ class Plant {
       if (!a.rest) continue;
       a.tagOrgansForBend(S);
       a.bend.sync(a.rest, a.radii, a.rest.length, a.organs, S);
-      a.bend.step(dt, w, this.time, WORLD);
+      a.bend.step(dt, w, this.time + this.windPhase, WORLD);
     }
     // `axes` is in creation order and a branch is always created after the axis it
     // came off, so this is already parents-first.
@@ -9658,6 +9670,14 @@ class App {
         const p = this._plan.shift();
         const S = this.makeSpecimen(p.name, p.seed, p.origin, p.wind);
         S.warm = p.warm; S.debt = p.warm;
+        // One air, ONE CLOCK. The head start is a compressed life, so once the
+        // debt is paid this member's `time` sits `warm` ahead of the moment it
+        // was planted — without this offset it would spend the rest of its life
+        // sampling wind from `warm` steps in the future of everyone else's.
+        // While the debt is still paying down the member's wall clock lags by
+        // exactly the debt remaining and converges to the hero's as it lands,
+        // which is the least-surprising thing a compressed life can do.
+        S.plant.windPhase = this.plant.time + this.plant.windPhase - p.warm;
         this.garden.push(S);
         if (spent()) return false;
       }
@@ -9698,6 +9718,10 @@ class App {
     // so `WIND_DEFAULTS`) decides, and a regrow must not silently return the scene
     // to a calm the viewer had turned up out of. `makeSpecimen` reads it.
     const spec = this.makeSpecimen(name, seed);
+    // A regrown hero starts its life clock at zero, but the scene's wall clock
+    // has moved on — a garden's members keep theirs, and the air is one field.
+    // The new specimen picks up the scene clock where the old one left it.
+    if (this.plant) spec.plant.windPhase = this.plant.time + this.plant.windPhase;
     this.hero = spec;
     // Mirror the hero onto the App. Everything that predates the garden reads
     // these — the HUD, the director, the close-up modes, `80_main.js`, every
@@ -13870,6 +13894,10 @@ function flBoot() {
         if (s.S || s.startAt > step) continue;
         const p = s.plan;
         const M = App.prototype.makeSpecimen.call(env, p.name, p.seed, p.origin, wind);
+        // One air, one clock: this member's life clock starts at zero but the
+        // world is at `startAt`, so without the phase it would bend to wind
+        // from `startAt` steps ago for its whole life (40_plant.js windPhase).
+        M.plant.windPhase = s.startAt;
         if (q.get('hold') !== 'none') M.plant.sp.senesceHold = true;
         s.form = flApplyForm(M, p.name, p.seed, q);
         s.S = M; s.B = new FlowerBuffers();
