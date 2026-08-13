@@ -11271,7 +11271,57 @@ const FL_POLLEN = {
   life: 900,         // pt units before a grain leaves the story (7.2 s). ⚠ NO
                      // GRAIN HAS EVER REACHED IT: 0% of deaths, every sweep.
                      // Kept as the backstop it is, not read as a lever
-  size: 0.022,       // drawn mote size, world units [legibility]
+  size: 0.022,       // drawn mote size, world units [legibility]. It is the
+                     // NEAR size now — see minAng, which is what a viewer
+                     // actually gets at every distance the camera ever stands
+  // THE DRAWN SIZE IS AN ANGLE, NOT A LENGTH, and this is the number that
+  // makes the mechanism visible at all. It is the vein width floor's argument
+  // (MINW, 50_geom.js) and the Blender bridge's px_ref, applied to a mote: a
+  // real grain is 30 um = 0.00048 world units and sub-pixel at every distance
+  // anything here stands, so what a viewer sees is not the grain, it is the
+  // glare spot a shaft of light makes of one — and a glare spot has a roughly
+  // constant ANGULAR size, not a constant world size.
+  //
+  // psize is therefore floored at minAng x (distance to the eye), so a grain
+  // is drawn no smaller than a fixed fraction of the frame however far away it
+  // is, and `size` above takes over only inside ~5.5 units, where it stops an
+  // intimate camera turning a mote into a 64-px blob against its own clamp.
+  //
+  // ⚠ THE VALUE IS AN EYE DECISION and cannot be anything else — there is no
+  // physical grain to derive it from, only the question of whether a viewer
+  // sees the population at all. Measured before: over a full director cycle
+  // the field held 320-390 grains and the whole population sat AT THE
+  // RASTERISER'S 1-PIXEL CLAMP (?garden=7 seed 21 step 3000, low shot: median
+  // drawn size 1.00 px, p99 1.26, max 1.40, and 0 of 320 grains over 2 px).
+  // Chosen by shooting the low, bank and wide shots at 1x / 3.2x / 6.8x / 11x
+  // the shipped world size and looking: 3.2x and 6.8x are still a scatter of
+  // dots you have to hunt for, and 11x is where the plume reads immediately as
+  // motes drifting between the corollas without reading as fireflies. 11x put
+  // the bank shot's median at 5.6 device px, so that is the angle taken.
+  //
+  // In units: psize per world unit of distance, which the shipped point pass
+  // (gl_PointSize = psize * uPx / w, uPx = 0.9 x the drawing buffer's height)
+  // turns into 0.9 x minAng of the frame's height — 5.6 px of 1560 rows. It is
+  // a fraction of the FRAME and not a pixel count, so it does not change with
+  // display density, which a pixel count would.
+  minAng: 0.004,
+  // HOW MUCH OF THE SCENE'S FOG A MOTE TAKES. The tissue takes 0.80 and so do
+  // the ribbons, but that 0.80 is a MIX TOWARD THE FOG COLOUR — distant tissue
+  // is veiled, not extinguished, and stays perfectly visible. A mote is
+  // additively blended and has no veil to be mixed into, so the same number
+  // spent on it is a fade to black and it is not the same statement at all:
+  // at 0.80 the establishing shot read correctly and the bank shot lost the
+  // plume it had just been given (measured below). This is the one number here
+  // that could not be taken from the shipped fog. ?pol=..,..,..,..,fogK.
+  fogK: 0.45,
+  //
+  // ⚠ AND IT COSTS LIGHT, WHICH IS THE OTHER HALF OF A LEGIBILITY NUMBER.
+  // Drawn area goes as the square, so the population's contribution to the
+  // frame went from 160 to 5373 px^2-of-luminance on the bank shot. `bright`
+  // is deliberately NOT lowered against it: 5373 over a 2200x1560 frame is
+  // 0.16% of the picture, the motes are still additive dots on a dark field,
+  // and dimming a mote to pay for seeing it is the move that put this
+  // mechanism at the 1-px clamp in the first place.
   bright: 1.1,       // key-colour multiplier on a mote [grade-category]
   fadeIn: 40,        // pt units to full brightness — a grain POPPING to full
   fadeOut: 150,      // white at the anther reads as a glitch, not a mote
@@ -11314,6 +11364,10 @@ class FlPollen {
   constructor(seed, keyCol, plan) {
     this.buf = new Float32Array(FL_POLLEN.max * 7);   // pt layout: pos3 col3 size
     this.age = new Float32Array(FL_POLLEN.max);
+    // the per-grain size jitter, kept OUT of the buffer: the drawn size is
+    // re-derived from the eye every frame (minAng), so the buffer's size slot
+    // is an output and cannot also be where the jitter is remembered
+    this.jit = new Float32Array(FL_POLLEN.max);
     this.n = 0;
     this.rnd = mulberry32((seed ^ 0x9011e4) >>> 0);
     const P = FL_POLLEN, w = WORLD;
@@ -11326,16 +11380,22 @@ class FlPollen {
     // sheds the same total as one paid a step at a time
     this._acc = [];
     this._cand = [];
-    // ?pol=rate,beyond,size sweeps the three legibility numbers together, for
-    // the reason ?lod=0 and ?haze= exist: a look decision has to be shootable
-    // as a before/after FROM ONE BUILD, at one seed and one step.
+    // ?pol=rate,beyond,size[,minAng] sweeps the four legibility numbers
+    // together, for the reason ?lod=0 and ?haze= exist: a look decision has to
+    // be shootable as a before/after FROM ONE BUILD, at one seed and one step.
+    // ?pol=0.05,12,0.022,0 is the pre-floor renderer exactly — a mote of a
+    // fixed world size, which is the scatter of one-pixel dots this shipped as.
     let rate = P.rate, beyond = P.beyond;
     this.size = P.size;
+    this.minAng = P.minAng;
+    this.fogK = P.fogK;
     if (typeof location !== 'undefined') {
       const s = (new URLSearchParams(location.search).get('pol') || '').split(',').map(Number);
       if (s.length >= 2 && s.every(isFinite)) {
         rate = s[0]; beyond = s[1];
         if (s.length > 2) this.size = s[2];
+        if (s.length > 3) this.minAng = s[3];
+        if (s.length > 4) this.fogK = s[4];
       }
     }
     this.rate = rate;
@@ -11365,7 +11425,8 @@ class FlPollen {
     b[i + 1] = y + (this.rnd() - 0.5) * r;
     b[i + 2] = z + (this.rnd() - 0.5) * r;
     b[i + 3] = this.col[0]; b[i + 4] = this.col[1]; b[i + 5] = this.col[2];
-    b[i + 6] = this.size * (0.7 + 0.6 * this.rnd());
+    this.jit[this.n] = 0.7 + 0.6 * this.rnd();
+    b[i + 6] = this.size * this.jit[this.n];   // replaced by _resize when there is an eye
     this.age[this.n] = 0;
     this.n++;
     this.stat.emit++;
@@ -11439,6 +11500,69 @@ class FlPollen {
     return (this._dtMax = Math.max(0.5, Math.min(hx, ht)));
   }
 
+  // THE DRAWN SIZE, RE-DERIVED FROM WHERE THE CAMERA IS. Called by the boot
+  // every frame, immediately before the upload — NOT from step(), because
+  // step() only runs on a frame the world clock advanced on and the camera
+  // moves on frames it does not (?speed=0 is exactly that page, and it is the
+  // one every still in this repo is shot on).
+  //
+  // psize = jitter x max(FL_POLLEN.size, minAng x distance), which is a
+  // constant angular size with a world-size floor under it rather than the
+  // other way round. See minAng above for why a mote is an angle.
+  //
+  // ⚠ The distance used is RADIAL and the rasteriser divides by clip w, which
+  // is the depth along the view axis; they differ by 1/cos(off-axis angle), up
+  // to about 20% in a corner of this 41.25 deg lens. That is inside the band
+  // this number was chosen by eye in, and using w would mean handing this file
+  // a projection matrix.
+  //
+  // AND THE MOTE IS IN THE SAME FOG AS EVERYTHING ELSE NOW, which is the other
+  // thing having a distance buys. The point pass has no fog of its own — this
+  // file's `beyond` note above records that as a defect and works around it by
+  // ending the story early — so a grain neither dimmed nor shrank with
+  // distance, and once the size is held constant in ANGLE that stops being a
+  // detail: a grain 90 units out was about to be drawn exactly as large and
+  // exactly as bright as one at 20, which is the recipe for a swarm of
+  // fireflies at one depth rather than a plume with depth in it.
+  //
+  // It is the SHIPPED fog and not a second one that resembles it: uFogD and
+  // uFogNear straight off the scene's own fog uniforms, through flFog's own
+  // formula. One fog, evaluated on the CPU for a stream whose shader cannot
+  // see it — the same argument 37_wind.js makes about its GLSL. Only the
+  // WEIGHT is this file's own, and fogK says why.
+  //
+  // `beyond` stays as it is. Its own measurement says the part of the
+  // population a viewer can see does not move with it, so it is a cost number
+  // now rather than a legibility one.
+  //
+  // `eye` may be a THREE Vector3 or a 3-array. With no eye the buffer keeps
+  // the plain world size and the unfogged colour, so a headless harness that
+  // never had a camera (test/flowers_pollen.mjs) is unchanged.
+  resize(eye, fogD, fogNear) {
+    if (!eye) return;
+    const ex = eye[0] !== undefined ? eye[0] : eye.x;
+    const ey = eye[1] !== undefined ? eye[1] : eye.y;
+    const ez = eye[2] !== undefined ? eye[2] : eye.z;
+    const C = FL_POLLEN;
+    const b = this.buf, s = this.size, a = this.minAng;
+    const fd = fogD > 0 ? fogD : 0, fn = fogNear > 0 ? fogNear : 0;
+    for (let i = 0; i < this.n; i++) {
+      const o = i * 7;
+      const dx = b[o] - ex, dy = b[o + 1] - ey, dz = b[o + 2] - ez;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      b[o + 6] = this.jit[i] * Math.max(s, a * d);
+      // the fade-in/out envelope, re-evaluated here rather than carried over
+      // from step(): the colour slot now holds envelope x fog, and the fog
+      // half moves when the CAMERA does, on frames step() never runs
+      const env = Math.max(0, Math.min(
+        this.age[i] / C.fadeIn, 1, (C.life - this.age[i]) / C.fadeOut));
+      const k = env * (1 - Math.min(1, 1 - Math.exp(-Math.max(0, d - fn) * fd)) * this.fogK);
+      b[o + 3] = this.col[0] * k;
+      b[o + 4] = this.col[1] * k;
+      b[o + 5] = this.col[2] * k;
+    }
+  }
+
   // Advance the population. `specs` is the boot's specimen list — each entry
   // { S, stepped } — `dt` is the WORLD clock's advance this frame and `t` the
   // world time the air is sampled at. Every specimen sheds on its own
@@ -11497,6 +11621,7 @@ class FlPollen {
           if (i !== l) {
             b.copyWithin(o, l * 7, l * 7 + 7);
             this.age[i] = this.age[l];
+            this.jit[i] = this.jit[l];
             continue;   // re-examine the swapped-in grain
           }
         } else i++;
@@ -14062,6 +14187,12 @@ function flBoot() {
     capN = dirty.reduce((a2, d) => a2 + (d ? 1 : 0), 0);
     if (anyDirty) captureDirty(dirty);
     if (step > polStep) { pollen.step(specs, step - polStep, step); polStep = step; }
+    // a mote is drawn at a constant ANGULAR size and is fogged by the scene's
+    // own fog (18_pollen.js), so both are functions of where the camera is and
+    // have to be re-derived on every frame — including the frames the world
+    // clock does not advance on, which is the whole of ?speed=0
+    pollen.resize(scene.camera.position,
+      scene.fogU.uFogD.value, scene.fogU.uFogNear.value);
     scene.uploadPollen(pollen.buf, pollen.n * 7);
     // spot fields bake lazily in the draw loop; ship each to the GPU once.
     // HERO's library only: the 3-row atlas is scene-wide (see uBull note).
