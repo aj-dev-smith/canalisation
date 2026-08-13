@@ -215,9 +215,29 @@ if (LIVE) {
       const fd = fl.scene.compU.uFocus.value, rng = fl.scene.compU.uRange.value;
       const r = window.__wallStats(cam.position.x, cam.position.y, cam.position.z,
         _mv, fd, rng, SKIP);
+      const F = flDirField(fl.garden);
+      // ⚠ THE DIRECTOR'S OWN SCORE, ASKED OF THE POSE THE DIRECTOR CHOSE. This
+      // is the control on flDirDollySolve: if the raster says 83% of the frame
+      // is unreadable while flDirBlurLoad says the pose is empty, then the solve
+      // is not wrong about which bearing is best — its RULER is wrong, and no
+      // amount of searching with it will help.
+      const tg = new THREE.Vector3().fromArray(st.target);
+      const load = typeof flDirBlurLoad === 'function'
+        ? flDirBlurLoad(F, cam.position.x, cam.position.y, cam.position.z,
+          tg.x, tg.y, tg.z, 1.06, 0.752, 0) / 160 : -1;   // 16 x 10 cells
       window.__wall.rows.push({ t: +(performance.now() / 1000).toFixed(1), shot: st.shot,
+        load: +load.toFixed(4), nsolid: F.solid.length,
         el: +st.el.toFixed(1), step: st.step, d: +r.d.toFixed(2),
         fd: +fd.toFixed(1), rng: +rng.toFixed(1),
+        // ⚠ WHERE THE EYE ACTUALLY IS, because the reconstruction above and this
+        // mode once disagreed by a factor of two on a purely geometric number
+        // and neither of them could be checked against the other without it.
+        // `D` is the eye's distance from the field's own middle — the one number
+        // both modes print — and `gd` is the geometric eye-to-target distance,
+        // which is what uFocus should equal once a shot has settled.
+        D: +Math.hypot(cam.position.x - F.cx, cam.position.z - F.cz).toFixed(1),
+        gd: +cam.position.distanceTo(new THREE.Vector3().fromArray(st.target)).toFixed(1),
+        R: +F.R.toFixed(1), Rout: +F.Rout.toFixed(1), hTop: +F.hTop.toFixed(1),
         ink: +r.ink.toFixed(3), blur: +r.blur.toFixed(3) });
     };
     window.__wallTimer = setInterval(window.__wallSample, 500);
@@ -250,10 +270,13 @@ if (LIVE) {
   if (dl.length) {
     console.log(`  the dolly's own dwell: ${dl.filter(r => r.blur >= 0.5).length}/${dl.length} ` +
       `(${f2(100 * dl.filter(r => r.blur >= 0.5).length / dl.length, 1)}%)`);
-    console.log('\n  every dolly sample:  t / el / clearance / blur');
-    let line = '   ';
-    for (const r of dl) line += ` ${(f2(r.el, 0) + ':' + f2(r.d, 0) + ':' + f2(100 * r.blur, 0) + '%').padStart(12)}`;
-    for (const s of line.match(/.{1,150}/g)) console.log(s);
+    console.log('\n  every dolly sample:  el / standoff from the middle / clearance / focal (geometric) / blur');
+    for (const r of dl) {
+      console.log(`    el ${f2(r.el, 1).padStart(5)}  step ${String(r.step).padStart(5)}  D ${f2(r.D, 1).padStart(6)}` +
+        `  clear ${f2(r.d, 1).padStart(6)}  focus ${f2(r.fd, 1).padStart(6)}/${f2(r.gd, 1).padStart(6)}` +
+        `  rng ${f2(r.rng, 1).padStart(5)}  R ${f2(r.R, 1).padStart(5)} Rout ${f2(r.Rout, 1).padStart(5)}` +
+        `  blur ${(f2(100 * r.blur, 0) + '%').padStart(5)}  solveLoad ${(f2(100 * r.load, 0) + '%').padStart(5)}`);
+    }
   }
   console.log('');
   await b.close();

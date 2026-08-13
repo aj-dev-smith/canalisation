@@ -1098,6 +1098,29 @@ const FL_DIR_DOLLY_DOF = { k: 0.35, min: 1.5 };
 // the same correction the crane's solve needed (see the note above F.solid in
 // flDirField, where a sampled organ AXIS reported 4 units of clearance on a path
 // whose true clearance was 0.46).
+//
+// ⚠ AND IT COUNTS THE FRAME AND NOT THE TISSUE, WHICH THE FIRST VERSION DID NOT
+// AND WHICH COST THIS WHOLE MECHANISM A DAY. That one returned the NUMBER OF
+// POINTS inside the band. It is the obvious thing to write and it is wrong by an
+// inverse square: a blade seven units from the lens fills eighty percent of the
+// picture with the same few hundred sampled points that a blade twenty-five
+// units away spends on three percent of it. Measured, on the film rather than in
+// the abstract — tools/flowers_hold.mjs prints the director's own score beside
+// its rasterised answer, which is the only reason this was caught: at el 21 s of
+// a dolly at ?garden=7&seed=21 the raster reads 83% of the frame unreadable
+// while the point count read 1.9% of F.solid. The solve was not picking the
+// wrong bearing; it was measuring the wrong quantity, and the ruler agreed with
+// itself all the way through a 7x improvement that the film did not show.
+//
+// So the band's contents are BINNED into a coarse frame — the perpendicular
+// offsets divided by the depth are exactly a screen coordinate, so this is a
+// projection and costs nothing extra — and what comes back is the fraction of
+// CELLS that hold anything. That is the same quantity the harness rasterises,
+// computed from the points the director already has. 16 x 10 rather than the
+// harness's 32 x 20 because F.solid is ~11k points over a whole field and a
+// finer grid would be measuring the subsample.
+const FL_BLUR_GX = 16, FL_BLUR_GY = 10;
+const _blurCell = new Uint8Array(FL_BLUR_GX * FL_BLUR_GY);
 function flDirBlurLoad(F, ex, ey, ez, tx, ty, tz, kw, kh, g) {
   const dx = tx - ex, dy = ty - ey, dz = tz - ez;
   const L = Math.hypot(dx, dy, dz);
@@ -1105,7 +1128,11 @@ function flDirBlurLoad(F, ex, ey, ez, tx, ty, tz, kw, kh, g) {
   const ux = dx / L, uy = dy / L, uz = dz / L;
   const zs = L - Math.max(FL_DIR_DOLLY_DOF.min, L * FL_DIR_DOLLY_DOF.k);
   if (zs <= 1) return 0;
-  let n = 0;
+  // the frame's own right vector, in plan: the view is near-horizontal in every
+  // shot this serves, so the roll is zero and the basis is (right, up, forward)
+  const rl = Math.hypot(ux, uz) || 1;
+  const rx = uz / rl, rz = -ux / rl;
+  _blurCell.fill(0);
   for (const p of F.solid) {
     // F.solid is [x, z, y] — plan first, height last
     const px = p[0] - ex, py = p[2] - ey, pz = p[1] - ez;
@@ -1114,9 +1141,14 @@ function flDirBlurLoad(F, ex, ey, ez, tx, ty, tz, kw, kh, g) {
     const qx = px - ux * al, qy = py - uy * al, qz = pz - uz * al;
     const hh = al * kh * 0.5 + g, hw = al * kw * 0.5 + g;
     if (qy > hh || qy < -hh) continue;
-    if (qx * qx + qz * qz > hw * hw) continue;
-    n++;
+    const u = qx * rx + qz * rz;
+    if (u > hw || u < -hw) continue;
+    const i = Math.min(FL_BLUR_GX - 1, ((u / hw + 1) * 0.5 * FL_BLUR_GX) | 0);
+    const j = Math.min(FL_BLUR_GY - 1, ((qy / hh + 1) * 0.5 * FL_BLUR_GY) | 0);
+    _blurCell[j * FL_BLUR_GX + i] = 1;
   }
+  let n = 0;
+  for (let i = 0; i < _blurCell.length; i++) n += _blurCell[i];
   return n;
 }
 // HOW FAST THE FIELD IS GROWING, MEASURED OFF THE FIELD ITSELF. The dolly's
