@@ -13,6 +13,21 @@
 // where the probe reads it, and once more immediately after — and compare. A
 // square that is black in one read and not the other was never on screen.
 //
+// RESOLVED, and not by this file. The hole was a NaN of our own making —
+// normalize(vN) on a vertex normal of exactly zero, in the tri stream, spread
+// into a 112 px axis-aligned square by the bloom chain's separable blurs. See
+// flowers/30_scene.js above FL_GUARD, and tools/flowers_{hole,nan,vn,zeron}.mjs
+// for the chain that convicted it.
+//
+// ⚠ AND TWO OF THIS FILE'S OWN CLAIMS DID NOT SURVIVE. "128 px is a raster
+// tile" was an eyeball: the square measures 112 x 112, which is the post
+// chain's impulse support (3.2308 x (1 + 2.6 + 4.2) half-res texels each way,
+// = 101 full-res px) and not any GPU tile. And its COLLAPSE TEST IS NOT AN
+// EVENT COUNT — at seed 1337 it reports 232 tiles in 2,613 frames, in runs of
+// six consecutive frames falling 60 -> 25, which is a camera cut. What it did
+// settle, and what it was built for, still stands: both reads agree, so the
+// hole is in the drawing buffer and not in the instrument.
+//
 //   node tools/flowers_black.mjs '<query>' <seconds>
 import { chromium } from 'playwright';
 import { pathToFileURL } from 'url';
