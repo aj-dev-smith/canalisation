@@ -14236,13 +14236,25 @@ function flDirU(dir) {
 // indistinguishable from the sway.
 //
 // MEASURED, on the film rather than on the code — `node tools/flowers_clip.mjs
-// shots/cine 'garden=7&seed=21&ff=3000' 120`, which records the tab and reports
-// the camera's own speed. Against the same 120 s before this landed:
+// shots/cine 'garden=7&seed=21&ff=3000' 150`, which records the tab and reports
+// the camera's own speed. Against the same 150 s before this landed:
 //
-//     STATIONARY (under 0.1 %frame/s)   15.4%  ->  0.0% of samples
-//     peak speed                        44.2   ->  26.6 u/s   (VPEAK is 26)
-//     drift once a shot has arrived      0.00  ->  0.49-0.81 %frame/s
-//     capture, weighted over the loop    52.4  ->  52.4 ms
+//     STATIONARY (under 0.1 %frame/s)   15.1%  ->  0.0% of samples
+//     peak speed                        43.7   ->  27.3 u/s   (VPEAK is 26)
+//     capture, weighted over the loop   58.5   ->  61.1 ms
+//
+// and the drift itself, as the slow decile of each shot's own screen rate —
+// what the camera is doing once it has arrived, in %frame/s:
+//
+//     wide  0.101 -> 0.805    bank 0.021 -> 0.580    low 0.015 -> 0.485
+//     close 0.873 -> 0.723    dolly 2.114 -> 3.635
+//
+// Those five numbers say exactly where the defect was. The three static poses
+// were at a fiftieth to a hundredth of the drift they carry now — frozen, and
+// the 15.1% is them. The CLOSE-UP was never the offender and is slightly slower
+// than it was: its three exponential lerps take a long time to converge, so it
+// always crept. The dolly is its own travel and is faster only because it no
+// longer decelerates into the cut.
 //
 // The last line is the one to check when touching this: camera motion dirties
 // a capture (40_boot's camMoved), and a drift that never stops could in

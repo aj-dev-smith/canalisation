@@ -525,20 +525,38 @@ whose range is 0.22 of its focal distance and an establishing shot whose range i
 of a distance ten times larger both rack by one depth of field without either having to
 say by how much.
 
-Measured over the same 120 s, before → after:
+Measured over the same 150 s of the same seed, before → after:
 
 | | before | after |
 |---|---|---|
-| stationary (< 0.1 %frame/s) | 15.4% | **0.0%** of samples |
-| peak camera speed | 44.2 | **26.6** u/s (`FL_DIR_VPEAK` is 26) |
-| drift once a shot has landed | 0.00 | **0.49-0.81** %frame/s |
-| capture, weighted over the loop | 52.4 | 52.4 ms |
+| stationary (< 0.1 %frame/s) | 15.1% | **0.0%** of samples |
+| peak camera speed | 43.7 | **27.3** u/s (`FL_DIR_VPEAK` is 26) |
+| capture, weighted over the loop | 58.5 | 61.1 ms |
+| specimens recaptured a frame | 3.95 | 4.03 of 7 |
+
+and the drift itself, as the slow decile of each shot's own screen rate — what the
+camera does once it has arrived, in %frame/s:
+
+| | `wide` | `bank` | `low` | `close` | `dolly` |
+|---|---|---|---|---|---|
+| before | 0.101 | 0.021 | 0.015 | 0.873 | 2.114 |
+| after | **0.805** | **0.580** | **0.485** | 0.723 | 3.635 |
+
+Those five columns say exactly where the defect was. The three static poses were at a
+fiftieth to a hundredth of the drift they carry now, and the 15.1% is them. The
+**close-up was never the offender** and is slightly slower than it was — its three
+exponential lerps take a long time to converge, so it always crept. The dolly is its own
+travel and is faster only because it no longer decelerates into the cut.
 
 ⚠ The capture line is the one that had to be **checked and not assumed**: camera motion
 dirties a stream (`camMoved`), and a drift that never stops could in principle have made
 every frame a recapture. It cannot, and the reason is structural rather than lucky —
 `camMoved` only ever redraws the **hero**, and only while the close-up's sight-line cull
-is engaged, so four shots in five are untouched by a moving camera by construction.
+is engaged, so four shots in five are untouched by a moving camera by construction. The
++4.5% above is inside the run-to-run spread and is not a measurement of the drift: a
+second pair at 120 s came back 52.4 → 52.4 ms, and the two runs cannot see the same
+plants, because a field that is still growing is heavier at the end of a window than at
+the start and the shot shares are not identical.
 
 Three measurements decided more of that file than any preference did. The camera stands
 off the field's **short** axis (from the plan covariance of the origins) because a stand
