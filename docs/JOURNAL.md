@@ -3781,9 +3781,11 @@ recession and no visible ground (looked at, 2026-08-12), and the world clock slo
 
 AJ watched `flowers.html` and said "glitchy flashes on flowers... every now and again".
 That is the fifth time on this project that a person watching for a few seconds has been
-the deciding instrument, and this time it took **ten probes over two rounds** to convict
-— because the flash and a second artefact found while gating the fix turned out to be
-**the same null geometry reaching the screen through two different holes.**
+the deciding instrument, and this time it took **twelve instruments over two rounds** to
+convict — six for the flash (`glitch`, `peak`, `scan`, `term`, `kind`, `sliver`) and six
+for a second artefact found while gating the fix (`black`, `hole`, `nan`, `vn`, `zeron`,
+`guard`) — because the two turned out to be **the same null geometry reaching the screen
+through two different holes.**
 
 ### The mechanism, which is one line of `blade()` in `src/50_geom.js`
 

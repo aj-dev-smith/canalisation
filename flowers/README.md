@@ -47,7 +47,7 @@ carpel stands at the top of the spiral where the meristem consumed
 itself to nothing.
 
 Two supporting engine knobs, both defaulting to the shipped behaviour
-exactly (smoke 73/73, parity 20/20):
+exactly (smoke 73/73, parity green — 20/20 when this landed, 24/24 now):
 
 - `floralDome` — a cap on the converted dome, in founder-patch radii. A
   floral meristem has a *characteristic* size, not a fraction of
@@ -441,7 +441,7 @@ strain profile, the shader gain constants (grade-category, like the shipped
 palette scalars), and the bullseye jitter width. Every physical constant
 above them is published, and flagged where it lands in the files.
 
-## A GARDEN — `?garden=N`, and the four numbers it had to state
+## A GARDEN — `?garden=N`, and the numbers it had to state out loud
 
 `?garden=N` (2 to 12) grows a whole flowering **field** on one page: N specimens,
 each with its own species, seed, floral form and germination date, standing on one
@@ -909,7 +909,9 @@ eye. Ground contribution per band, bottom four, of 255:
 |---|---|---|---|---|
 | before | 0.31 | 1.83 | 5.64 | 10.06 |
 | flat pool (**rejected**) | 2.11 | 11.49 | 20.62 | 24.76 |
-| airlight pool (shipped) | wide frame mean pixel 46.52 → **49.34** | | | |
+
+The airlight pool that ships was measured on the frame instead: wide-shot mean pixel
+46.52 → **49.34**.
 
 `tools/flowers_horizon.mjs` at its three heights, mean pixel, no pool → shipped: low
 (eye 0.35) 100.29 → 101.39, mid (3.5) 54.37 → 60.47, high (26) 59.83 → **64.01** — where
