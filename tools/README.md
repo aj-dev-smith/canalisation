@@ -201,7 +201,7 @@ inside **single** quotes, so it never interpolated.
   you are trying to measure — the first two baseline runs of this tool disagreed
   about which species was worst, because they were not looking at the same plants.
 
-### The flowers page has its own three (2026-08-12)
+### The flowers page has its own four (2026-08-12)
 
 `flowers.html` is a separate build with its own boot, its own handle
 (`window.__fl` rather than `window.app`) and, since `?garden=N`, its own field.
@@ -231,6 +231,31 @@ None of the tools above can drive it.
   camera": it wraps `scene.render` and overrules the framer before every draw.
   Default eyes are 0.35 (across the field), 3.5 (the shipped framing) and 26
   (down onto the disc, where the geometric rim is nearest to being in frame).
+
+- `flowers_clip.mjs <outdir> '<query>' <seconds>` — **the page as a FILM.** Every
+  other tool here hands you a frame, and a frame cannot answer the one question
+  the garden director exists to answer: is the camera saying anything, or has it
+  arrived at a pose and stopped. This one records the tab with Playwright's own
+  `recordVideo` — so what lands in the `.webm` is what a viewer would have seen,
+  HUD and hitches included, at the browser's frame timing rather than a
+  harness's — and *at the same time* samples `window.__fl.state()` at 4 Hz.
+
+  It is the sampler that makes it an instrument. It reports camera speed in world
+  units/s **and in frame widths/s**, because "gentle" is only meaningful on
+  screen; the **stationary fraction**, which is the freeze-frame defect stated as
+  a number (a director with no perpetual drift scores 15% of its running time
+  under 0.1 %frame/s, one with drift scores 0.0); the **drift** as the slow decile
+  inside each shot, which is what the camera does once it has arrived; and
+  `capMs`/`capN`, because camera motion is one of the two things that dirty a
+  stream and a perpetual drift must not thrash the recapture. The raw samples go
+  to `track.json` so a question the summary does not answer does not cost another
+  two-minute run.
+
+  The `?ff=` pre-roll cannot be kept out of the recording — a video belongs to the
+  context and starts when the context does — so it is trimmed off into `clip.webm`
+  with ffmpeg, and `raw.webm` is kept. Extract frames with
+  `ffmpeg -i clip.webm -vf fps=1 f%03d.png` and *read them*: consecutive frames a
+  second apart are the only evidence that the camera language is continuous.
 
 Their headless counterpart is `test/flowers_capture.mjs`, which profiles a whole
 field's capture cost per specimen, per organ kind and per stream without a
