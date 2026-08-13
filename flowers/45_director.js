@@ -1191,6 +1191,16 @@ function flDirCorridor(F, H) {
 // and every flower in the lane resolves as it reaches that plane and softens
 // again as it passes. Nothing new was needed for the rack; it is the shipped
 // lens pointed forwards.
+//
+// ⚠ AND `?shot=glide` IS NOT A USEFUL STILL, WHICH IS WORTH SAYING RATHER THAN
+// ENGINEERING AROUND. Pinning a shot stops the clock, so `u` saturates at 1 and
+// the camera parks at the traverse's last position — which, since the window is
+// placed on the mass, is deep inside it. The still is a wall of soft blade. In
+// motion that same blade is a wipe and reads as passing something; as a frame it
+// reads as a mistake, and a traverse stopped anywhere is a frame of a move. For
+// the same reason a PINNED CLIP cannot show this shot at all: measured, 45 s of
+// ?shot=glide travels 1.1 units and scores 94% stationary, because it had
+// already arrived before the recording started. Record the rotation.
 const FL_GLIDE_K = 3;
 function flDirPoseGlide(dir, F, u) {
   // the lane is solved on the cut and held. It is a 60 x (every station) sweep
