@@ -299,14 +299,65 @@ what belongs here is what each tool is *for*, because they generalise:
   degenerate; screen-only is one seen edge-on, and projection preserves
   collinearity so the two separate cleanly.
 - `flowers_black.mjs '<query>' <seconds>` — a one-question tool for the *second*
-  artefact (a one-frame black square, unrelated and unfixed): read the canvas
-  twice in the same frame and see whether the two readers agree. They do, 376 out
-  of 376, so it is in the drawing buffer and not in the instrument.
+  artefact (a one-frame black square): read the canvas twice in the same frame
+  and see whether the two readers agree. They do, 376 out of 376, so it is in the
+  drawing buffer and not in the instrument. ⚠ **Its collapse test is not specific
+  and its counts are not event counts** — at seed 1337 it flags 232 tiles in
+  2,613 frames, in runs of six consecutive frames falling 60 → 25, which is a
+  camera cut. Use `flowers_hole.mjs` for the artefact itself.
 
-Two things worth keeping from that sequence. **A GPU-side reduce is cheap enough
-to run every frame** — it is the only way to measure an HDR buffer a person can
-only see through a tone map — and **attribution belongs inside the frame that
-misbehaved**, not in a second run with something switched off.
+### The black square — convicted, and it was ours
+
+The second artefact turned out to be a **NaN**, and the chain below is what named
+it. The full story is in `flowers/30_scene.js` above `FL_GUARD`; these four are
+the instruments, and they were each built because the previous one could not
+answer the next question.
+
+- `flowers_hole.mjs '<query>' <seconds> <outdir>` — **which pass.** The
+  artefact's own signature as three conditions (near black, still camera, one
+  frame, recovers) instead of one, plus a GPU reduce of *every* post target —
+  scene, bright, bloom, defocus — read back per frame. At seed 1337: 8 confirmed
+  holes in 4,026 frames, the DEFOCUS target collapsing with the screen on 7 of 8
+  and carrying non-finite texels on all 8, while the scene target's luminance at
+  the same tile does not move.
+- `flowers_nan.mjs '<query>' <seconds>` — **which texel, and NaN or Inf.** Exact
+  coverage (one output texel per 8x8 source block, taps at texel centres), and it
+  classifies without `isnan()`, which GLSL ES 1.0 does not have: NaN fails every
+  comparison, ±Inf fails exactly one. 69 frames of 4,921 carried a NaN in
+  rtScene's **colour**, one 8x8 block at a time, never Inf, never in alpha, and
+  **never** a NaN in the defocus target without one in the scene. `HIDE=` bisects
+  by mesh; hide `tri` and it is zero.
+- `flowers_vn.mjs '<query>' <seconds>` — **which term.** Rewrites `FL_TRI_FS` at
+  runtime, keeping the shipped discard and intercepting only what the discard
+  cannot see. 83 markers, every one of them `|vN| == 0`, and **zero unexplained
+  NaN** left over.
+- `flowers_zeron.mjs` — **headless, no GPU.** Walks both captured streams' vertex
+  normals in Node. 15,560 of 915,792 vertices carry a normal of exactly zero, the
+  count matching the no-area triangles `10_capture.js` drops species for species,
+  and the population is a **gap**: a normal is 0, or it is 1 to within 1e-7.
+- `flowers_guard.mjs '<query>' <seconds>` — **does the fix change the picture.**
+  Both guards against the *same* frame; `CONTROL=1` renders the new one twice.
+  0 changed blocks in 3,921 frames against a control floor of 0, and 38 blocks
+  where the old guard was non-finite and the new one is not.
+
+Three things worth keeping from that sequence. **A GPU-side reduce is cheap
+enough to run every frame** — it is the only way to measure an HDR buffer a
+person can only see through a tone map. **Attribution belongs inside the frame
+that misbehaved**, not in a second run with something switched off. And **run the
+control first**: the guard A/B had two floors it could not see, one from Three
+deep-copying a cloned material's uniforms (every block changed, by up to 84 —
+what a moving scene shaded from a frozen camera looks like) and one from the
+opaque render list sorting by material id, so a clone with *identical* source
+still moved 75 blocks a frame. Only a control could tell those from a result.
+
+⚠ **The 128 px was an eyeball and it sent the first hypothesis to the GPU.** The
+square measures **112 x 112 px** in six of eight captured frames, and 112 is
+*derived*: the bloom chain is three separable 5-tap blurs at radii 1, 2.6 and 4.2
+at half resolution, so its impulse support is 3.2308 x 7.8 = 25.2 half-res texels
+each way — 101 full-res px — plus the source block and the bilinear downsample.
+It is the post chain's own footprint, not a tile size. Nor is the missing bloom
+comb evidence against the bloom path: a comb is what a *finite* impulse leaves at
+sparse taps, and a NaN has no magnitude to comb with.
 
 ⚠ **Symlinking `node_modules` into a worktree: `ln -sfn`, and never from the repo
 root.** The advice under `clip.mjs` above is right and it is sharp: run

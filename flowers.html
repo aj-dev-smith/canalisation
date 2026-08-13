@@ -12475,18 +12475,47 @@ const FL_TRI_VS = `
 // is left is legitimate geometry seen EDGE-ON, which cannot be removed because
 // a leaf has to be drawable from the side.
 //
-// Every vertex normal in both streams is unit length (v3norm), and perspective-
-// correct interpolation is a convex combination, so |vN| <= 1 holds for every
-// correctly interpolated fragment with no tolerance in it. Measured on the
-// corrupt ones: 6.4 to 32.9. Splitting the shaded colour on that test puts the
-// WHOLE spike above it (56.10 at the peak block) and leaves 0.69 below it, so
-// the invariant names the bad fragments exactly and costs the picture nothing.
-// The 1.01 is a float32 allowance — the normals are stored to ~1e-7 — and not
-// a dial: raising it does not make anything look better, it only lets the flash
-// back. A fragment that fails is not dim, it is MEANINGLESS, so it is dropped
-// rather than clamped.
+// Perspective-correct interpolation is a convex combination, so |vN| <= 1 holds
+// for every correctly interpolated fragment of a UNIT vertex normal, with no
+// tolerance in it. Measured on the corrupt ones: 6.4 to 32.9. Splitting the
+// shaded colour on that test puts the WHOLE spike above it (56.10 at the peak
+// block) and leaves 0.69 below it, so the invariant names the bad fragments
+// exactly and costs the picture nothing. The 1.01 is a float32 allowance — the
+// normals are stored to ~1e-7 — and not a dial: raising it does not make
+// anything look better, it only lets the flash back. A fragment that fails is
+// not dim, it is MEANINGLESS, so it is dropped rather than clamped.
+//
+// THE TEST IS OPEN AT BOTH ENDS, AND THE OTHER END IS A SECOND ARTEFACT.
+// The sentence this comment used to open with — "every vertex normal in both
+// streams is unit length" — is FALSE, and tools/flowers_zeron.mjs is where it
+// died: across the nine species at seed 1337, 14,485 of 629,364 tri vertices
+// (2.30%) carry a normal of EXACTLY zero, and the count coincides species for
+// species with the no-area triangles 10_capture.js drops, so both come off the
+// same collapsed blade base. The population is a gap — a normal is 0, or it is
+// 1 to within 1e-7, and there is nothing in between.
+//
+// A fragment that lands on such a vertex gets |vN| = 0, normalize() divides by
+// it, and the shader writes a NaN. That is the OTHER artefact AJ has been
+// seeing: not a flash but a ~80-128 px screen-axis-aligned square of pure
+// black, because the defocus chain is two separable gaussians — whose support
+// is a RECTANGLE — and the comp then does mix(scene, dof, coc), and NaN
+// survives aces() and pow() all the way to the screen. Measured at seed 1337
+// before this line changed: one 8x8 block of NaN in rtScene on 69 frames of
+// 4,921, never Inf, never in alpha, and never a NaN in the defocus target
+// without one in the scene. tools/flowers_hole.mjs names the pass,
+// tools/flowers_nan.mjs finds and classifies the texel, tools/flowers_vn.mjs
+// convicts the term (83 markers, ALL of them |vN| = 0, and zero unexplained
+// NaN left over).
+//
+// So the guard is written as the NEGATION of the valid band rather than as the
+// bad one, which buys two things and costs nothing. It closes the zero end
+// with an exact comparison — `length(vN) > 0.0` needs no epsilon, because the
+// measured population has a gap and 0 is a bit pattern, not a small number.
+// And it is NaN-SAFE: every comparison against a NaN is false, so the old
+// `> 1.01` form could never fire on the very fragments that produced one. For
+// any finite |vN| > 0 the two forms are the same test.
 const FL_GUARD = `
-  if (length(vN) > 1.01) discard;
+  if (!(length(vN) > 0.0 && length(vN) <= 1.01)) discard;
 `;
 const FL_TRI_FS = `
   varying vec3 vP; varying vec3 vN; varying vec3 vC; varying float vE;
