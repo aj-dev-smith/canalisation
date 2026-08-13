@@ -187,14 +187,23 @@ await pg.evaluate(() => {
           B.seg[k], B.seg[k + 1], B.seg[k + 2]);
       }
     }
-    const soft = fd - rng, s2 = soft * soft;
-    let ink = 0, blur = 0;
+    // ⚠ THREE STATES, NOT TWO, AND THE FAR LIMIT MATTERS AS MUCH AS THE NEAR
+    // ONE. A cell whose nearest surface is nearer than uFocus - uRange is a
+    // WALL; one whose nearest is further than uFocus + uRange is at full blur
+    // too and this page then hazes it, so it reads as empty; only what lies
+    // between is READ. Counting a fogged-out stand as content is exactly how
+    // the first hole survived a harness that said 19% ink — see the note in
+    // flDirFrameLoad.
+    const s2 = (fd - rng) * (fd - rng), f2z = (fd + rng) * (fd + rng);
+    let ink = 0, blur = 0, read = 0;
     for (let i = 0; i < all.length; i++) {
       if (!all[i]) continue;
       ink++;
       if (zmin[i] < s2) blur++;
+      else if (zmin[i] <= f2z) read++;
     }
-    return { d: Math.sqrt(d2), ink: ink / (GX * GY), blur: blur / (GX * GY) };
+    return { d: Math.sqrt(d2), ink: ink / (GX * GY), blur: blur / (GX * GY),
+      read: read / (GX * GY) };
   };
 });
 
@@ -224,8 +233,8 @@ if (LIVE) {
       const tg = new THREE.Vector3().fromArray(st.target);
       const fr = typeof flDirFrameLoad === 'function'
         ? flDirFrameLoad(F, cam.position.x, cam.position.y, cam.position.z,
-          tg.x, tg.y, tg.z, 1.06, 0.752, 0) : { blur: -160, ink: 0 };
-      const load = fr.blur / 160, dink = fr.ink / 160;   // 16 x 10 cells
+          tg.x, tg.y, tg.z, 1.06, 0.752, 0) : { blur: -160, read: 0 };
+      const load = fr.blur / 160, dink = fr.read / 160;   // 16 x 10 cells
       window.__wall.rows.push({ t: +(performance.now() / 1000).toFixed(1), shot: st.shot,
         load: +load.toFixed(4), dink: +dink.toFixed(4), nsolid: F.solid.length,
         el: +st.el.toFixed(1), step: st.step, d: +r.d.toFixed(2),
@@ -239,7 +248,7 @@ if (LIVE) {
         D: +Math.hypot(cam.position.x - F.cx, cam.position.z - F.cz).toFixed(1),
         gd: +cam.position.distanceTo(new THREE.Vector3().fromArray(st.target)).toFixed(1),
         R: +F.R.toFixed(1), Rout: +F.Rout.toFixed(1), hTop: +F.hTop.toFixed(1),
-        ink: +r.ink.toFixed(3), blur: +r.blur.toFixed(3) });
+        ink: +r.ink.toFixed(3), blur: +r.blur.toFixed(3), read: +r.read.toFixed(3) });
     };
     window.__wallTimer = setInterval(window.__wallSample, 500);
   }, SKIP);
@@ -257,17 +266,17 @@ if (LIVE) {
   // ⚠ A HOLE IS THE OTHER FAILURE AND IT IS COUNTED HERE. Minimising the wall
   // alone has its optimum pointing out of the stand, and the first version of
   // flDirDollySolve found one — several seconds of empty fog. `ink` is the
-  // fraction of frame cells holding any drawn surface at any depth; under 15% is
-  // a frame with nothing in it. 15% is by eye and is a REPORTING threshold, the
-  // same category as the 50% that calls a frame a wall.
-  console.log('  shot        samples   step range      focal    clearance min/med    BLUR WALL med / MAX    wall (>=50%)    ink med / MIN    HOLE (<15%)');
+  // fraction of frame cells whose nearest surface is IN FOCUS; under 10% is a
+  // frame with nothing to look at. 10% is by eye and is a REPORTING threshold,
+  // the same category as the 50% that calls a frame a wall.
+  console.log('  shot        samples   step range      focal    clearance min/med    BLUR WALL med / MAX    wall (>=50%)   in-focus med / MIN   HOLE (<10%)');
   for (const k of Object.keys(byShot)) {
     const rs = byShot[k];
     const md = (a) => { const b = a.slice().sort((p, q) => p - q); return b[b.length >> 1]; };
     const bl = rs.map(r => r.blur), dd = rs.map(r => r.d);
     const wall = rs.filter(r => r.blur >= 0.5).length;
-    const nk = rs.map(r => r.ink);
-    const hole = rs.filter(r => r.ink < 0.15).length;
+    const nk = rs.map(r => r.read);
+    const hole = rs.filter(r => r.read < 0.10).length;
     console.log(`  ${(k || '(none)').padEnd(10)} ${String(rs.length).padStart(6)}   ` +
       `${rs[0].step}-${rs[rs.length - 1].step}`.padStart(12) + `  ${f2(md(rs.map(r => r.fd)), 0).padStart(6)}   ` +
       `${f2(Math.min(...dd)).padStart(7)} /${f2(md(dd)).padStart(7)}   ` +
@@ -275,19 +284,19 @@ if (LIVE) {
       `   ${f2(100 * md(nk), 0).padStart(5)}% /${f2(100 * Math.min(...nk), 0).padStart(4)}%   ${String(hole).padStart(4)}/${rs.length}`);
   }
   const wl = w.filter(r => r.blur >= 0.5);
-  const hl = w.filter(r => r.ink < 0.15);
+  const hl = w.filter(r => r.read < 0.10);
   console.log(`\n  WALL over the whole film: ${wl.length}/${w.length} samples (${f2(100 * wl.length / w.length, 1)}%)`);
   console.log(`  HOLE over the whole film: ${hl.length}/${w.length} samples (${f2(100 * hl.length / w.length, 1)}%)`);
   const dl = w.filter(r => r.shot === 'dolly');
   if (dl.length) {
     console.log(`  the dolly's own dwell: wall ${dl.filter(r => r.blur >= 0.5).length}/${dl.length}, ` +
-      `hole ${dl.filter(r => r.ink < 0.15).length}/${dl.length}`);
+      `hole ${dl.filter(r => r.read < 0.10).length}/${dl.length}`);
     console.log('\n  every dolly sample:  el / standoff from the middle / clearance / focal (geometric) / blur');
     for (const r of dl) {
       console.log(`    el ${f2(r.el, 1).padStart(5)}  step ${String(r.step).padStart(5)}  D ${f2(r.D, 1).padStart(6)}` +
         `  clear ${f2(r.d, 1).padStart(6)}  focus ${f2(r.fd, 1).padStart(6)}/${f2(r.gd, 1).padStart(6)}` +
         `  rng ${f2(r.rng, 1).padStart(5)}  R ${f2(r.R, 1).padStart(5)} Rout ${f2(r.Rout, 1).padStart(5)}` +
-        `  blur ${(f2(100 * r.blur, 0) + '%').padStart(5)}  ink ${(f2(100 * r.ink, 0) + '%').padStart(5)}  solve blur/ink ${(f2(100 * r.load, 0) + '%').padStart(5)}/${(f2(100 * r.dink, 0) + '%').padStart(5)}`);
+        `  blur ${(f2(100 * r.blur, 0) + '%').padStart(5)}  ink ${(f2(100 * r.ink, 0) + '%').padStart(5)}  focus ${(f2(100 * r.read, 0) + '%').padStart(5)}  solve wall/focus ${(f2(100 * r.load, 0) + '%').padStart(5)}/${(f2(100 * r.dink, 0) + '%').padStart(5)}`);
     }
   }
   console.log('');
@@ -310,7 +319,7 @@ const out = await pg.evaluate(([NS, ROT, SKIP]) => {
     const fd = Math.hypot(tx - x, ty - y, tz - z);
     const rng = Math.max(plan.min, fd * plan.k);
     const r = window.__wallStats(x, y, z, _mv, fd, rng, SKIP);
-    return { d: r.d, ink: r.ink, blur: r.blur, fd, rng };
+    return { d: r.d, ink: r.ink, blur: r.blur, read: r.read, fd, rng };
   };
 
   // 40_boot's flowerScore, second copy — same warning as flowers_trans.mjs
@@ -398,7 +407,7 @@ const out = await pg.evaluate(([NS, ROT, SKIP]) => {
         if (i) travel += Math.hypot(dir.wantEye.x - px, dir.wantEye.y - py, dir.wantEye.z - pz);
         px = dir.wantEye.x; py = dir.wantEye.y; pz = dir.wantEye.z;
         samp.push({ v, d: +nr.d.toFixed(2), fd: +nr.fd.toFixed(1),
-          ink: +nr.ink.toFixed(3), blur: +nr.blur.toFixed(3),
+          ink: +nr.ink.toFixed(3), blur: +nr.blur.toFixed(3), read: +nr.read.toFixed(3),
           D: +Math.hypot(dir.wantEye.x - F.cx, dir.wantEye.z - F.cz).toFixed(1),
           fd: +Math.hypot(dir.wantTgt.x - dir.wantEye.x, dir.wantTgt.y - dir.wantEye.y,
             dir.wantTgt.z - dir.wantEye.z).toFixed(1) });
@@ -408,12 +417,12 @@ const out = await pg.evaluate(([NS, ROT, SKIP]) => {
       prev = { eye: dir.wantEye.clone(), tgt: dir.wantTgt.clone() };
       if (pass) {
         let worst = 1e9, worstV = 0, ink = 1, bpk = 0, bpkV = 0;
-        let sb = 0, nWall = 0;
+        let sb = 0, sr = 0, nWall = 0;
         for (const s of samp) {
           if (s.d < worst) { worst = s.d; worstV = s.v; }
           if (s.blur > bpk) { bpk = s.blur; bpkV = s.v; }
           if (s.ink < ink) ink = s.ink;
-          sb += s.blur;
+          sb += s.blur; sr += s.read;
           // A WALL, stated the way a viewer meets it and counted the way the
           // film was read: fully-blurred near foliage over half the frame. It is
           // a REPORTING number — nothing in the director reads it.
@@ -422,6 +431,7 @@ const out = await pg.evaluate(([NS, ROT, SKIP]) => {
         rows.push({ name: sh.name, rot: pass, T: +T.toFixed(1), hold: +H.toFixed(1),
           travel: +travel.toFixed(1), worst: +worst.toFixed(2), worstV: +worstV.toFixed(2),
           blur: +bpk.toFixed(3), blurV: +bpkV.toFixed(2), meanBlur: +(sb / samp.length).toFixed(3),
+          meanRead: +(sr / samp.length).toFixed(3),
           ink: +ink.toFixed(3), wall: nWall, n: samp.length, samp });
       }
     }
@@ -439,13 +449,13 @@ const f = (x, d = 2) => (x === undefined || x === null ? 'n/a' : (+x).toFixed(d)
 console.log(`\nFIELD  cx ${f(out.F.cx, 1)} cz ${f(out.F.cz, 1)}  R ${f(out.F.R, 1)} Rout ${f(out.F.Rout, 1)}  hMid ${f(out.F.hMid, 1)} hTop ${f(out.F.hTop, 1)} hHi ${f(out.F.hHi, 1)}`);
 console.log(`       ${out.tri} drawn primitives rasterised (stride ${SKIP})   brush ${f(out.brush, 1)}   subject ${out.subj ? `specimen ${out.subj.i} axis ${out.subj.ai} r ${f(out.subj.r)}` : 'none'}`);
 console.log(`\nHOLDS — ${out.rot} rotations (each a fresh bearing: the jitter walks by the golden angle), ${out.ns} samples across each dwell`);
-console.log('  shot      hold  eye travel    standoff       worst clear: min / med   BLUR WALL mean: med / MAX   least ink   wall samples (blur>=50%)');
+console.log('  shot      hold  eye travel    standoff       worst clear: min / med   BLUR WALL mean: med / MAX   in-focus mean: med / MIN   wall samples (blur>=50%)');
 const names = [];
 for (const r of out.rows) if (!names.includes(r.name)) names.push(r.name);
 const med = (a) => { const b = a.slice().sort((p, q) => p - q); return b[b.length >> 1]; };
 for (const nm of names) {
   const rs = out.rows.filter(r => r.name === nm);
-  const w = rs.map(r => r.worst), bl = rs.map(r => r.meanBlur);
+  const w = rs.map(r => r.worst), bl = rs.map(r => r.meanBlur), rd = rs.map(r => r.meanRead);
   let wall = 0, n = 0, d0 = 0, d1 = 0, tr = 0, ink = 1;
   for (const r of rs) {
     wall += r.wall; n += r.n; tr += r.travel;
@@ -456,7 +466,7 @@ for (const nm of names) {
     `${f(d0 / rs.length, 1).padStart(5)}->${f(d1 / rs.length, 1).padStart(5)}   ` +
     `${f(Math.min(...w)).padStart(7)} / ${f(med(w)).padStart(6)}   ` +
     `${f(100 * med(bl), 0).padStart(4)}% / ${f(100 * Math.max(...bl), 0).padStart(3)}%   ` +
-    `${f(100 * ink, 0).padStart(4)}%   ${String(wall).padStart(4)}/${n}`);
+    `${f(100 * med(rd), 0).padStart(6)}% / ${f(100 * Math.min(...rd), 0).padStart(3)}%   ${String(wall).padStart(4)}/${n}`);
 }
 console.log('\n  THE DOLLY, ROTATION BY ROTATION — its chord is the thing no pose solve ever saw');
 console.log('    rot   standoff  travel   worst clear (v)   blur wall mean / peak (v)   wall');
@@ -477,7 +487,7 @@ for (const r of out.rows.filter(x => x.name === 'dolly')) {
   every('    v      ', s => f(s.v, 2));
   every('    clear  ', s => f(s.d, 1));
   every('    BLUR   ', s => f(100 * s.blur, 0) + '%');
-  every('    ink    ', s => f(100 * s.ink, 0) + '%');
+  every('    focus  ', s => f(100 * s.read, 0) + '%');
   every('    stand  ', s => f(s.D, 0));
 }
 let wall = 0, n = 0, dw = 0, dn = 0;

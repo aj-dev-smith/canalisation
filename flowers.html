@@ -15708,27 +15708,36 @@ const FL_DIR_DOLLY_DOF = { k: 0.35, min: 1.5 };
 // ALL — the other way a transition can be a bad two seconds, and the one a
 // crane invents") and it applies here word for word.
 //
-// So the objective is READABLE FRAME: cells holding something, minus cells whose
-// contents are past full blur. It needs no weight between the two terms, because
-// they are the same unit — thirds of a picture — and it is the quantity the shot
-// is actually for. `ink` counts everything in front of the lens at any depth;
-// `blur` is the subset inside the band.
+// SO THE OBJECTIVE IS IN-FOCUS FRAME, AND BOTH OF ITS LIMITS ARE THE LENS'S.
+// The first attempt at this scored `ink - blur`, ink being anything in front of
+// the lens at any depth, and it did not close the hole: f160 came back empty a
+// second time (shots/after21b) while the harness reported 19% ink, because a
+// stand thirty units past the focal plane is ink to a projection and fog to a
+// viewer. Anything nearer than uFocus - uRange is at full blur; anything FURTHER
+// than uFocus + uRange is at full blur too, and this page then hazes it.
+//
+// A cell is therefore classified by its NEAREST surface, which is the only one a
+// viewer sees, into exactly three states: WALL (nearer than the band), READ
+// (inside it), SOFT (beyond it, or empty). `read` is what the solve maximises,
+// and it is zero for a wall and zero for a hole without either being named — a
+// bearing pointing out of the stand scores nothing because there is nothing at
+// the distance this lens is focused on. Same rule the harness rasterises with.
 const FL_BLUR_GX = 16, FL_BLUR_GY = 10;
-const _blurCell = new Uint8Array(FL_BLUR_GX * FL_BLUR_GY);
-const _inkCell = new Uint8Array(FL_BLUR_GX * FL_BLUR_GY);
-const _frameOut = { blur: 0, ink: 0, read: 0 };
+const _cellZ = new Float64Array(FL_BLUR_GX * FL_BLUR_GY);
+const _frameOut = { blur: 0, read: 0, ink: 0 };
 function flDirFrameLoad(F, ex, ey, ez, tx, ty, tz, kw, kh, g) {
-  _frameOut.blur = 0; _frameOut.ink = 0; _frameOut.read = 0;
+  _frameOut.blur = 0; _frameOut.read = 0; _frameOut.ink = 0;
   const dx = tx - ex, dy = ty - ey, dz = tz - ez;
   const L = Math.hypot(dx, dy, dz);
   if (!(L > 1)) return _frameOut;
   const ux = dx / L, uy = dy / L, uz = dz / L;
-  const zs = L - Math.max(FL_DIR_DOLLY_DOF.min, L * FL_DIR_DOLLY_DOF.k);
+  const rng = Math.max(FL_DIR_DOLLY_DOF.min, L * FL_DIR_DOLLY_DOF.k);
+  const zs = L - rng, zf = L + rng;
   // the frame's own right vector, in plan: the view is near-horizontal in every
   // shot this serves, so the roll is zero and the basis is (right, up, forward)
   const rl = Math.hypot(ux, uz) || 1;
   const rx = uz / rl, rz = -ux / rl;
-  _blurCell.fill(0); _inkCell.fill(0);
+  _cellZ.fill(1e18);
   for (const p of F.solid) {
     // F.solid is [x, z, y] — plan first, height last
     const px = p[0] - ex, py = p[2] - ey, pz = p[1] - ez;
@@ -15742,14 +15751,15 @@ function flDirFrameLoad(F, ex, ey, ez, tx, ty, tz, kw, kh, g) {
     const i = Math.min(FL_BLUR_GX - 1, ((u / hw + 1) * 0.5 * FL_BLUR_GX) | 0);
     const j = Math.min(FL_BLUR_GY - 1, ((qy / hh + 1) * 0.5 * FL_BLUR_GY) | 0);
     const c = j * FL_BLUR_GX + i;
-    _inkCell[c] = 1;
-    if (al <= zs) _blurCell[c] = 1;
+    if (al < _cellZ[c]) _cellZ[c] = al;
   }
-  for (let i = 0; i < _blurCell.length; i++) {
-    _frameOut.blur += _blurCell[i];
-    _frameOut.ink += _inkCell[i];
+  for (let i = 0; i < _cellZ.length; i++) {
+    const z = _cellZ[i];
+    if (z > 1e17) continue;
+    _frameOut.ink++;
+    if (z < zs) _frameOut.blur++;
+    else if (z <= zf) _frameOut.read++;
   }
-  _frameOut.read = _frameOut.ink - _frameOut.blur;
   return _frameOut;
 }
 // HOW FAST THE FIELD IS GROWING, MEASURED OFF THE FIELD ITSELF. The dolly's
