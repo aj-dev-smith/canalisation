@@ -750,8 +750,10 @@ flanking mass's centroid to 0.5 H after, so the camera spends the shot approachi
 passes through near the end.
 
 The speed is the film's own drift times three and nothing else:
-`v = FL_GLIDE_K * FL_DRIFT * (frame width at the aim distance)`, about 0.9 u/s on the
-shipped field — 5.7 cm/s in `WORLD.unitM`. Measured over 285 s of film, the six shots'
+`v = FL_GLIDE_K * FL_DRIFT * (frame width at the aim distance)` — 0.7-0.9 u/s on the
+shipped field, i.e. 4.6-5.7 cm/s in `WORLD.unitM`, the spread being which aim distance
+the lane solves to. The number that is not sensitive to that is the one measured off the
+film. Measured over 285 s of film, the six shots'
 steady screen rates are **0.605 / 0.781 / 0.965 / 1.137 / 2.131 / 3.748 %frame/s**; the
 glide's 2.131 against `FL_DRIFT`'s 0.75 is 2.84x, second-fastest under the dolly. The
 rack needed nothing new: `uFocus` is the camera-to-target distance and the target is a

@@ -1846,7 +1846,8 @@ walk. It is a law rather than two numbers because the distances are not fixed:
 `?garden=12` is a 107-unit field where `?garden=3` is 31.
 
 **`FL_GLIDE_K = 3` is the traverse's whole speed.** `v = FL_GLIDE_K * FL_DRIFT *
-(frame width at the aim distance)` ≈ 0.9 u/s on the shipped field, 5.7 cm/s. Measured
+(frame width at the aim distance)` = 0.7-0.9 u/s on the shipped field (4.6-5.7 cm/s; the
+spread is which aim distance the lane solves to, so quote the screen rate). Measured
 over 285 s of film the six shots' steady screen rates are **0.605 / 0.781 / 0.965 /
 1.137 / 2.131 / 3.748 %frame/s** — the glide at 2.84x `FL_DRIFT`, second-fastest under
 the dolly. Chosen as a ceiling: at `K = 1` a traverse is indistinguishable from the
