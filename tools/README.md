@@ -308,6 +308,40 @@ to run every frame** — it is the only way to measure an HDR buffer a person ca
 only see through a tone map — and **attribution belongs inside the frame that
 misbehaved**, not in a second run with something switched off.
 
+### And one for the framing, because "wastes a quarter" is a claim about a number
+
+- `flowers_frame.mjs '<query>'` — **where in the frame is the field.** A still
+  tells you a shot looks lopsided; it does not tell you by how much, or whether
+  the next seed is lopsided the same way. This measures it three ways that can
+  disagree with each other, which is the point:
+
+  **INK** reduces the drawn canvas to a grid and reports the ink centroid, the
+  share in each half, and the dead margin from each edge. ⚠ That margin is a
+  QUANTILE of the ink, not a threshold on it — these palettes have a lit sky and
+  a grain, so "the first column above 1% of peak" returns zero from both edges on
+  a frame a person calls half empty. **GEOM** projects every drawn station of
+  every specimen through the live camera: the NDC span the plants occupy, and
+  each specimen's clearance from the eye, in two forms (plan distance minus reach
+  against the true nearest station — a disc over-states an arm by its own
+  length). **LAW** runs the director's own pure functions — `flDirClearance`,
+  `flDirGap`, `flDirCorridor` — on the heading the camera is actually standing
+  on, so a pose's arithmetic can be read against the picture it produced.
+
+  Its **SWEEP** is the half that is about what the director *could* have done: it
+  stands the establishing eye on every heading of a 4-degree grid, projects the
+  field through each, and prints the fill. That is where the establishing frame's
+  heading came from — 0.584 of the frame's half-width from the covariance
+  heading, 0.777 from the widest one, at the same distance. It also runs
+  `flEstabSolve` per heading beside the stations, and **their disagreement is
+  informative**: the solver reports 0.86 from every heading because it returns
+  the distance at which the width condition is met, and the camera never stands
+  there when the height condition binds.
+
+  It re-implements 40_boot's `flowerScore` so the subject ranking can be printed
+  with its base term. ⚠ **That is a second implementation and it will drift**: if
+  the ranking here stops agreeing with the subject the page picks, suspect this
+  copy first.
+
 ⚠ **Symlinking `node_modules` into a worktree: `ln -sfn`, and never from the repo
 root.** The advice under `clip.mjs` above is right and it is sharp: run
 `ln -sfn /abs/path/to/node_modules node_modules` **from inside the worktree**.

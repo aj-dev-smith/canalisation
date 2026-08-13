@@ -544,7 +544,10 @@ function flBoot() {
       // the solo framer uses: a cut across a field is a MOVE, and an
       // exponential move starts at its fastest.
       const w = smoothstep(0, 1, Math.min(1, director.el / flDirTrans(director)));
-      _poseE.copy(director.fromEye).lerp(director.wantEye, w);
+      // the eye swings AROUND the field rather than across it (flDirBlendEye);
+      // the target still lerps straight, because an aim has nothing to collide
+      // with and an arced aim is a swerve
+      flDirBlendEye(_poseE, director, F, w);
       _poseT.copy(director.fromTgt).lerp(director.wantTgt, w);
       scene.camera.position.lerp(_poseE, 0.12);
       target.lerp(_poseT, 0.12);

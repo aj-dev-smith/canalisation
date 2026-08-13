@@ -14083,7 +14083,10 @@ function flBoot() {
       // the solo framer uses: a cut across a field is a MOVE, and an
       // exponential move starts at its fastest.
       const w = smoothstep(0, 1, Math.min(1, director.el / flDirTrans(director)));
-      _poseE.copy(director.fromEye).lerp(director.wantEye, w);
+      // the eye swings AROUND the field rather than across it (flDirBlendEye);
+      // the target still lerps straight, because an aim has nothing to collide
+      // with and an arced aim is a swerve
+      flDirBlendEye(_poseE, director, F, w);
       _poseT.copy(director.fromTgt).lerp(director.wantTgt, w);
       scene.camera.position.lerp(_poseE, 0.12);
       target.lerp(_poseT, 0.12);
@@ -14865,8 +14868,33 @@ function flFieldSpan(F, a) {
 // side and none of them points at the empty quarter — plus the perpetual orbit,
 // which is a term in the HEADING precisely so that every pose built on it arcs
 // its eye and swings its aim together instead of sliding sideways.
+// ⚠ AND THE BASIS IS FROZEN ON THE CUT, which is the third and last version of
+// the same teleport. `F.pa` is the direction of the field's plan DIAMETER, and a
+// diameter is not a continuous function of a growing stand: one arm reaching
+// past the old extreme swaps which pair of points is furthest apart and swings
+// the answer by tens of degrees between two 500 ms measurements. At the
+// establishing frame's 90-unit standoff a 30-degree swing is 47 units of eye,
+// and 40_boot's 12%-a-frame lerp makes that 5.6 units in one frame — 336 units
+// a second against FL_DIR_VPEAK's 26. tools/flowers_clip.mjs found it as six
+// samples over 50 u/s in a 290 s film, every one of them inside `wide`, and it
+// survived two other fixes aimed at the wrong suspect (the lateral shift, then
+// the end re-decision) because all three produce the same signature.
+//
+// A shot's heading is now decided when the shot begins, like its end, its
+// subject, its gap and its lane. Nothing about a held frame should be a function
+// of what the plants did while it was being held.
+//
+// ⚠ EXCEPT WHERE NO CLOCK IS RUNNING. Under ?shot= the director never cuts, so
+// a heading frozen on the cut is the one measured on the first frame it ever
+// ran — inside the fast-forward, on a stand of seedlings — and a pinned still
+// is then a framing of a field that no longer exists. `overrun` is true only
+// once the elapsed time has passed this shot's own length, which flDirClock
+// makes impossible while it is cutting, so it is exactly the pinned case.
 function flDirAng(dir, F) {
-  return F.pa + dir.flip + dir.jit + flDirOrbit(dir);
+  const sh = FL_DIR_SHOTS[dir.shot];
+  if (dir.cut || dir.pa === undefined
+    || dir.el > flDirTrans(dir) + sh.hold * (dir.holdK || 1)) dir.pa = F.pa;
+  return dir.pa + dir.flip + dir.jit + flDirOrbit(dir);
 }
 
 // How OPEN a flower is: the mean development of the petals that are drawn.
@@ -15605,8 +15633,25 @@ function flDirPoseGlide(dir, F, u) {
     const bx = F.cx + rx * ln.off, bz = F.cz + rz * ln.off;
     const dA = Math.hypot(bx - c * H - dir.fromEye.x, bz - s * H - dir.fromEye.z);
     const dB = Math.hypot(bx + c * H - dir.fromEye.x, bz + s * H - dir.fromEye.z);
-    dir.lane = { ang: dB < dA ? ln.ang + Math.PI : ln.ang, off: ln.off,
-      half: ln.half, len: ln.len, bx, bz };
+    const ang = dB < dA ? ln.ang + Math.PI : ln.ang;
+    // WHERE ALONG THE LANE TO SPEND THE SHOT, and it is not the middle. Centred
+    // on the field, the traverse's last third ran out of plants: it had passed
+    // everything that flanks the lane and was aimed down the empty end of it —
+    // a measured frame with two soft leaves in one corner and nothing else. The
+    // mass has a centroid along the lane, and the window is placed so the camera
+    // spends the shot APPROACHING it and passes through near the end: from
+    // 1.5 H before it to 0.5 H after. Only points within a lane's own width of
+    // the axis count, since it is the flanking plants that make the picture.
+    const c2 = Math.cos(ang), s2 = Math.sin(ang);
+    const rx2 = Math.sin(ang), rz2 = -Math.cos(ang);
+    let ms = 0, mn = 0;
+    for (const p of F.drawn) {
+      if (Math.abs((p[0] - F.cx) * rx2 + (p[1] - F.cz) * rz2 - ln.off) > H) continue;
+      ms += (p[0] - F.cx) * c2 + (p[1] - F.cz) * s2;
+      mn++;
+    }
+    dir.lane = { ang, off: ln.off, half: ln.half, len: ln.len, bx, bz, H,
+      t0: (mn ? ms / mn : 0) - 1.5 * H };
   }
   const ln = dir.lane;
   const c = Math.cos(ln.ang), s = Math.sin(ln.ang);
@@ -15615,9 +15660,8 @@ function flDirPoseGlide(dir, F, u) {
   const L = Math.max(8, F.Rout);
   const v = FL_GLIDE_K * FL_DRIFT * (dir.kw || 1.06) * L;
   const T = flDirTrans(dir) + FL_DIR_SHOTS[dir.shot].hold * (dir.holdK || 1);
-  // centred on the field: the middle of the shot is the middle of the stand, so
-  // the move both enters and leaves rather than arriving
-  const t = (u - 0.5) * v * T;
+  // placed on the mass rather than on the middle — see the lane solve above
+  const t = ln.t0 + u * v * T;
   const ex = ln.bx + c * t, ez = ln.bz + s * t;
   const yE = Math.max(FL_DIR_EYE_FLOOR, F.hMid);
   dir.wantEye.set(ex, yE, ez);
@@ -15648,6 +15692,30 @@ function flDirPoseGlide(dir, F, u) {
   dir.wantTgt.set(ex + c * L + s * lat, yE, ez + s * L - c * lat);
   flDirPace(dir, dir.wantEye.x, dir.wantEye.y, dir.wantEye.z);
   return Math.max(3, F.R * 0.5);
+}
+
+// A TRANSITION IS AN ARC, NOT A CHORD — and that is the other half of the low
+// shot's entrance. Its POSE was solved out of the canopy (flDirPoseLow), and it
+// still entered through a wall of leaf, because the pose is where the move ENDS
+// and the straight line to it from the previous shot goes wherever it goes. The
+// headings alternate end for end at every cut (dir.flip), so a great many of
+// those lines run straight across the middle of the stand at flower height.
+//
+// Interpolating the eye in the field's own polar coordinates instead — radius,
+// azimuth the short way round, height — makes the camera swing AROUND the stand
+// at an interpolated radius rather than through it. It costs nothing: two poses
+// on the same bearing still give a straight radial move, which is what the
+// establishing crane and the bank's approach already were.
+function flDirBlendEye(out, dir, F, w) {
+  const ax = dir.fromEye.x - F.cx, az = dir.fromEye.z - F.cz;
+  const bx = dir.wantEye.x - F.cx, bz = dir.wantEye.z - F.cz;
+  const ra = Math.hypot(ax, az), rb = Math.hypot(bx, bz);
+  const aa = Math.atan2(az, ax), ab = Math.atan2(bz, bx);
+  const d = ((ab - aa + Math.PI) % TAU + TAU) % TAU - Math.PI;
+  const r = ra + (rb - ra) * w, an = aa + d * w;
+  out.set(F.cx + Math.cos(an) * r,
+    dir.fromEye.y + (dir.wantEye.y - dir.fromEye.y) * w,
+    F.cz + Math.sin(an) * r);
 }
 
 // Advance the shot clock. Returns the name of the shot to play this frame, and
