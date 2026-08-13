@@ -266,9 +266,31 @@ function flDirMake() {
 // Framing off that one axis doubles the standoff and photographs a clearing
 // nobody is standing in. Height loses nothing to the same treatment there
 // (p85 48.0 against max 49.2); at ?garden=12 it is 44.8 against 49.9.
+// THE PLAN HULL of a set of (x, z) pairs — Andrew's monotone chain, lower and
+// upper, returned counter-clockwise. This is here because the questions the
+// director asks about the field's SHAPE are all support-function questions
+// ("how wide is it seen from there"), and a support function is exact and cheap
+// on a hull and wrong on any rounder summary. Measured on ?garden=7&seed=21 the
+// field is 882 drawn stations and its plan hull is a dozen vertices, so every
+// heading query below is a dozen dot products.
+function flHull(pts) {
+  if (pts.length < 3) return pts.slice();
+  const p = pts.slice().sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+  const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const q of p) { while (lo.length > 1 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (let i = p.length - 1; i >= 0; i--) {
+    const q = p[i];
+    while (up.length > 1 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop();
+    up.push(q);
+  }
+  lo.pop(); up.pop();
+  return lo.concat(up);
+}
+
 function flDirField(specs) {
   let n = 0, sx = 0, sz = 0;
-  const fh = [], hs = [], pos = [], reach = [];
+  const fh = [], hs = [], pos = [], reach = [], plan = [];
   for (const s of specs) {
     if (!s.S) continue;
     const o = s.plan ? s.plan.origin : [0, 0, 0];
@@ -278,6 +300,7 @@ function flDirField(specs) {
       if (p[1] > ymax) ymax = p[1];
       const rr = Math.hypot(p[0] - o[0], p[2] - o[2]);
       if (rr > rch) rch = rr;
+      plan.push([p[0], p[2]]);
     }
     hs.push(ymax); reach.push(rch);
     // the weight is the specimen's own station count — how much PLANT is
@@ -321,22 +344,71 @@ function flDirField(specs) {
   const Rout = Math.max(R, pct(outs, 0.85));
   const hHi = Math.max(2, pct(hs.slice().sort((a, b) => a - b), 0.85));
   const hMid = fh.length ? med(fh) : Math.max(2, med(hs) * 0.55);
-  // THE FIELD'S SHORT AXIS, from the plan covariance of the origins, is where
-  // the camera stands: a stand of seven is never round, and standing off the
-  // SHORT axis lays the long one ACROSS the frame, which is what fills a 1.41
-  // landscape picture with plants. Standing on the long axis and looking down
-  // it was tried first and is the bunched column again — the specimens line up
-  // one behind another and occupy the middle fifth of the width.
-  let sxx = 0, szz = 0, sxz = 0;
-  for (const p of pos) {
-    const dx = p[0] - cx, dz = p[1] - cz;
-    sxx += dx * dx; szz += dz * dz; sxz += dx * dz;
+  // THE FIELD AS A SET OF DISCS, for the questions that are about a specimen
+  // rather than about the field: one disc per germinated specimen on its own
+  // origin, with what its stations reach and how tall it is. ⚠ A disc is
+  // ISOTROPIC, so a 43-unit trailing arm is modelled as a 43-unit circle. That
+  // is the right conservative shape for "could this plant be across the lens
+  // from over there" (flDirClearance) and exactly the wrong one for "how wide
+  // is the field from over there" — the first version of this heading law used
+  // discs and returned a flat sweep, because one dominating disc has the same
+  // width in every direction and the argmax then falls on rounding.
+  const discs = pos.map((p, i) => [p[0], p[1], reach[i], hs[i]]);
+  // THE HEADING, and it is the field's own DIAMETER rather than the covariance
+  // of its origins. The old law took the minor axis of the origins' plan
+  // covariance and stood on it, so the major axis lay across the frame. That is
+  // the right idea measured on the wrong thing: a covariance of ORIGINS weights
+  // a 20-station seedling exactly like a 252-station Abyssal Frond and knows
+  // nothing about what either of them reaches.
+  //
+  // What the establishing pose's width condition actually wants is the heading
+  // whose ACROSS-FRAME extent is largest, and on the field's plan hull that has
+  // a closed form: the extent in a direction is a support width, its maximum
+  // over all directions is the set's DIAMETER, and it is attained along the
+  // diameter. So the camera stands PERPENDICULAR to the field's own diameter.
+  // Swept here at 3 degrees rather than solved pairwise because the sweep is
+  // 60 x (a dozen hull vertices) and reads as the thing it is; the error from
+  // the grid is (1 - cos 1.5deg), four parts in ten thousand of the width.
+  //
+  // MEASURED on ?garden=7&seed=21 with tools/flowers_frame.mjs, which stands
+  // the establishing eye on every heading in turn and projects every drawn
+  // station through it: the field covers 0.584 of the frame's half-width from
+  // the covariance heading and 0.777 from the widest one, at the same distance.
+  // A third of the picture, for a heading that was already being chosen.
+  const hull = flHull(plan);
+  let pa = 0, pw = -1;
+  for (let d = 0; d < 180; d += 3) {
+    const a = d * Math.PI / 180;
+    const w = flFieldSpan({ cx, cz, hull }, a).half;
+    if (w > pw) { pw = w; pa = a; }
   }
-  const pa = 0.5 * Math.atan2(2 * sxz, sxx - szz) + Math.PI / 2;
-  return { cx, cz, R, Rout, hMid, hHi, hTop: med(hs), pa, n };
+  return { cx, cz, R, Rout, hMid, hHi, hTop: med(hs), pa, n, discs, hull };
 }
 
-// The heading a shot is taken from: the field's long axis, flipped end for end
+// THE FIELD ACROSS THE FRAME, from a heading. `half` is how far the field
+// reaches either side of the camera axis and `mid` is where the middle of that
+// reach sits — in world units, along the frame's own right vector.
+//
+// The eye stands at C + D*(cos a, sin a) looking back at C, so the view
+// direction is -(cos a, sin a) and the frame's right vector in plan is
+// (sin a, -cos a). `mid` is what the establishing pose slides itself sideways
+// by: aiming at the field's weighted CENTRE puts the centroid of the origins in
+// the middle of the picture, which is not the same point as the middle of what
+// is drawn, and the difference is the empty quarter.
+function flFieldSpan(F, a) {
+  const rx = Math.sin(a), rz = -Math.cos(a);
+  let lo = 1e9, hi = -1e9;
+  for (const d of F.hull) {
+    const u = (d[0] - F.cx) * rx + (d[1] - F.cz) * rz;
+    if (u < lo) lo = u;
+    if (u > hi) hi = u;
+  }
+  if (hi < lo) return { half: 1, mid: 0 };
+  return { half: (hi - lo) / 2, mid: (hi + lo) / 2 };
+}
+
+// The heading a shot is taken from: perpendicular to the field's own diameter
+// (flDirField, which is where the derivation is), flipped end for end
 // between shots and jittered, so no two consecutive shots come from the same
 // side and none of them points at the empty quarter — plus the perpetual orbit,
 // which is a term in the HEADING precisely so that every pose built on it arcs
@@ -484,7 +556,7 @@ function flDirOutward(dir, F, bb) {
 // written down, because a window is not 1.41 wide by decree. Two conditions,
 // and the distance is whichever binds:
 //
-//   WIDTH   the field's full diameter 2*Rout across fW of the frame width
+//   WIDTH   the field's extent ACROSS THIS HEADING across fW of the frame width
 //   HEIGHT  the field's top hHi across fH of the frame height
 //
 // Which one binds is a property of the FIELD's own aspect and it swaps inside
@@ -540,15 +612,99 @@ function flEstabKnobs() {
   const v = (new URLSearchParams(location.search).get('estab') || '').split(',').map(Number);
   return (v.length === 4 && v.every(isFinite)) ? v : FL_ESTAB;
 }
+// THE FIELD IN THE PICTURE — the hull's support width the way the LENS sees it
+// rather than the way a plan does. `half` and `mid` come back in tangent units,
+// which is the unit the frame's own half-width is: A*fovH/2. The difference
+// between this and flFieldSpan is a factor of 1/(D - along) per vertex, and it
+// is not small — a field is not centred on its own centre, so the half that is
+// NEAR the camera subtends more. Measured on ?garden=7&seed=21, standing on the
+// two ends of one and the same diameter gives 0.61 and 0.777 of the frame.
+function flFieldSpanP(F, a, D) {
+  const c = Math.cos(a), s = Math.sin(a), rx = Math.sin(a), rz = -Math.cos(a);
+  let lo = 1e9, hi = -1e9;
+  for (const p of F.hull) {
+    const u = (p[0] - F.cx) * rx + (p[1] - F.cz) * rz;
+    const along = (p[0] - F.cx) * c + (p[1] - F.cz) * s;
+    const q = u / Math.max(1, D - along);
+    if (q < lo) lo = q;
+    if (q > hi) hi = q;
+  }
+  if (hi < lo) return { half: 0.1, mid: 0 };
+  return { half: (hi - lo) / 2, mid: (hi + lo) / 2 };
+}
+// Solve the establishing standoff from a heading: the distance at which the
+// field's PROJECTED width is k[0] of the frame's, found by fixed point because
+// the projected width depends on the distance it is solved for. The map is
+// close to half ~ W/D, so the iterate D <- D * fill/k0 is a contraction and
+// three passes are worth ten; it starts from the plan solution, which is that
+// map exactly.
+function flEstabSolve(F, a, k, A, fovH) {
+  const halfFrame = A * fovH / 2;
+  let D = 2 * Math.min(flFieldSpan(F, a).half, F.Rout) / (k[0] * A * fovH);
+  let sp = null;
+  for (let i = 0; i < 3; i++) {
+    sp = flFieldSpanP(F, a, D);
+    D = Math.max(4, D * (sp.half / halfFrame) / k[0]);
+  }
+  sp = flFieldSpanP(F, a, D);
+  return { D, fill: sp.half / halfFrame, mid: sp.mid };
+}
 function flDirPoseEstab(dir, F, cam) {
   const fovH = 2 * Math.tan(cam.fov * Math.PI / 360);
   const A = Math.max(0.5, cam.aspect);
   const k = flEstabKnobs();
-  const dW = 2 * F.Rout / (k[0] * A * fovH);
+  // WHICH END OF THE DIAMETER, AND THE PROJECTION DECIDES. flDirAng alternates
+  // the heading end for end at every cut (dir.flip) so no two consecutive shots
+  // come from the same side, and that is right for the four shots that are
+  // ABOUT the field. The establishing frame is the one shot that is about the
+  // PLACE, and the two ends of one diameter are not equally good places to
+  // stand: same axis, same distance, 0.61 of the frame from one end and 0.777
+  // from the other. So this pose keeps the jitter (a repeating heading is what
+  // makes a cycling director read as a loop) and takes whichever end its own
+  // field projects widest from. Two solves of a dozen hull vertices.
+  //
+  // ⚠ AND THE TWO ENDS MUST BE COMPARED AT THE DISTANCE ACTUALLY USED, which is
+  // the whole reason this is written out rather than read off flEstabSolve's
+  // own `fill`. That solver returns the distance at which the width condition
+  // is exactly met, so its fill is 0.86 from every heading by construction — a
+  // flat sweep that says nothing. On this field the HEIGHT condition binds from
+  // every heading (dH 91 against dW 57-83), so the camera never stands where
+  // the width solve asked, and what a viewer gets is the width fill at dH:
+  // 0.57 from one end of the diameter and 0.79 from the other.
   const dH = F.hHi / (k[1] * fovH);
-  // and never inside the field it is establishing, whatever the fractions say
-  const D = Math.max(dW, dH, F.Rout * 1.15 + 6);
-  const a = flDirAng(dir, F), c = Math.cos(a), s = Math.sin(a);
+  const halfFrame = A * fovH / 2;
+  // ⚠ THE STANDOFF IS CLIPPED WHERE THE HEADING IS NOT. A heading is
+  // directional, so one specimen's 43-unit arm only widens the headings it lies
+  // across and needs no guard. A DISTANCE is one number for the whole picture,
+  // and the p85 that sizes `Rout` exists precisely so a 65.9-unit arm — one
+  // measured seed of one species, still climbing linearly at step 3200 — cannot
+  // stand the camera 145 units off a clearing nobody is in. So the width
+  // condition is clipped at what a p85-round field would have asked for: the
+  // arm is framed if it fits and crosses the frame edge if it does not, which
+  // is a good picture either way. And never inside the field it is
+  // establishing, whatever the fractions say.
+  const cap = 2 * F.Rout / (k[0] * A * fovH);
+  const solve = (ang) => {
+    const D = Math.max(Math.min(flEstabSolve(F, ang, k, A, fovH).D, cap), dH, F.Rout * 1.15 + 6);
+    return { ang, D, fill: flFieldSpanP(F, ang, D).half / halfFrame };
+  };
+  //
+  // ⚠ AND IT IS DECIDED ON THE CUT AND HELD. The field is re-measured every
+  // 500 ms and the orbit turns the heading all shot, so an end chosen every
+  // frame is an end that can change its mind — and changing it is a 180-degree
+  // jump of the establishing eye, the most violent thing this director could
+  // possibly do. Same argument as the subject being picked on the cut.
+  const a0 = flDirAng(dir, F);
+  if (dir.cut || dir.estabEnd === undefined) {
+    dir.estabEnd = solve(a0 + Math.PI).fill > solve(a0).fill ? Math.PI : 0;
+  }
+  const sol = solve(a0 + dir.estabEnd);
+  const a = sol.ang, c = Math.cos(a), s = Math.sin(a), D = sol.D;
+  // and the lateral shift that centres what is drawn, re-read at the distance
+  // actually used — `mid` is in tangent units, so mid*D is the world offset at
+  // the field's own depth, and one correction is enough because the residual is
+  // second order in (depth spread / D).
+  const ex = flFieldSpanP(F, a, D);
   const yT = fovH * D * (0.5 - k[2]);
   // THE CRANE, and it is the one shot that gets a vertical drift on top of the
   // shared orbit. An establishing frame's job is to say what the place is, and
@@ -560,11 +716,18 @@ function flDirPoseEstab(dir, F, cam) {
   // rather than width, so it drifts at the same speed on screen.
   const yD = FL_DRIFT * (dir.kh || fovH) * D * flDirDriftT(dir);
   const yE = Math.max(FL_DIR_EYE_FLOOR, yT + fovH * D * (k[3] - 0.5) + yD);
-  dir.wantEye.set(F.cx + c * D, yE, F.cz + s * D);
+  // AND THE WHOLE POSE SLIDES SIDEWAYS ONTO WHAT IS DRAWN. Eye and target both,
+  // by ex.mid along the frame's right vector, so the view direction is
+  // untouched and only the framing moves: the middle of the occupied sector
+  // ends up in the middle of the picture instead of the centroid of the
+  // origins. Those are different points whenever the field is lopsided, which
+  // a dart-thrown field of seven always is.
+  const mx = Math.sin(a) * ex.mid * D, mz = -Math.cos(a) * ex.mid * D;
+  dir.wantEye.set(F.cx + mx + c * D, yE, F.cz + mz + s * D);
   // aimed at the MIDDLE, unlike every other shot here: the establishing frame
   // is the one whose subject is the whole field, so there is nothing to push
   // into the near half of the picture.
-  dir.wantTgt.set(F.cx, yT, F.cz);
+  dir.wantTgt.set(F.cx + mx, yT, F.cz + mz);
   flDirPace(dir, dir.wantEye.x, dir.wantEye.y, dir.wantEye.z);
   // the fog's scale (uFogNear = dist - 1.1 r) and the lens range. Half the
   // field's height rather than Rout alone: at ?garden=3 the stand is tall and
