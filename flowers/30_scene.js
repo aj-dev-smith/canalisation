@@ -472,7 +472,10 @@ class FlowerScene {
 
     // --- the ground (25_ground.js): one disc, the same eye and the same fog
     // uniforms as the tissue, alpha carrying depth like everything else ---
-    this.ground = new FlGround(this.scene, pal, { eyeU, fogU, bgU: this.bgU });
+    // the plan goes in for the same reason it goes into flFieldPal: the pool
+    // of light on the floor is the CLEARING's, and its size is the field's
+    // (25_ground.js). Null keeps the solo page's pool exactly as it was.
+    this.ground = new FlGround(this.scene, pal, { eyeU, fogU, bgU: this.bgU }, plan);
 
     // --- post: the shipped chain, manually — scene to a half-float target
     // (alpha = depth), bright + 3x widening blur at half res for bloom, the

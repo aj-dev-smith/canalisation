@@ -769,6 +769,12 @@ function flBoot() {
     capN = dirty.reduce((a2, d) => a2 + (d ? 1 : 0), 0);
     if (anyDirty) captureDirty(dirty);
     if (step > polStep) { pollen.step(specs, step - polStep, step); polStep = step; }
+    // a mote is drawn at a constant ANGULAR size and is fogged by the scene's
+    // own fog (18_pollen.js), so both are functions of where the camera is and
+    // have to be re-derived on every frame — including the frames the world
+    // clock does not advance on, which is the whole of ?speed=0
+    pollen.resize(scene.camera.position,
+      scene.fogU.uFogD.value, scene.fogU.uFogNear.value);
     scene.uploadPollen(pollen.buf, pollen.n * 7);
     // spot fields bake lazily in the draw loop; ship each to the GPU once.
     // HERO's library only: the 3-row atlas is scene-wide (see uBull note).
