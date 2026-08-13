@@ -15696,25 +15696,44 @@ const FL_DIR_DOLLY_DOF = { k: 0.35, min: 1.5 };
 // computed from the points the director already has. 16 x 10 rather than the
 // harness's 32 x 20 because F.solid is ~11k points over a whole field and a
 // finer grid would be measuring the subsample.
+//
+// ⚠ AND IT RETURNS THE INK AS WELL AS THE WALL, BECAUSE MINIMISING A WALL ALONE
+// BUYS A HOLE. A solve that only asks "how little of the frame is unreadable"
+// has its optimum at a bearing pointing out of the stand, and it will find one:
+// on the film at ?garden=7&seed=21 the second dolly of the rotation came back
+// with frame f160 EMPTY — fog, the HUD, and nothing else, for several seconds
+// (shots/before21 vs shots/after21, same frame number, same step). The old shot
+// was a wall; the first repair made a hole. tools/flowers_trans.mjs already
+// carries this warning about the crane ("IS THERE ANYTHING IN THE PICTURE AT
+// ALL — the other way a transition can be a bad two seconds, and the one a
+// crane invents") and it applies here word for word.
+//
+// So the objective is READABLE FRAME: cells holding something, minus cells whose
+// contents are past full blur. It needs no weight between the two terms, because
+// they are the same unit — thirds of a picture — and it is the quantity the shot
+// is actually for. `ink` counts everything in front of the lens at any depth;
+// `blur` is the subset inside the band.
 const FL_BLUR_GX = 16, FL_BLUR_GY = 10;
 const _blurCell = new Uint8Array(FL_BLUR_GX * FL_BLUR_GY);
-function flDirBlurLoad(F, ex, ey, ez, tx, ty, tz, kw, kh, g) {
+const _inkCell = new Uint8Array(FL_BLUR_GX * FL_BLUR_GY);
+const _frameOut = { blur: 0, ink: 0, read: 0 };
+function flDirFrameLoad(F, ex, ey, ez, tx, ty, tz, kw, kh, g) {
+  _frameOut.blur = 0; _frameOut.ink = 0; _frameOut.read = 0;
   const dx = tx - ex, dy = ty - ey, dz = tz - ez;
   const L = Math.hypot(dx, dy, dz);
-  if (!(L > 1)) return 0;
+  if (!(L > 1)) return _frameOut;
   const ux = dx / L, uy = dy / L, uz = dz / L;
   const zs = L - Math.max(FL_DIR_DOLLY_DOF.min, L * FL_DIR_DOLLY_DOF.k);
-  if (zs <= 1) return 0;
   // the frame's own right vector, in plan: the view is near-horizontal in every
   // shot this serves, so the roll is zero and the basis is (right, up, forward)
   const rl = Math.hypot(ux, uz) || 1;
   const rx = uz / rl, rz = -ux / rl;
-  _blurCell.fill(0);
+  _blurCell.fill(0); _inkCell.fill(0);
   for (const p of F.solid) {
     // F.solid is [x, z, y] — plan first, height last
     const px = p[0] - ex, py = p[2] - ey, pz = p[1] - ez;
     const al = px * ux + py * uy + pz * uz;
-    if (al < 1 || al > zs) continue;
+    if (al < 1) continue;
     const qx = px - ux * al, qy = py - uy * al, qz = pz - uz * al;
     const hh = al * kh * 0.5 + g, hw = al * kw * 0.5 + g;
     if (qy > hh || qy < -hh) continue;
@@ -15722,11 +15741,16 @@ function flDirBlurLoad(F, ex, ey, ez, tx, ty, tz, kw, kh, g) {
     if (u > hw || u < -hw) continue;
     const i = Math.min(FL_BLUR_GX - 1, ((u / hw + 1) * 0.5 * FL_BLUR_GX) | 0);
     const j = Math.min(FL_BLUR_GY - 1, ((qy / hh + 1) * 0.5 * FL_BLUR_GY) | 0);
-    _blurCell[j * FL_BLUR_GX + i] = 1;
+    const c = j * FL_BLUR_GX + i;
+    _inkCell[c] = 1;
+    if (al <= zs) _blurCell[c] = 1;
   }
-  let n = 0;
-  for (let i = 0; i < _blurCell.length; i++) n += _blurCell[i];
-  return n;
+  for (let i = 0; i < _blurCell.length; i++) {
+    _frameOut.blur += _blurCell[i];
+    _frameOut.ink += _inkCell[i];
+  }
+  _frameOut.read = _frameOut.ink - _frameOut.blur;
+  return _frameOut;
 }
 // HOW FAST THE FIELD IS GROWING, MEASURED OFF THE FIELD ITSELF. The dolly's
 // bearing is decided on the cut and held for a transition plus eighteen seconds,
@@ -15796,11 +15820,13 @@ function flDirDollySolve(dir, F, bb, D) {
     const a = a0 + i * 0.225, c = Math.cos(a), s = Math.sin(a);
     for (const o of FL_DOLLY_OFFS) {
       const off = o * F.R;
+      // the score is READABLE FRAME summed over the chord, and it is MAXIMISED;
+      // `load` is its negative so the comparison below reads as a cost.
       let load = 0;
       for (let k = 0; k < 4; k++) {
         const t = off + (2 * (k / 3) - 1) * F.R * 0.95;
-        load += flDirBlurLoad(F, F.cx + c * D - s * t, ey, F.cz + s * D + c * t,
-          tx, ty, tz, kw, kh, g);
+        load -= flDirFrameLoad(F, F.cx + c * D - s * t, ey, F.cz + s * D + c * t,
+          tx, ty, tz, kw, kh, g).read;
       }
       // ⚠ TIES GO TO THE POSE THE SHOT WOULD HAVE TAKEN. A strict `<` keeps the
       // first candidate found, which is the far end of the window; on a field

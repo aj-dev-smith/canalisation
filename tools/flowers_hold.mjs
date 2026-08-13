@@ -218,15 +218,16 @@ if (LIVE) {
       const F = flDirField(fl.garden);
       // ⚠ THE DIRECTOR'S OWN SCORE, ASKED OF THE POSE THE DIRECTOR CHOSE. This
       // is the control on flDirDollySolve: if the raster says 83% of the frame
-      // is unreadable while flDirBlurLoad says the pose is empty, then the solve
+      // is unreadable while flDirFrameLoad says the pose is empty, then the solve
       // is not wrong about which bearing is best — its RULER is wrong, and no
       // amount of searching with it will help.
       const tg = new THREE.Vector3().fromArray(st.target);
-      const load = typeof flDirBlurLoad === 'function'
-        ? flDirBlurLoad(F, cam.position.x, cam.position.y, cam.position.z,
-          tg.x, tg.y, tg.z, 1.06, 0.752, 0) / 160 : -1;   // 16 x 10 cells
+      const fr = typeof flDirFrameLoad === 'function'
+        ? flDirFrameLoad(F, cam.position.x, cam.position.y, cam.position.z,
+          tg.x, tg.y, tg.z, 1.06, 0.752, 0) : { blur: -160, ink: 0 };
+      const load = fr.blur / 160, dink = fr.ink / 160;   // 16 x 10 cells
       window.__wall.rows.push({ t: +(performance.now() / 1000).toFixed(1), shot: st.shot,
-        load: +load.toFixed(4), nsolid: F.solid.length,
+        load: +load.toFixed(4), dink: +dink.toFixed(4), nsolid: F.solid.length,
         el: +st.el.toFixed(1), step: st.step, d: +r.d.toFixed(2),
         fd: +fd.toFixed(1), rng: +rng.toFixed(1),
         // ⚠ WHERE THE EYE ACTUALLY IS, because the reconstruction above and this
@@ -253,29 +254,40 @@ if (LIVE) {
   const byShot = {};
   for (const r of w) (byShot[r.shot] = byShot[r.shot] || []).push(r);
   console.log(`\nLIVE — ${w.length} samples over ${LIVE}s, camera and lens read out of the running page`);
-  console.log('  shot        samples   step range      focal    clearance min/med    BLUR WALL med / MAX    wall samples (blur>=50%)');
+  // ⚠ A HOLE IS THE OTHER FAILURE AND IT IS COUNTED HERE. Minimising the wall
+  // alone has its optimum pointing out of the stand, and the first version of
+  // flDirDollySolve found one — several seconds of empty fog. `ink` is the
+  // fraction of frame cells holding any drawn surface at any depth; under 15% is
+  // a frame with nothing in it. 15% is by eye and is a REPORTING threshold, the
+  // same category as the 50% that calls a frame a wall.
+  console.log('  shot        samples   step range      focal    clearance min/med    BLUR WALL med / MAX    wall (>=50%)    ink med / MIN    HOLE (<15%)');
   for (const k of Object.keys(byShot)) {
     const rs = byShot[k];
     const md = (a) => { const b = a.slice().sort((p, q) => p - q); return b[b.length >> 1]; };
     const bl = rs.map(r => r.blur), dd = rs.map(r => r.d);
     const wall = rs.filter(r => r.blur >= 0.5).length;
+    const nk = rs.map(r => r.ink);
+    const hole = rs.filter(r => r.ink < 0.15).length;
     console.log(`  ${(k || '(none)').padEnd(10)} ${String(rs.length).padStart(6)}   ` +
       `${rs[0].step}-${rs[rs.length - 1].step}`.padStart(12) + `  ${f2(md(rs.map(r => r.fd)), 0).padStart(6)}   ` +
       `${f2(Math.min(...dd)).padStart(7)} /${f2(md(dd)).padStart(7)}   ` +
-      `${f2(100 * md(bl), 0).padStart(7)}% /${f2(100 * Math.max(...bl), 0).padStart(4)}%   ${String(wall).padStart(4)}/${rs.length}`);
+      `${f2(100 * md(bl), 0).padStart(7)}% /${f2(100 * Math.max(...bl), 0).padStart(4)}%   ${String(wall).padStart(4)}/${rs.length}` +
+      `   ${f2(100 * md(nk), 0).padStart(5)}% /${f2(100 * Math.min(...nk), 0).padStart(4)}%   ${String(hole).padStart(4)}/${rs.length}`);
   }
   const wl = w.filter(r => r.blur >= 0.5);
+  const hl = w.filter(r => r.ink < 0.15);
   console.log(`\n  WALL over the whole film: ${wl.length}/${w.length} samples (${f2(100 * wl.length / w.length, 1)}%)`);
+  console.log(`  HOLE over the whole film: ${hl.length}/${w.length} samples (${f2(100 * hl.length / w.length, 1)}%)`);
   const dl = w.filter(r => r.shot === 'dolly');
   if (dl.length) {
-    console.log(`  the dolly's own dwell: ${dl.filter(r => r.blur >= 0.5).length}/${dl.length} ` +
-      `(${f2(100 * dl.filter(r => r.blur >= 0.5).length / dl.length, 1)}%)`);
+    console.log(`  the dolly's own dwell: wall ${dl.filter(r => r.blur >= 0.5).length}/${dl.length}, ` +
+      `hole ${dl.filter(r => r.ink < 0.15).length}/${dl.length}`);
     console.log('\n  every dolly sample:  el / standoff from the middle / clearance / focal (geometric) / blur');
     for (const r of dl) {
       console.log(`    el ${f2(r.el, 1).padStart(5)}  step ${String(r.step).padStart(5)}  D ${f2(r.D, 1).padStart(6)}` +
         `  clear ${f2(r.d, 1).padStart(6)}  focus ${f2(r.fd, 1).padStart(6)}/${f2(r.gd, 1).padStart(6)}` +
         `  rng ${f2(r.rng, 1).padStart(5)}  R ${f2(r.R, 1).padStart(5)} Rout ${f2(r.Rout, 1).padStart(5)}` +
-        `  blur ${(f2(100 * r.blur, 0) + '%').padStart(5)}  solveLoad ${(f2(100 * r.load, 0) + '%').padStart(5)}`);
+        `  blur ${(f2(100 * r.blur, 0) + '%').padStart(5)}  ink ${(f2(100 * r.ink, 0) + '%').padStart(5)}  solve blur/ink ${(f2(100 * r.load, 0) + '%').padStart(5)}/${(f2(100 * r.dink, 0) + '%').padStart(5)}`);
     }
   }
   console.log('');
