@@ -231,6 +231,35 @@ None of the tools above can drive it.
   camera": it wraps `scene.render` and overrules the framer before every draw.
   Default eyes are 0.35 (across the field), 3.5 (the shipped framing) and 26
   (down onto the disc, where the geometric rim is nearest to being in frame).
+- `flowers_floor.mjs <outprefix> '<query>'` — **how much of the picture is the
+  ground worth.** `flowers_horizon` asks whether the ground melts; this asks
+  whether it is *there*. "The field floats in void" is a claim about a difference,
+  so it takes the difference: the same settled frame rendered three ways
+  (everything / ground hidden / ground alone), read back, reported per horizontal
+  band. On the pre-pool build **eight of twelve bands came back exactly zero**,
+  which no amount of looking at the composite will tell you — a dark floor and a
+  dark void are the same pixels. It also prints the melt/fog profile along the
+  view ray from the material's own uniforms, which is what corrected the first
+  diagnosis (the melt is 0.75-0.93 where the plants stand, not 1.0; the pool of
+  light was a 5-unit pool at the origin in a clearing of radius 26).
+
+  ⚠ **`dMax` is not a second opinion on `dMean`.** Alpha carries linear depth for
+  the defocus pass, so hiding the ground changes what is behind a silhouette and
+  the blur moves; the large maxima are that, at organ edges, and not floor.
+- `flowers_motes.mjs '<query>'` — **what size is a grain on the screen.** It walks
+  the live pollen population and evaluates `FL_PT_VS`'s **own** `gl_PointSize`
+  expression per grain, so the histogram is the rasteriser's number rather than an
+  estimate of it. That is how the plume turned out to be invisible: p50 = p90 =
+  p99 = max = **1.00 px** at the establishing shot, the whole population against
+  the clamp with zero variance, which is a thing no screenshot reports. It also
+  reports `inFrame` (**zero is a real answer** and the close-up returns it — a
+  population can be entirely out of the picture, which is a framing question and
+  not a size one) and `lightPx2`, the population's total drawn light, which is the
+  unit "keep the total light sane" has to be argued in.
+
+  ⚠ **Say which pixel you mean.** It prints device *and* CSS pixels, because
+  `gl_PointSize` is device and at dpr 2 the two readings support opposite
+  conclusions.
 
 - `flowers_clip.mjs <outdir> '<query>' <seconds>` — **the page as a FILM.** Every
   other tool here hands you a frame, and a frame cannot answer the one question

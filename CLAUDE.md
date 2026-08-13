@@ -79,6 +79,7 @@ node test/crown.mjs '{"maxGen":2}'                 # HOW MUCH OF ANYTHING IS THE
 node test/pathogen.mjs                             # AN AGENT IN THE TISSUE: invasion front against a closed form
 node test/infected.mjs                             # that agent on real tissue, measured and DRAWN
 node test/flowers_capture.mjs '{"n":7}'            # flowers.html: what a FIELD costs to draw, per organ kind
+node test/flowers_pollen.mjs                       # flowers.html: the pollen census — anthers, grains, where they go
 node flowers/parity.test.mjs                       # flowers.html: captured streams == shipped drawSpecimen
 ```
 
