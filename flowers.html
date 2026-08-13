@@ -11856,6 +11856,12 @@ const FL_SKY_LEAD = 0.35;
 // hides the horizon and empties the close-up, 0.6 the reverse), P and N are
 // what let both be right. ?haze=G,H,P,N sweeps all four.
 const FL_HAZE = [2.0, 3.0, 1.5, 5.0];
+// THE POOL: [K, R0] — the ground-hugging glow's strength, and its length scale
+// in world units ON A PAGE WITH NO FIELD, where 5.0 is the shipped
+// `exp(-r * 0.20)` re-spelled and nothing about the solo page moves. A field's
+// scale is not in here: it is the clearing's own, see "the pool is the
+// clearing's" below. ?pool=K,R0 sweeps both.
+const FL_POOL = [1.0, 5.0];
 
 const FL_GND_VS = () => `
   varying vec3 vP;
@@ -11871,7 +11877,7 @@ const FL_GND_FS = () => `
   varying vec4 vProj;
   uniform vec3 uEye, uKey, uKeyCol, uAmbTop, uAmbBot;
   uniform vec3 uSoil0, uSoil1, uGlowC;
-  uniform float uR, uHazeG, uHazeH, uHazeP, uHazeN;
+  uniform float uR, uHazeG, uHazeH, uHazeP, uHazeN, uPoolK, uPoolR;
   ${FL_FOG}
   ${FL_SKY}
   float flGndHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -11892,7 +11898,6 @@ const FL_GND_FS = () => `
     vec3 amb = mix(uAmbBot, uAmbTop, N.y * 0.5 + 0.5);
     vec3 c = alb * (amb + uKeyCol * d * 0.9) + rim * uAmbTop * 0.12;
     float r = length(vP.xz);
-    c += uGlowC * exp(-r * 0.20);
     float fw = flFog(vP, uEye);
     c = mix(c, uFog, fw * 0.80);
     // THE MELT: how much of this pixel is air rather than floor. The optical
@@ -11916,9 +11921,35 @@ const FL_GND_FS = () => `
     float melt = pow(1.0 - exp(-uFogD * uHazeG * L * hf), uHazeP);
     // and the geometric rim, which the haze argument does not cover from
     // straight above: the disc must never be what ends the ground
-    melt = max(melt, smoothstep(0.62, 0.90, r / uR));
+    float geo = smoothstep(0.62, 0.90, r / uR);
+    melt = max(melt, geo);
+    // THE POOL, AND IT IS AIRLIGHT RATHER THAN ALBEDO. It used to be added to
+    // the floor's own colour, ABOVE the fog and above the melt, which made it
+    // a thing the disc's own albedo carried and the haze could then hide. But
+    // this is a glow in the ground-hugging layer, and the melt IS that layer:
+    // mix(surface, sky, melt) is already the airlight form — transmitted
+    // surface plus in-scattered air, with the sky standing in for what the air
+    // is lit by. The pool is the rest of what it is lit by, so it belongs in
+    // the AIR's colour and not in the floor's, and it arrives with the same
+    // (1 - transmittance) weight everything else in that layer does.
+    //
+    // ⚠ THAT WEIGHT IS THE WHOLE REASON IT IS WRITTEN THIS WAY, and adding it
+    // flat on top was tried first and measured. A flat pool is a statement
+    // about the FLOOR, so it is strongest where the floor fills the frame:
+    // it lit the establishing shot correctly and then turned an overhead into
+    // a sheet of magenta with the plants as silhouettes (mean pixel 59.8 ->
+    // 78.6 at eye height 26, the ground filling nine tenths of the frame).
+    // Riding the melt makes it a statement about the AIR: 18% of it survives
+    // that overhead and 75-93% survives the establishing shot, which is the
+    // right way round, and it costs nothing to say — it is the airlight
+    // integral written out rather than a second exponent chosen by eye.
+    //
+    // It keeps the GEOMETRIC rim, and must: a layer of lit air over the disc
+    // has to end where the disc does, or the pool paints a band past the
+    // horizon on the one view where the rim is what ends the ground.
     vec2 suv = vProj.xy / vProj.w * 0.5 + 0.5;
-    c = mix(c, flSky(suv), melt);
+    vec3 air = flSky(suv) + uGlowC * uPoolK * exp(-r / uPoolR) * (1.0 - geo);
+    c = mix(c, air, melt);
     // alpha carries linear depth for the defocus pass (shipped MESH_FS), and
     // melts to the void's own 3.0 so a melted pixel defocuses like the void
     gl_FragColor = vec4(c, mix(length(vP - uEye) * 0.01, 3.0, melt));
@@ -11968,17 +11999,58 @@ function flFieldPal(pal, plan, lead) {
 class FlGround {
   // shared = { eyeU, fogU, bgU }: the scene's eye uniform, its fog uniform
   // OBJECTS and its background uniforms, so the ground can never drift onto a
-  // second fog or melt into a sky that is not the one behind it.
-  constructor(scene, pal, shared) {
+  // second fog or melt into a sky that is not the one behind it. `plan` is
+  // flGardenPlan's array or null — read for the clearing's rim only (the pool,
+  // below), the same one number FlPollen takes off it.
+  constructor(scene, pal, shared, plan) {
     const R = 140;
     // the ground's haze: [thickening over the palette's own fog density at
     // y=0, scale height in world units]. ?haze=G,H sweeps it — that is how
     // the two were chosen, by looking at three camera heights.
-    let haze = FL_HAZE;
+    let haze = FL_HAZE, poolQ = null;
     if (typeof location !== 'undefined') {
-      const h = (new URLSearchParams(location.search).get('haze') || '').split(',').map(Number);
+      const s = new URLSearchParams(location.search);
+      const h = (s.get('haze') || '').split(',').map(Number);
       if (h.length === 4 && h.every(isFinite)) haze = h;
+      // ?pool=K,R — K scales the pool, R REPLACES its length scale outright
+      // (not an offset off the rim), so one query says the same thing on the
+      // solo page and in a field and an A/B is one number.
+      const p = (s.get('pool') || '').split(',').map(Number);
+      if (p.length === 2 && p.every(isFinite)) poolQ = p;
     }
+    // THE POOL IS THE CLEARING'S, NOT THE ORIGIN'S — and until now it was the
+    // origin's. `exp(-r * 0.20)` is a 5-unit length scale written for a page
+    // holding one plant at the origin; in a field of seven the plants stand at
+    // r = 12-26 (flGardenPlan's ring), where that pool has decayed to
+    // exp(-5.2) = 0.6% and the stand is lit by nothing at all. Measured on the
+    // establishing shot (?garden=7 seed 21, step 3000, the ground rendered
+    // alone against the same frame with the disc hidden): the floor moved the
+    // bottom four bands of the picture by 0.31 / 1.83 / 5.64 / 10.06 of 255,
+    // and the other eight by ZERO.
+    //
+    // So a field's pool is the FIELD's: rim + one plant's room, which is the
+    // story radius FlPollen independently arrives at for the same clearing
+    // (rEdge, 18_pollen.js) and which spends no new hand-picked number —
+    // FL_GARDEN_SPACING is the 160-cell drawn-reach sweep in 35_garden.js. On
+    // the shipped field that is 26.4 + 12 = 38.4, so the pool is 1/e exactly
+    // at the edge of the story the grains are allowed to drift into. With no
+    // plan it is FL_POOL[1] and the solo page does not move — the same
+    // by-construction no-op as flFieldPal and flGardenPlan.
+    //
+    // ⚠ It is a length scale and not a radius: the pool does not stop at the
+    // rim, it falls off e-fold per uPoolR, which is what keeps it from drawing
+    // an edge where the plants stop. It is 0.50 of peak at the outermost
+    // plant and 2.6% at the disc's own rim, and the rim term below takes that
+    // last part to zero outright.
+    //
+    // NOTE FL_GARDEN_SPACING is read HERE, in the constructor, and not at this
+    // file's top level: 35_garden.js sorts after this file in the bundle, so a
+    // top-level read would be the same temporal-dead-zone bug the shader
+    // strings at the head of this file are built lazily to avoid.
+    let rim = 0;
+    if (plan) for (const p of plan) rim = Math.max(rim, Math.hypot(p.origin[0], p.origin[2]));
+    const poolK = poolQ ? poolQ[0] : FL_POOL[0];
+    const poolR = poolQ ? poolQ[1] : (plan ? rim + FL_GARDEN_SPACING : FL_POOL[1]);
     const mixc = (a, b, t) => a.map((v, k) => lerp(v, b[k], t));
     // soil, from the palette only: the dark base is the void's bottom pulled
     // toward the stem's shadow tone; the mottle's light end is the lower
@@ -12007,6 +12079,7 @@ class FlGround {
         uR: { value: R },
         uHazeG: { value: haze[0] }, uHazeH: { value: haze[1] },
         uHazeP: { value: haze[2] }, uHazeN: { value: haze[3] },
+        uPoolK: { value: poolK }, uPoolR: { value: poolR },
         ...shared.fogU,
         ...shared.bgU,
       },
@@ -12584,7 +12657,10 @@ class FlowerScene {
 
     // --- the ground (25_ground.js): one disc, the same eye and the same fog
     // uniforms as the tissue, alpha carrying depth like everything else ---
-    this.ground = new FlGround(this.scene, pal, { eyeU, fogU, bgU: this.bgU });
+    // the plan goes in for the same reason it goes into flFieldPal: the pool
+    // of light on the floor is the CLEARING's, and its size is the field's
+    // (25_ground.js). Null keeps the solo page's pool exactly as it was.
+    this.ground = new FlGround(this.scene, pal, { eyeU, fogU, bgU: this.bgU }, plan);
 
     // --- post: the shipped chain, manually — scene to a half-float target
     // (alpha = depth), bright + 3x widening blur at half res for bloom, the
