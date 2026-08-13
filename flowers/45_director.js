@@ -290,17 +290,26 @@ function flHull(pts) {
 
 function flDirField(specs) {
   let n = 0, sx = 0, sz = 0;
-  const fh = [], hs = [], pos = [], reach = [], plan = [];
+  const fh = [], hs = [], pos = [], reach = [], plan = [], tops = [];
   for (const s of specs) {
     if (!s.S) continue;
     const o = s.plan ? s.plan.origin : [0, 0, 0];
     sx += o[0]; sz += o[2]; n++;
     let ymax = 0, rch = 0;
-    for (const ax of s.S.plant.axes) for (const p of ax.pts) {
-      if (p[1] > ymax) ymax = p[1];
-      const rr = Math.hypot(p[0] - o[0], p[2] - o[2]);
-      if (rr > rch) rch = rr;
-      plan.push([p[0], p[2]]);
+    for (const ax of s.S.plant.axes) {
+      // THE SKYLINE, one point per axis: the highest station on it. That is
+      // what a low camera reads against the sky, and it has to be per AXIS and
+      // not per specimen — a plant's silhouette is made of all its shoots, and
+      // the tallest station of the whole specimen is one point of it.
+      let bt = null;
+      for (const p of ax.pts) {
+        if (p[1] > ymax) ymax = p[1];
+        const rr = Math.hypot(p[0] - o[0], p[2] - o[2]);
+        if (rr > rch) rch = rr;
+        plan.push([p[0], p[2]]);
+        if (!bt || p[1] > bt[2]) bt = [p[0], p[2], p[1]];
+      }
+      if (bt) tops.push(bt);
     }
     hs.push(ymax); reach.push(rch);
     // the weight is the specimen's own station count — how much PLANT is
@@ -382,7 +391,7 @@ function flDirField(specs) {
     const w = flFieldSpan({ cx, cz, hull }, a).half;
     if (w > pw) { pw = w; pa = a; }
   }
-  return { cx, cz, R, Rout, hMid, hHi, hTop: med(hs), pa, n, discs, hull };
+  return { cx, cz, R, Rout, hMid, hHi, hTop: med(hs), pa, n, discs, hull, plan, tops };
 }
 
 // THE FIELD ACROSS THE FRAME, from a heading. `half` is how far the field
@@ -808,24 +817,130 @@ function flDirPoseDolly(dir, F, bb, u) {
   return Math.max(3, F.R * 0.7);
 }
 
-// THE LOW UPWARD SHOT. Kneeling OUTSIDE the field at the foot of the best
-// flower's own plant and looking up it, so the plant and its neighbours cross
-// the sky's glow (FL_BG_FS's uGlow) instead of the ground — the one framing
-// here where a silhouette reads. Short: it is punctuation, not a scene.
+// WHERE A HEADING LEAVES THE FIELD — the standoff at which no drawn station is
+// within `margin` of the eye, exact and in closed form. A station at plan
+// offset (along, perp) from the field's middle is within `margin` of the ray
+// point at parameter t whenever |perp| < margin and t is between
+// along -+ sqrt(margin^2 - perp^2); the answer is the furthest such exit, which
+// is the smallest standoff on this heading with nothing on the lens.
+//
+// ⚠ IT IS THE STATIONS AND NOT THE DISCS, and the difference is a factor of two
+// in the answer. The disc model puts a circle of the specimen's REACH on its
+// origin, so one Ember Creeper trailing 43.3 units becomes a 43-unit disc that
+// the eye must leave in every direction — measured, that stood the low shot
+// 67.1 units out where the stations ask for less than half of it, and turned a
+// kneel into a distant shot. An arm is thin, and only the part of it that is
+// actually there should push the camera back.
+function flDirClearance(F, a, margin) {
+  const c = Math.cos(a), s = Math.sin(a), rx = Math.sin(a), rz = -Math.cos(a);
+  const m2 = margin * margin;
+  let D = 0;
+  for (const p of F.plan) {
+    const perp = (p[0] - F.cx) * rx + (p[1] - F.cz) * rz;
+    const q = m2 - perp * perp;
+    if (q <= 0) continue;
+    const t = (p[0] - F.cx) * c + (p[1] - F.cz) * s + Math.sqrt(q);
+    if (t > D) D = t;
+  }
+  return D;
+}
+// THE GAP NEAREST A HEADING. Every specimen has a bearing from the middle of
+// the field; between consecutive bearings there is an arc with no plant on it.
+// This returns the middle of whichever such arc lies nearest `a0`, which is
+// where a low camera can walk in without a trunk on the lens. It replaces a
+// hardcoded +0.55 rad, and the two are the same size on a stand of seven (seven
+// bearings, 51 degrees of arc each, so the nearest gap centre is never more
+// than 26 degrees away) — the difference is that this one knows where the
+// plants are.
+function flDirGap(F, a0) {
+  if (!F.discs || F.discs.length < 2) return a0;
+  const bs = F.discs.map(d => Math.atan2(d[1] - F.cz, d[0] - F.cx)).sort((p, q) => p - q);
+  let best = a0, bd = 1e9;
+  for (let i = 0; i < bs.length; i++) {
+    const m = (bs[i] + (i + 1 < bs.length ? bs[i + 1] : bs[0] + TAU)) / 2;
+    const dd = Math.abs(((m - a0 + Math.PI) % TAU + TAU) % TAU - Math.PI);
+    if (dd < bd) { bd = dd; best = m; }
+  }
+  return best;
+}
+
+// THE LOW UPWARD SHOT. Kneeling OUTSIDE the field and looking up into it, so
+// the plants cross the sky's glow (FL_BG_FS's uGlow) instead of the ground —
+// the one framing here where a silhouette reads. Short: punctuation, not a
+// scene.
+//
+// ⚠ IT DID NOT DO THAT, AND THE POSE ABOVE THIS LINE SAID SO WHILE THE
+// ARITHMETIC BELOW IT DISAGREED. Measured on ?garden=7&seed=21&shot=low with
+// tools/flowers_frame.mjs: the eye stood 35.3 units out with a worst canopy
+// clearance of MINUS 4.1 — inside an Ember Creeper that reaches 43.3 — the
+// drawn stations spanned NDC x from -3.5 to +1.8, so two thirds of the field
+// was off the sides of the picture, and there was no sky anywhere in the frame.
+// A wall of near foliage, which is exactly what its own comment warns about
+// three lines further down. Two numbers were stated rather than solved, and
+// both of them are solvable:
+//
+//   THE STANDOFF was 1.1 R + 4, a fraction of a radius that cannot know what
+//   any individual plant reaches. It is flDirClearance now: the distance at
+//   which the ray this shot stands on has left every canopy, plus a margin of
+//   one median flower height — near enough for the near plants to tower, far
+//   enough that none of them is ON the lens.
+//   THE PITCH was hMid*1.45 at the field's middle, an elevation that happens to
+//   be inside the canopy of anything taller than 1.45 median flowers. It is
+//   solved from the SKYLINE now, in exactly the way the establishing frame is
+//   solved from the field's top: find the highest thing this eye can see, and
+//   put it FL_LOW_SKY of the way up the frame, so what is above it is sky. That
+//   makes the pitch a function of what is standing there rather than of a
+//   fraction, and it never looks down — clamped at horizontal, because an
+//   upward shot that pitches down is not this shot.
+//
+// FL_LOW_SKY is 0.62 in NDC, i.e. the skyline four fifths of the way up the
+// frame with the top fifth open. It is by eye, the same category as FL_DRIFT
+// and the establishing frame's four fractions, and it is the only number here
+// that is not derived.
+const FL_LOW_SKY = 0.62;
 function flDirPoseLow(dir, F) {
-  const a = flDirAng(dir, F) + 0.55, c = Math.cos(a), s = Math.sin(a);
-  // Two thirds of the wide shot's standoff, the eye all but on the soil, and
-  // the aim ABOVE the flowers: the horizon drops off the bottom of the frame
-  // and the whole bank is read against the sky's glow instead of against the
-  // ground. ⚠ This was first built as a kneel at the foot of one plant, which
-  // is a beautiful idea and does not survive contact with this catalogue —
-  // these species carry leaves to the ground and reach 3-4 units, so an eye
-  // anywhere inside the ring is inside a canopy. Twice measured, twice a wall
-  // of blurred leaf. The only interior shot here is the close-up, which steers
-  // around its trunk on purpose.
-  const D = Math.max(F.R * 1.1 + 4, F.hTop * 1.35);
-  dir.wantEye.set(F.cx + c * D, FL_DIR_EYE_FLOOR * 0.85, F.cz + s * D);
-  dir.wantTgt.set(F.cx - c * F.R * 0.15, F.hMid * 1.45, F.cz - s * F.R * 0.15);
+  // enter through a gap rather than at a stated offset from the shot's heading,
+  // and — like the establishing frame's end — decide it ON THE CUT and hold it.
+  // The gap a heading is nearest to is a piecewise-constant function of that
+  // heading, and the orbit turns the heading all shot: recomputed every frame
+  // it steps from one gap to the next mid-hold, which is a teleport rather than
+  // a drift. Held, the orbit still swings the AIM through the gap it chose.
+  if (dir.cut || dir.lowAng === undefined) dir.lowAng = flDirGap(F, flDirAng(dir, F));
+  const a = dir.lowAng + flDirOrbit(dir), c = Math.cos(a), s = Math.sin(a);
+  const yE = FL_DIR_EYE_FLOOR * 0.85;
+  // outside every canopy, and no further out than it has to be: the floors are
+  // the old law, kept as a floor so a field of seedlings does not put the
+  // camera in among them.
+  const D = Math.max(F.R * 1.1 + 4, F.hTop * 1.35, flDirClearance(F, a, F.hMid));
+  const ex = F.cx + c * D, ez = F.cz + s * D;
+  // THE SKYLINE: the elevation the field's own tops rise to from this eye, over
+  // the ones in front of it, at the 85th percentile — the same statistic and
+  // for the same reason as `hHi`, that a stand of seven regularly hands one
+  // member a veto. Axis tops rather than specimen discs, because a disc's near
+  // edge is where its trailing arm lies on the ground and reading a plant's
+  // full height off a point ten units away pitched this camera into the sky
+  // with the whole field below the bottom edge (measured: NDC y -6.0 to -1.1).
+  //
+  // ⚠ AND A MAXIMUM IS NOT A SKYLINE, which was the second version and is the
+  // same mistake one rung down. The tallest thing in this field is a 49-unit
+  // Abyssal Frond, 50 degrees up from a kneeling eye 40 units away; pinning
+  // THAT to 0.62 of the frame is a camera pointed at the top of one plant, and
+  // it photographed an empty sky with foliage in two corners.
+  const els = [];
+  for (const p of F.tops) {
+    if ((p[0] - ex) * -c + (p[1] - ez) * -s <= 0) continue;
+    els.push(Math.atan2(p[2] - yE, Math.max(1, Math.hypot(p[0] - ex, p[1] - ez))));
+  }
+  els.sort((p, q) => p - q);
+  const phi = els.length ? els[Math.min(els.length - 1, Math.floor(els.length * 0.85))] : 0;
+  // and the pitch that puts it FL_LOW_SKY up the frame. tan(fovV/2) is half the
+  // lens's own frame height per unit of distance, which flDirLens already
+  // caches as kh; ndc.y for something at elevation (phi - theta) off the axis is
+  // tan(phi - theta) / tan(fovV/2).
+  const th = Math.max(0, phi - Math.atan(FL_LOW_SKY * (dir.kh || 0.752) / 2));
+  const L = Math.hypot(F.cx - ex, F.cz - ez);
+  dir.wantEye.set(ex, yE, ez);
+  dir.wantTgt.set(ex - c * L * Math.cos(th), yE + L * Math.sin(th), ez - s * L * Math.cos(th));
   flDirPace(dir, dir.wantEye.x, dir.wantEye.y, dir.wantEye.z);
   return Math.max(3, F.R * 0.8);
 }

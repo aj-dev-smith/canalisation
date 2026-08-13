@@ -150,7 +150,20 @@ const geom = await pg.evaluate(() => {
     off += n * (xl + xh) / 2; wsum += n;
   }
   const F = flDirField(fl.garden);
-  return { rows, span: [lo, hi], yspan: [ylo, yhi], xbar: off / wsum, F,
+  // and what the director's own laws say about the heading the eye is actually
+  // standing on — the pose functions are stateful, so this reads the ones that
+  // are pure functions of the field and compares them with where the camera is.
+  const e = cam.position;
+  const aEye = Math.atan2(e.z - F.cz, e.x - F.cx);
+  const law = {
+    aEye, aEyeDeg: aEye * 180 / Math.PI,
+    dEye: Math.hypot(e.x - F.cx, e.z - F.cz),
+    hMid: F.hMid,
+    clearance: typeof flDirClearance === 'function' ? flDirClearance(F, aEye, F.hMid) : undefined,
+    gap: typeof flDirGap === 'function' ? flDirGap(F, aEye) * 180 / Math.PI : undefined,
+    lowFloors: [F.R * 1.1 + 4, F.hTop * 1.35],
+  };
+  return { rows, span: [lo, hi], yspan: [ylo, yhi], xbar: off / wsum, F, law,
     eye: cam.position.toArray(), fov: cam.fov, aspect: cam.aspect };
 });
 
@@ -219,6 +232,12 @@ for (const r of geom.rows) {
   const cl = geom.rows.map(r => r.clear).sort((a, b) => a - b)[0];
   const nr = geom.rows.map(r => r.near).sort((a, b) => a - b)[0];
   console.log(`      WORST clearance ${f(cl, 1)} (negative = the eye is inside a canopy)   nearest drawn station ${f(nr, 1)}`);
+}
+{
+  const L = geom.law;
+  console.log(`\nLAW   the eye stands on heading ${f(L.aEyeDeg, 1)}deg at ${f(L.dEye, 1)} from the middle`);
+  console.log(`      flDirClearance on that heading (margin hMid ${f(L.hMid, 1)}) = ${f(L.clearance, 1)}   low floors ${L.lowFloors.map(v => f(v, 1)).join(' / ')}`);
+  console.log(`      nearest gap centre to it: ${f(L.gap, 1)}deg`);
 }
 
 const best = sweep.rows.slice().sort((p, q) => q.w - p.w)[0];
