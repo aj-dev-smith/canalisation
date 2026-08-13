@@ -15806,9 +15806,13 @@ function flDirCorridor(F, H) {
 //
 //     v = FL_GLIDE_K * FL_DRIFT * (frame width at the aim distance)
 //
-// which on ?garden=7&seed=21 is 3 * 0.0075 * 1.06 * 38 = 0.91 units/s, or
-// 5.7 cm/s in WORLD.unitM. Over a 26-second dwell plus its transition that is
-// about 30 units of travel through a field 61 units across. FL_GLIDE_K = 3 is
+// which on ?garden=7&seed=21 lands at 0.7-0.9 units/s (4.6-5.7 cm/s in
+// WORLD.unitM) depending on where the solved aim distance sits as the field
+// grows — the number that is NOT sensitive to that choice is the measured
+// screen rate, 2.1-2.2 %frame/s against FL_DRIFT's 0.75, which is what
+// tools/flowers_clip.mjs reports. Over a 26-second dwell plus its transition
+// that is roughly 25-30 units of travel through a field 61 units across.
+// FL_GLIDE_K = 3 is
 // the one number here that is chosen, and it is chosen as a ceiling: at 1 the
 // move is indistinguishable from the drift the other five shots already carry,
 // and the rate this measures is the one tools/flowers_clip.mjs reports.
