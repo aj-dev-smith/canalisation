@@ -17,7 +17,7 @@
 // single-specimen piece exactly (held to byte identity by the formref harness
 // + parity).
 //
-// ?shot=wide|bank|dolly|close|low pins the garden director to one shot, for stills.
+// ?shot=wide|bank|glide|dolly|close|low pins the garden director to one shot, for stills.
 
 function flBoot() {
   const q = new URLSearchParams(location.search);
@@ -115,7 +115,7 @@ function flBoot() {
   hint.textContent = 'drag to orbit · wheel to dolly';
   console.info('canalisation flowers — ?species= ?seed= ?speed= ?ff= '
     + '?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= '
-    + '?aniso= ?garden=2..12 ?radius= ?shot=wide|bank|dolly|close|low');
+    + '?aniso= ?garden=2..12 ?radius= ?shot=wide|bank|glide|dolly|close|low');
   // The form rail. A form is decided at founding — every organ's identity is
   // read off sp the step it is founded — so switching means regrowing, and
   // the honest way to regrow deterministically is a reload with the form in
@@ -333,7 +333,7 @@ function flBoot() {
   // distance). null on the solo page, where the shipped law below still runs
   // untouched.
   let dofPlan = null;
-  // ?shot=wide|bank|dolly|close|low pins the director to one shot — a capture
+  // ?shot=wide|bank|glide|dolly|close|low pins the director to one shot — a capture
   // affordance, the same category as ?ff=, so a still of a named shot is
   // reproducible. Unpinned (the page as watched) it cycles.
   let pinIdx = -2;   // resolved on first use — FL_DIR_SHOTS is in its TDZ at boot
@@ -374,7 +374,7 @@ function flBoot() {
       let sp = specs[0], ax;
       if (gardenN) {
         if (!focusPick || now - focusPickT > 3000) {
-          const p = flDirPick(specs, scene.camera.position, flowerScore, director.field);
+          const p = flDirPick(specs, scene.camera.position, flowerScore, director.field, pollen);
           focusPickT = now;
           if (p && (!focusPick || !specs[focusPick.i].S ||
             !specs[focusPick.i].B.floralBounds(focusPick.ai) ||
@@ -456,7 +456,7 @@ function flBoot() {
       // better challenger to actually move (measured: with no hysteresis the
       // top two trade places continuously).
       if (director.cut || !director.subj || !specs[director.subj.i].S) {
-        director.subj = flDirPick(specs, scene.camera.position, flowerScore, F);
+        director.subj = flDirPick(specs, scene.camera.position, flowerScore, F, pollen);
         director.pickT = now;
         // and how long to hold on it: a subject-bearing shot stretches or
         // shrinks its hold by up to a third with how good this one is against
@@ -464,8 +464,8 @@ function flBoot() {
         if (director.cut) flDirDwell(director, director.subj ? director.subj.score : 0);
       } else if (now - director.pickT > 6000) {
         director.pickT = now;
-        const cur = flDirScoreOf(specs, director.subj.i, director.subj.ai, flowerScore, F);
-        const p = flDirPick(specs, scene.camera.position, flowerScore, F);
+        const cur = flDirScoreOf(specs, director.subj.i, director.subj.ai, flowerScore, F, pollen);
+        const p = flDirPick(specs, scene.camera.position, flowerScore, F, pollen);
         if (p && p.score > cur * 1.6) director.subj = p;
       }
       const sj = director.subj;
@@ -533,6 +533,11 @@ function flBoot() {
       const u = flDirU(director);
       let rWant;
       if (name === 'dolly') { rWant = flDirPoseDolly(director, F, bb, u); dofPlan = { k: 0.35, min: 1.5 }; }
+      // THE TRAVERSE (45_director.js). Its lens is the shallowest of the field
+      // shots on purpose: the focal plane rides a fixed distance ahead down the
+      // lane, so `k` is what decides how thick the slab of sharp flowers is as
+      // they pass. It needs no subject — the aim is the far end of the lane.
+      else if (name === 'glide') { rWant = flDirPoseGlide(director, F, u); dofPlan = { k: 0.22, min: 1.5 }; }
       else if (name === 'low') { rWant = flDirPoseLow(director, F); dofPlan = { k: 0.45, min: 3.0 }; }
       // the establishing frame is SOLVED from the live camera's own fov and
       // aspect, so it is the one pose that is handed the camera
@@ -545,7 +550,10 @@ function flBoot() {
       // the solo framer uses: a cut across a field is a MOVE, and an
       // exponential move starts at its fastest.
       const w = smoothstep(0, 1, Math.min(1, director.el / flDirTrans(director)));
-      _poseE.copy(director.fromEye).lerp(director.wantEye, w);
+      // the eye swings AROUND the field rather than across it (flDirBlendEye);
+      // the target still lerps straight, because an aim has nothing to collide
+      // with and an arced aim is a swerve
+      flDirBlendEye(_poseE, director, F, w);
       _poseT.copy(director.fromTgt).lerp(director.wantTgt, w);
       scene.camera.position.lerp(_poseE, 0.12);
       target.lerp(_poseT, 0.12);
