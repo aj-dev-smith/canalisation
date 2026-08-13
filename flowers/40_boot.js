@@ -368,7 +368,7 @@ function flBoot() {
       let sp = specs[0], ax;
       if (gardenN) {
         if (!focusPick || now - focusPickT > 3000) {
-          const p = flDirPick(specs, scene.camera.position, flowerScore, director.field);
+          const p = flDirPick(specs, scene.camera.position, flowerScore, director.field, pollen);
           focusPickT = now;
           if (p && (!focusPick || !specs[focusPick.i].S ||
             !specs[focusPick.i].B.floralBounds(focusPick.ai) ||
@@ -450,7 +450,7 @@ function flBoot() {
       // better challenger to actually move (measured: with no hysteresis the
       // top two trade places continuously).
       if (director.cut || !director.subj || !specs[director.subj.i].S) {
-        director.subj = flDirPick(specs, scene.camera.position, flowerScore, F);
+        director.subj = flDirPick(specs, scene.camera.position, flowerScore, F, pollen);
         director.pickT = now;
         // and how long to hold on it: a subject-bearing shot stretches or
         // shrinks its hold by up to a third with how good this one is against
@@ -458,8 +458,8 @@ function flBoot() {
         if (director.cut) flDirDwell(director, director.subj ? director.subj.score : 0);
       } else if (now - director.pickT > 6000) {
         director.pickT = now;
-        const cur = flDirScoreOf(specs, director.subj.i, director.subj.ai, flowerScore, F);
-        const p = flDirPick(specs, scene.camera.position, flowerScore, F);
+        const cur = flDirScoreOf(specs, director.subj.i, director.subj.ai, flowerScore, F, pollen);
+        const p = flDirPick(specs, scene.camera.position, flowerScore, F, pollen);
         if (p && p.score > cur * 1.6) director.subj = p;
       }
       const sj = director.subj;

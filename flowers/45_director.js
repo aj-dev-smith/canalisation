@@ -487,7 +487,61 @@ function flDirCompact(bb) {
   return smoothstep(4.0, 1.0, bb.r);
 }
 
-function flDirScoreOf(specs, i, ai, scoreAxis, F) {   // i === 0 is the hero
+// IS THERE ANYTHING IN THE AIR AROUND THIS FLOWER — and the population is asked
+// rather than the plant. `tools/flowers_motes.mjs` reports 0 grains of 320 in
+// frame at the close-up, and the reason is not the grain size that tool was
+// built to measure: on ?garden=7&seed=21 the subject was specimen 2, a
+// twenty-station Sulphur Rosette with a corolla at height 3.8 that sheds
+// NOTHING, while the other six shed 320 grains between them at mean heights
+// 12.7 to 21.5 — a plume four frame-heights above the picture (mean ndc.y 3.3
+// to 4.9). A close-up cannot show motes that are not there.
+//
+// The honest form of the fix is a term in the SUBJECT SCORE, and the honest
+// source for it is the pollen itself. The alternative — re-deriving which
+// organs are dehiscing from `whorl`, `dev` and `sen` — is a second copy of
+// FlPollen._sources's gates that would drift from it inside a month, and it
+// answers a worse question anyway: what a close-up needs is not that this
+// flower HAS anthers but that there is pollen in the air where the camera is
+// about to point. A grain that has drifted off is somebody else's mote.
+//
+// The radius is the corolla's own drawn bound, taken generously (2.5 r, floored
+// at 1.5 units so a small flower still has an airspace): the close-up ends up
+// about 4.2 corolla radii out with the corolla filling the frame, so a grain
+// inside that sphere is a grain in the picture. The weight runs 0.8 to 1.4, the
+// same 1.75x spread as `rim` and the same job — enough to decide between two
+// comparable corollas, not enough to overturn a petal count.
+//
+// ⚠ AND ON THE SEED THIS WAS BUILT FOR IT DOES NOT WIN, WHICH IS THE HONEST
+// HEADLINE AND IS NOT A BUG IN THIS TERM. The subject at ?garden=7&seed=21 is a
+// Sulphur Rosette carrying 33 petals on a corolla of radius 1.81: base score
+// 13.68 against 2.14 for the best flower that IS shedding. Nothing defensible
+// closes a factor of six, and nothing should — that really is the best corolla
+// in the field. What it cannot do is shed, and the reason is structural: that
+// species has `whorlBands: false`, so every one of its floral organs carries
+// the `petal` flag and FlPollen._sources — which skips petals — finds no anther
+// on it at all. Measured across the field: 33/33 organs petal on specimen 2,
+// against 23 stamens of 76 organs on the Abyssal Frond.
+//
+// So the field's showiest corolla and its shedding corollas are different
+// flowers here for a reason, and `close` keeps returning 0 grains in frame. The
+// framing half of that was measured too and rejected on the measurement: at
+// seed 31 the subject's OWN plume sits at mean height 26.8 against a corolla at
+// 17.2, nine units above a frame about five units tall, so no headroom this
+// shot could give would reach it. A grain drifts ~0.32 units per unit of plant
+// time and lives a long time; by the time there are grains they are gone.
+function flDirPlume(pol, bb) {
+  if (!pol || !pol.n) return 0;
+  const r = Math.max(1.5, bb.r * 2.5), r2 = r * r;
+  let n = 0;
+  for (let i = 0; i < pol.n; i++) {
+    const o = i * 7;
+    const dx = pol.buf[o] - bb.c[0], dy = pol.buf[o + 1] - bb.c[1], dz = pol.buf[o + 2] - bb.c[2];
+    if (dx * dx + dy * dy + dz * dz < r2) n++;
+  }
+  return 0.8 + 0.6 * smoothstep(0, 6, n);
+}
+
+function flDirScoreOf(specs, i, ai, scoreAxis, F, pol) {   // i === 0 is the hero
   const s = specs[i];
   if (!s || !s.S || !s.S.plant.axes[ai]) return 0;
   const base = scoreAxis(s, ai);
@@ -496,10 +550,11 @@ function flDirScoreOf(specs, i, ai, scoreAxis, F) {   // i === 0 is the hero
   if (!bb) return 0;
   const rim = F ? 0.65 + 0.5 * smoothstep(0, F.R, Math.hypot(bb.c[0] - F.cx, bb.c[2] - F.cz)) : 1;
   return base * (0.25 + 0.75 * flDirOpenness(s.S.plant.axes[ai]))
-    * flDirCrowd(specs, s, bb) * rim * flDirCompact(bb) * (i === 0 ? FL_DIR_HERO : 1);
+    * flDirCrowd(specs, s, bb) * rim * flDirCompact(bb) * flDirPlume(pol, bb)
+    * (i === 0 ? FL_DIR_HERO : 1);
 }
 
-function flDirPick(specs, eye, scoreAxis, F) {   // eslint-disable-line no-unused-vars
+function flDirPick(specs, eye, scoreAxis, F, pol) {   // eslint-disable-line no-unused-vars
   let best = null, bs = 0;
   for (let i = 0; i < specs.length; i++) {
     const s = specs[i];
@@ -519,7 +574,9 @@ function flDirPick(specs, eye, scoreAxis, F) {   // eslint-disable-line no-unuse
       // middle of it. F is optional: ?focus=flower asks before the field has
       // been measured on the first frame.
       const rim = F ? 0.65 + 0.5 * smoothstep(0, F.R, Math.hypot(bb.c[0] - F.cx, bb.c[2] - F.cz)) : 1;
-      const sc = base * open * clear * rim * flDirCompact(bb) * (i === 0 ? FL_DIR_HERO : 1);
+      // and whether there is anything in the air around it — see flDirPlume
+      const sc = base * open * clear * rim * flDirCompact(bb) * flDirPlume(pol, bb)
+        * (i === 0 ? FL_DIR_HERO : 1);
       if (sc > bs) { bs = sc; best = { i, ai, bb, score: sc }; }
     }
   }

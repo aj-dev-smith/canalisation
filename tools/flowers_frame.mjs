@@ -217,6 +217,80 @@ const sweep = await pg.evaluate(() => {
   return { rows: out, D, yT, yE, pa: F.pa };
 });
 
+// WHOSE GRAINS ARE THESE, AND ARE THEY ANYWHERE NEAR THE SUBJECT?
+// tools/flowers_motes.mjs answers how big a grain is drawn and how many are in
+// frame; when the answer is zero, the next question is whether the population
+// is somewhere else or the FRAME is. This assigns every live grain to the
+// nearest specimen origin in plan and reports where each specimen's plume sits
+// relative to the shot, so "the close-up has no motes" separates into "the
+// subject is not shedding" and "the subject's plume is out of frame".
+const pollen = await pg.evaluate(() => {
+  const fl = window.__fl, p = fl.pollen, cam = fl.scene.camera;
+  if (!p || !p.n) return null;
+  cam.updateMatrixWorld();
+  const mvp = new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+  const v = new THREE.Vector4();
+  const by = fl.garden.map(() => ({ n: 0, inFrame: 0, y: 0, ndcY: 0, dist: 0 }));
+  const st = fl.state();
+  for (let i = 0; i < p.n; i++) {
+    const o = i * 7, x = p.buf[o], y = p.buf[o + 1], z = p.buf[o + 2];
+    let bi = 0, bd = 1e9;
+    for (let j = 0; j < fl.garden.length; j++) {
+      const g = fl.garden[j];
+      if (!g.S) continue;
+      const q = g.plan ? g.plan.origin : [0, 0, 0];
+      const d = Math.hypot(x - q[0], z - q[2]);
+      if (d < bd) { bd = d; bi = j; }
+    }
+    v.set(x, y, z, 1).applyMatrix4(mvp);
+    const on = v.w > 0 && Math.abs(v.x) <= v.w && Math.abs(v.y) <= v.w && v.z >= -v.w && v.z <= v.w;
+    const r = by[bi];
+    r.n++; if (on) r.inFrame++;
+    r.y += y; r.ndcY += v.w > 0 ? v.y / v.w : 0;
+    r.dist += Math.hypot(x - cam.position.x, y - cam.position.y, z - cam.position.z);
+  }
+  // and the director's own subject-score factors, for every floral axis in the
+  // field. `flowerScore` is a closure inside flBoot and cannot be reached, so
+  // the base term is missing — but every MULTIPLIER is a global function and
+  // they are what a garden adds, so this says which of them is deciding.
+  const F = flDirField(fl.garden);
+  const cand = [];
+  for (let i = 0; i < fl.garden.length; i++) {
+    const s = fl.garden[i];
+    if (!s.S) continue;
+    for (let ai = 0; ai < s.S.plant.axes.length; ai++) {
+      const ax = s.S.plant.axes[ai];
+      if (!ax.floral) continue;
+      const bb = s.B.floralBounds(ai);
+      if (!bb) continue;
+      // the shipped base score, re-implemented from 40_boot's flowerScore
+      // (which is a closure). ⚠ A SECOND IMPLEMENTATION IS A THING THAT DRIFTS:
+      // if this column stops agreeing with which subject the page picks, this
+      // copy is the suspect, not the page.
+      let np = 0;
+      for (const org of ax.organs) if (org.petal && org.len > 0.05) np++;
+      let clear = 1;
+      if (ai !== 0) {
+        let tp = null, bd = 1e9;
+        for (const q of s.S.plant.axes[0].pts) {
+          const d = Math.abs(q[1] - bb.c[1]);
+          if (d < bd) { bd = d; tp = q; }
+        }
+        clear = tp ? smoothstep(0.25, 1.0,
+          Math.hypot(bb.c[0] - tp[0], bb.c[2] - tp[2]) / Math.max(0.3, bb.r)) : 1;
+      }
+      const base = np < 3 ? 0 : np / (0.6 + bb.r) * (0.15 + 0.85 * clear);
+      cand.push({ i, ai, r: bb.r, y: bb.c[1], base, np,
+        open: 0.25 + 0.75 * flDirOpenness(ax),
+        crowd: flDirCrowd(fl.garden, s, bb),
+        rim: 0.65 + 0.5 * smoothstep(0, F.R, Math.hypot(bb.c[0] - F.cx, bb.c[2] - F.cz)),
+        compact: flDirCompact(bb),
+        plume: typeof flDirPlume === 'function' ? flDirPlume(p, bb) : undefined });
+    }
+  }
+  return { rows: by, subj: st.subj, shot: st.shot, tgt: st.target, n: p.n, cand };
+});
+
 const f = (x, d = 3) => (x === undefined ? 'n/a' : (+x).toFixed(d));
 console.log(`\nINK   centroid  x ${f(ink.cx)}  y ${f(ink.cy)}      (0,0 is the middle of the frame)`);
 console.log(`      halves    left ${f(ink.leftShare)}  top ${f(ink.topShare)}   (0.5 each is balanced)`);
@@ -238,6 +312,20 @@ for (const r of geom.rows) {
   console.log(`\nLAW   the eye stands on heading ${f(L.aEyeDeg, 1)}deg at ${f(L.dEye, 1)} from the middle`);
   console.log(`      flDirClearance on that heading (margin hMid ${f(L.hMid, 1)}) = ${f(L.clearance, 1)}   low floors ${L.lowFloors.map(v => f(v, 1)).join(' / ')}`);
   console.log(`      nearest gap centre to it: ${f(L.gap, 1)}deg`);
+}
+if (pollen) {
+  console.log(`\nMOTES ${pollen.n} live grains  ·  shot ${pollen.shot}  ·  subject ${pollen.subj ? 'specimen ' + pollen.subj.i + ' axis ' + pollen.subj.ax : 'none'}  ·  target ${pollen.tgt.map(v => f(v, 1)).join(', ')}`);
+  for (let i = 0; i < pollen.rows.length; i++) {
+    const r = pollen.rows[i];
+    if (!r.n) continue;
+    console.log(`      [${i}] ${String(r.n).padStart(4)} grains  ${String(r.inFrame).padStart(4)} in frame   mean height ${f(r.y / r.n, 1).padStart(6)}  mean ndc.y ${f(r.ndcY / r.n, 2).padStart(7)}  mean range ${f(r.dist / r.n, 1)}`);
+  }
+  const cs = pollen.cand.slice().sort((p, q) =>
+    (q.base * q.open * q.crowd * q.rim * q.compact * (q.plume || 1) * (q.i === 0 ? 1.25 : 1)) - (p.base * p.open * p.crowd * p.rim * p.compact * (p.plume || 1) * (p.i === 0 ? 1.25 : 1)));
+  console.log(`      subject score, best first (base re-implemented from 40_boot's closure — see the tool):`);
+  for (const c of cs.slice(0, 8)) {
+    console.log(`        [${c.i}] ax ${String(c.ai).padStart(2)}  petals ${String(c.np).padStart(2)} base ${f(c.base, 2)}  r ${f(c.r, 2)} y ${f(c.y, 1).padStart(5)}   open ${f(c.open, 2)}  crowd ${f(c.crowd, 2)}  rim ${f(c.rim, 2)}  compact ${f(c.compact, 2)}  plume ${f(c.plume, 2)}   product ${f(c.base * c.open * c.crowd * c.rim * c.compact * (c.plume || 1) * (c.i === 0 ? 1.25 : 1), 3)}`);
+  }
 }
 
 const best = sweep.rows.slice().sort((p, q) => q.w - p.w)[0];
