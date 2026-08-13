@@ -66,8 +66,19 @@ for (const name of ['Ember Creeper', 'Nightglass Parasol']) {
   const B1 = new M.FlowerBuffers();
   M.flDrawSpecimen(env2, B1, S);
 
-  ok(B0.triN === B1.triN + (B1.petbN / 16) * 10, 'tri floats reconcile',
-    `shipped ${B0.triN} == captured ${B1.triN} + petal ${(B1.petbN / 16) * 10}`);
+  // The capture now DROPS triangles with no area (10_capture.js): a blade's
+  // parametrisation collapses to a point at the leaf base, so the shipped
+  // emitter posts a column of them, and the rasteriser occasionally lights one
+  // with garbage varyings — the one-frame flash. The reconciliation stays exact
+  // rather than being loosened for it: shipped == captured + petal + dropped.
+  const dropped = (B1.degen.tri * 3) * 10 + (B1.degen.pet * 3) * 10;
+  ok(B0.triN === B1.triN + (B1.petbN / 16) * 10 + dropped, 'tri floats reconcile',
+    `shipped ${B0.triN} == captured ${B1.triN} + petal ${(B1.petbN / 16) * 10} + no-area ${dropped}`);
+  ok(B1.degen.tri + B1.degen.pet > 0, 'no-area triangles found and dropped',
+    `tri ${B1.degen.tri} + pet ${B1.degen.pet} of ` +
+    `${(B0.triN / 30) | 0} (${(100 * (B1.degen.tri + B1.degen.pet) / (B0.triN / 30)).toFixed(1)}%)`);
+  ok(B1.triN % 30 === 0 && B1.petbN % 48 === 0, 'streams are whole triangles',
+    `tri ${B1.triN} % 30, pet ${B1.petbN} % 48`);
   ok(B0.lineN / 42 === B1.segN / 12, 'ribbon count',
     `shipped ${B0.lineN / 42} == captured ${B1.segN / 12}`);
   ok(B0.ptN === B1.ptN, 'pt floats', `${B0.ptN} == ${B1.ptN}`);
