@@ -1000,20 +1000,66 @@ function flDirPoseBank(dir, F) {
 // wall of blurred leaf with the subject behind it. In a field this dense the
 // only reliable interior shot is the close-up, which steers around a trunk on
 // purpose (frameAxisFlower). Everything else stands outside and looks in.
+//
+// --- AND IT WAS STILL A WALL, FOR A REASON THAT IS NOT CLEARANCE. ------------
+//
+// Every other repair in this file is about the eye being INSIDE something:
+// flDirClearance stands the low shot out of the canopies, flDirRise cranes a
+// transition out of what it is in, FL_DIR_BRUSH is "the distance at which the
+// lens stops being inside the plant". Pointed at the dolly all three say the
+// shot is fine, and they are right. Measured with tools/flowers_hold.mjs over
+// eight bearings — the heading jitter walks by the golden angle, so one
+// rotation is one bearing and a single measurement of this shot means nothing —
+// the dolly's eye is 13.0 to 41.0 units from anything drawn at every sample of
+// its chord, on both seeds and at three stages of growth. FL_DIR_BRUSH is 3.
+// A standoff solved by flDirClearance would not move this shot by a millimetre.
+//
+// WHAT FILLS THE FRAME IS THE LENS, AND IT IS A CLOSED FORM. 40_boot focuses at
+// the eye-to-target distance and sets uRange to FL_DIR_DOLLY_DOF.k of it, so
+// everything nearer than (1 - k) * fd is at or past FULL blur. The dolly aims
+// near the middle of the field, so fd is about the standoff D and the field's
+// near rim is at D - Rout. That rim is unreadable whenever
+//
+//     D - Rout < (1 - k) * D      i.e.      D < Rout / k = 2.86 Rout
+//
+// and this shot stands at D = max(1.25 R + 4, 1.45 hTop), which on
+// ?garden=7&seed=21 is 46 against 2.86 * 30.6 = 87. So the near third of the
+// field is at full blur in this shot BY CONSTRUCTION, and no standoff fixes it
+// short of the establishing frame's own 88-111 units. That is not a hypothesis:
+// at ?garden=7&seed=1337&ff=5000 hTop grows to 47.1, the existing floor puts the
+// dolly at 69.4 on its own, and its wall does fall (47% -> 26%) — because it has
+// stopped being a near-field lateral track and become a second wide shot. THAT
+// IS THE FAILURE MODE, NOT THE FIX. The standoff is left exactly as it was.
+//
+// SO THE FREE VARIABLE IS WHERE THE CHORD RUNS, AND IT IS SOLVED NOW. What sits
+// in the blur band depends entirely on which side of the stand the track is
+// taken from, and that is the one thing this pose never asked: it took flDirAng
+// — the field's diameter, flipped and jittered — and stood there. Measured
+// across eight bearings at ?garden=7&seed=21&ff=4000 the same shot covers 16% of
+// the frame in unreadable foreground from the best of them and 40% from the
+// worst, a factor of 2.5 decided by an irrational walk. flDirDollySolve picks
+// the emptiest bearing and chord placement inside a window around the heading
+// the shot would have taken — the same shape of move as flDirGap for the low
+// shot and flDirCorridor for the traverse, and it keeps the alternation and the
+// jitter that stop a cycling director reading as a loop.
 function flDirPoseDolly(dir, F, bb, u) {
-  const a = flDirAng(dir, F), c = Math.cos(a), s = Math.sin(a);
   const D = Math.max(F.R * 1.25 + 4, F.hTop * 1.45);
+  // decided ON THE CUT and held, like the establishing frame's end, the low
+  // shot's gap and the traverse's lane: a track re-aimed while the camera is on
+  // it is a swerve, and the field is re-measured every 500 ms underneath it.
+  if (dir.cut || !dir.dolly) dir.dolly = flDirDollySolve(dir, F, bb, D);
+  const a = dir.dolly.a + flDirOrbit(dir), c = Math.cos(a), s = Math.sin(a);
   // ⚠ THE DOLLY USED TO STOP. Its travel was `2*smoothstep(0,1,u)-1` over the
   // whole shot, which is an ease at BOTH ends — so the one shot in the list
   // that is going somewhere spent its last four seconds arriving and its last
   // two parked, which is the freeze frame this pass exists to remove. It eases
   // in over the first fifth and then runs at a constant rate straight through
   // the cut, so the camera is still moving on the frame the next shot blends
-  // from. `a0/2` is the area the ease gives away and dividing by `1 - a0/2`
+  // from. `e0/2` is the area the ease gives away and dividing by `1 - e0/2`
   // puts f(1) back at 1, so the shot covers exactly the chord it always did.
-  const a0 = 0.2;
-  const f = u < a0 ? u * u / (2 * a0) : u - a0 / 2;
-  const t = (2 * (f / (1 - a0 / 2)) - 1) * F.R * 0.95;
+  const e0 = 0.2;
+  const f = u < e0 ? u * u / (2 * e0) : u - e0 / 2;
+  const t = dir.dolly.off + (2 * (f / (1 - e0 / 2)) - 1) * F.R * 0.95;
   dir.wantEye.set(F.cx + c * D - s * t,
     Math.max(FL_DIR_EYE_FLOOR, F.hMid * 0.42),
     F.cz + s * D + c * t);
@@ -1026,6 +1072,139 @@ function flDirPoseDolly(dir, F, bb, u) {
   // travel is already running when the transition lands
   flDirPace(dir, dir.wantEye.x, dir.wantEye.y, dir.wantEye.z);
   return Math.max(3, F.R * 0.7);
+}
+// The dolly's lens, and it lives here rather than in 40_boot because the pose
+// above is solved AGAINST it — a shot whose framing depends on its own depth of
+// field must not read that number out of a second copy. 40_boot's per-shot
+// dofPlan for `dolly` is this object.
+const FL_DIR_DOLLY_DOF = { k: 0.35, min: 1.5 };
+// HOW MUCH OF THE PICTURE IS INSIDE THE LENS'S BLUR BAND — flDirClearance's
+// question asked about DEPTH instead of radius. That one asks how far ALONG a
+// heading the eye must stand for a cylinder of radius `margin` around it to be
+// empty; this asks how much drawn surface lies in the frustum BETWEEN the eye
+// and the near limit of focus, which is the tissue a viewer can neither read
+// nor see past.
+//
+// The limit is the renderer's own and nothing here is chosen: uFocus is the
+// eye-to-target distance, uRange is max(min, k*fd), and the defocus pass blurs
+// by |z - uFocus| / uRange, so `fd - rng` is exactly where full blur begins.
+//
+// `g` is the growth allowance (flDirGrowth), added to the frame's own half
+// extents so tissue standing just outside the cone at the cut — which will have
+// grown into it before the hold ends — is counted now.
+//
+// It walks F.solid, the drawn SURFACE, and not the plan model in F.drawn: the
+// question is what covers the frame, and a blade meets a lens face-on. That is
+// the same correction the crane's solve needed (see the note above F.solid in
+// flDirField, where a sampled organ AXIS reported 4 units of clearance on a path
+// whose true clearance was 0.46).
+function flDirBlurLoad(F, ex, ey, ez, tx, ty, tz, kw, kh, g) {
+  const dx = tx - ex, dy = ty - ey, dz = tz - ez;
+  const L = Math.hypot(dx, dy, dz);
+  if (!(L > 1)) return 0;
+  const ux = dx / L, uy = dy / L, uz = dz / L;
+  const zs = L - Math.max(FL_DIR_DOLLY_DOF.min, L * FL_DIR_DOLLY_DOF.k);
+  if (zs <= 1) return 0;
+  let n = 0;
+  for (const p of F.solid) {
+    // F.solid is [x, z, y] — plan first, height last
+    const px = p[0] - ex, py = p[2] - ey, pz = p[1] - ez;
+    const al = px * ux + py * uy + pz * uz;
+    if (al < 1 || al > zs) continue;
+    const qx = px - ux * al, qy = py - uy * al, qz = pz - uz * al;
+    const hh = al * kh * 0.5 + g, hw = al * kw * 0.5 + g;
+    if (qy > hh || qy < -hh) continue;
+    if (qx * qx + qz * qz > hw * hw) continue;
+    n++;
+  }
+  return n;
+}
+// HOW FAST THE FIELD IS GROWING, MEASURED OFF THE FIELD ITSELF. The dolly's
+// bearing is decided on the cut and held for a transition plus eighteen seconds,
+// and the stand is not the same stand at the end of that: measured on
+// ?garden=7&seed=21 with tools/flowers_hold.mjs, Rout goes 30.6 at step 3000 to
+// 57.2 at step 5000, and the live page runs about 11.5 steps a second, so the
+// field's outer bound gains roughly 0.15 units a second and about 3.5 over one
+// dolly.
+//
+// Rather than state that number this reads it: F.Rout against the director's own
+// clock (t0 is a millisecond timestamp, el is seconds into the shot), sampled no
+// faster than every 2 s with a slow EMA. Two guards, both labelled:
+//   - the rate is floored at zero, because a field that has stopped growing and
+//     started senescing must not hand back a NEGATIVE margin;
+//   - the ALLOWANCE is capped at a quarter of R. Rout is an 85th percentile of
+//     (distance + reach) and a percentile is not continuous in a growing stand —
+//     one arm crossing the p85 boundary moves it by tens of units between two
+//     500 ms measurements, and an uncapped rate off that step would inflate the
+//     cone until every candidate bearing scored alike and the solve went blind.
+//     Measured, the cap does not bite: 0.15 u/s over a 23 s shot asks ~3.5 units
+//     against a cap of ~7.
+// ⚠ IT RETURNS ZERO UNDER A HARNESS, and that is correct rather than a hole.
+// tools/flowers_hold.mjs and tools/flowers_trans.mjs drive these poses with a cut
+// TOKEN in t0 and a frozen field, so no interval of real time ever elapses and no
+// growth is ever measured — exactly right for a reconstruction of one instant.
+// The allowance is a claim about a film and the film is where it is checked.
+function flDirGrowth(dir, F) {
+  const t = (dir.t0 || 0) / 1000 + (dir.el || 0);
+  if (dir.growT === undefined || t < dir.growT || t > dir.growT + 600) {
+    dir.growT = t; dir.growR = F.Rout;
+    return dir.growV || 0;
+  }
+  const dt = t - dir.growT;
+  if (dt >= 2) {
+    const r = Math.max(0, (F.Rout - dir.growR) / dt);
+    dir.growV = dir.growV === undefined ? r : dir.growV + (r - dir.growV) * 0.25;
+    dir.growT = t; dir.growR = F.Rout;
+  }
+  return dir.growV || 0;
+}
+// WHERE THE TRACK RUNS. A window of headings around the one the shot would have
+// taken, times three placements of the chord along its own line, each scored by
+// how much drawn surface sits in the blur band at four positions of the travel —
+// the whole chord, because a chord is not a pose and only one point of it was
+// ever solved against anything.
+//
+// THE WINDOW IS BOUNDED AT +-0.9 rad, and that is a decision rather than a
+// timidity. The heading alternates end for end at every cut (dir.flip) and
+// jitters by +-0.5 rad, and those two are what stop a six-shot loop reading as a
+// loop; a search wider than the jitter would overrule both and park every dolly
+// on the same good bearing. Nine steps of 0.225 rad is a shade finer than the 26
+// degrees flDirGap's own comment measures as its typical correction on a stand
+// of seven. It is the same bargain that file strikes: search for the nearest
+// good answer, not the best one anywhere.
+const FL_DOLLY_OFFS = [-0.45, 0, 0.45];
+function flDirDollySolve(dir, F, bb, D) {
+  const a0 = flDirAng(dir, F);
+  const kw = dir.kw || 1.06, kh = dir.kh || 0.752;
+  const T = flDirTrans(dir) + FL_DIR_SHOTS[dir.shot].hold * (dir.holdK || 1);
+  const g = Math.min(0.25 * F.R, flDirGrowth(dir, F) * T);
+  const ey = Math.max(FL_DIR_EYE_FLOOR, F.hMid * 0.42);
+  const tx = lerp(F.cx, bb.c[0], 0.65);
+  const ty = lerp(F.hMid * 0.85, bb.c[1], 0.65);
+  const tz = lerp(F.cz, bb.c[2], 0.65);
+  let best = null;
+  for (let i = -4; i <= 4; i++) {
+    const a = a0 + i * 0.225, c = Math.cos(a), s = Math.sin(a);
+    for (const o of FL_DOLLY_OFFS) {
+      const off = o * F.R;
+      let load = 0;
+      for (let k = 0; k < 4; k++) {
+        const t = off + (2 * (k / 3) - 1) * F.R * 0.95;
+        load += flDirBlurLoad(F, F.cx + c * D - s * t, ey, F.cz + s * D + c * t,
+          tx, ty, tz, kw, kh, g);
+      }
+      // ⚠ TIES GO TO THE POSE THE SHOT WOULD HAVE TAKEN. A strict `<` keeps the
+      // first candidate found, which is the far end of the window; on a field
+      // with nothing in the band every bearing scores zero and the dolly would
+      // then sit at a0 - 0.9 rad every single time, which is a stated offset
+      // wearing a solve's clothes. The unshifted pose wins at equal load.
+      const bias = Math.abs(i) + (o === 0 ? 0 : 0.5);
+      if (!best || load < best.load || (load === best.load && bias < best.bias)) {
+        best = { a, off, load, bias, g };
+      }
+    }
+  }
+  return best;
 }
 
 // WHERE A HEADING LEAVES THE FIELD — the standoff at which no drawn station is

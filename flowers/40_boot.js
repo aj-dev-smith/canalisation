@@ -568,7 +568,11 @@ function flBoot() {
       // different quantities computed in two files
       const u = flDirU(director);
       let rWant;
-      if (name === 'dolly') { rWant = flDirPoseDolly(director, F, bb, u); dofPlan = { k: 0.35, min: 1.5 }; }
+      // ⚠ THE DOLLY'S LENS LIVES IN 45_director.js AND IS READ HERE, NOT COPIED.
+      // Its pose is now solved against its own depth of field (flDirBlurLoad),
+      // so a second copy of k and min would be a shot framed for a lens the
+      // renderer is not using.
+      if (name === 'dolly') { rWant = flDirPoseDolly(director, F, bb, u); dofPlan = FL_DIR_DOLLY_DOF; }
       // THE TRAVERSE (45_director.js). Its lens is the shallowest of the field
       // shots on purpose: the focal plane rides a fixed distance ahead down the
       // lane, so `k` is what decides how thick the slab of sharp flowers is as
