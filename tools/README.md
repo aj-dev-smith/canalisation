@@ -237,6 +237,52 @@ field's capture cost per specimen, per organ kind and per stream without a
 browser — and it grows the field `flGardenPlan` plans *with the germination
 stagger*, so it is the page's field and not a different one.
 
+### Six probes for a one-frame flash, and why there are six
+
+AJ reported "glitchy flashes on flowers". Six instruments were needed to convict
+it, each answering the question the previous one raised, and none of them could
+have been skipped — the mechanism turned out to be **rasterisation**, which is
+two layers below where every plausible first guess pointed. The whole story,
+with numbers, is the last section of [flowers/README.md](../flowers/README.md);
+what belongs here is what each tool is *for*, because they generalise:
+
+- `flowers_glitch.mjs '<query>' <seconds> <outdir>` — the one that sees what a
+  person sees. Tile-diffs the canvas per frame from a rAF registered after the
+  app's, excludes camera-motion frames, and saves the glitch frame at full
+  resolution **the frame it happens**. A screenshot loop cannot catch 16 ms.
+- `flowers_peak.mjs '<query>' <seconds> [outdir]` — the HDR scene target's peak,
+  every frame, for the price of one small `readPixels`: a max-reduce over 8x8
+  blocks into a byte target as `log2(1+L)/16`. **Its real trick is attribution
+  in the same frame** — on a spike it re-renders each stream solo, with geometry,
+  camera and uniforms still exactly as they were, so the bisect cannot be
+  confounded by the flash not recurring. Five separate runs collapse to one.
+- `flowers_scan.mjs '<query>' [seconds]` — the CPU side: extremes and non-finites
+  per stream per specimen, reported with the *organ* the offending vertex belongs
+  to. Its first version checked only colour and emissive and missed that the
+  minimum normal length was zero. **Scan every field, not the suspects.**
+- `flowers_term.mjs '<query>' <seconds>` — one debug fragment shader per TERM of
+  the tri shader, each reduced through the same max pass, so every term is
+  measured on the same fragment that produced the spike. This is where a varying
+  turned out to be five to thirty times outside the hull of its own vertex
+  values, which is what moved the search from shading to interpolation.
+- `flowers_kind.mjs '<query>' <seconds>` — the same idea one level finer:
+  `FlowerBuffers` records `[tri0, tri1)` per organ, so the tri stream can be
+  re-rendered **one organ kind at a time**. Leaf, never stem.
+- `flowers_sliver.mjs '<query>' <seconds>` — projects every triangle on the spike
+  frame, finds the ones covering the flash block, and reports screen area, world
+  area and organ. Screen-and-world area both zero is a triangle that was emitted
+  degenerate; screen-only is one seen edge-on, and projection preserves
+  collinearity so the two separate cleanly.
+- `flowers_black.mjs '<query>' <seconds>` — a one-question tool for the *second*
+  artefact (a one-frame black square, unrelated and unfixed): read the canvas
+  twice in the same frame and see whether the two readers agree. They do, 376 out
+  of 376, so it is in the drawing buffer and not in the instrument.
+
+Two things worth keeping from that sequence. **A GPU-side reduce is cheap enough
+to run every frame** — it is the only way to measure an HDR buffer a person can
+only see through a tone map — and **attribution belongs inside the frame that
+misbehaved**, not in a second run with something switched off.
+
 ⚠ **Symlinking `node_modules` into a worktree: `ln -sfn`, and never from the repo
 root.** The advice under `clip.mjs` above is right and it is sharp: run
 `ln -sfn /abs/path/to/node_modules node_modules` **from inside the worktree**.

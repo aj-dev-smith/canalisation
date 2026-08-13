@@ -715,3 +715,102 @@ cantilevers and the petioles hang off them; the *material* shape of a mature
 lamina is frozen and is already baked, but where that lamina IS in the world
 moves every step, on every plant, forever. A geometry cache would be a wrong
 picture, so the answer to "recapture less" is temporal (above), not memoised.
+
+## The one-frame flash — a triangle with no area, and the bloom chain as a lens
+
+AJ watched the field and reported "glitchy flashes on flowers... every now and
+again". It is real, it was caught on camera, and it took five probes to say
+what it was, because every one of the obvious answers was wrong.
+
+**What it looks like.** A screen-axis-aligned rectangle, 64–100 px, of regular
+grid noise, on or beside a flower, for exactly one frame. `tools/flowers_glitch.mjs`
+catches it at full resolution the frame it happens: 3 confirmed still-camera
+flashes per 75 s at `garden=7&seed=21&ff=2200`.
+
+**The chain, in the order it had to be walked.**
+
+| probe | what it settled |
+|---|---|
+| `tools/flowers_peak.mjs` | the HDR scene target holds **8,863** at one texel against a frame-peak median of **2.38**, and — attributing in the SAME frame by re-rendering each stream solo — it is the **tri** stream |
+| `tools/flowers_scan.mjs` | the DATA is clean: no NaN anywhere, largest colour **1.29**, largest emissive **0.83**. But the minimum normal length is **0** |
+| `tools/flowers_term.mjs` | at the flash: vC **7.07**, vE **4.70**, \|vN\| **32.9**, and `vC*vE*3` at **710** against a legitimate ceiling near 3 |
+| `tools/flowers_kind.mjs` | the organ is a **leaf** (or a sepal, or a stamen — never a stem), by re-rendering one organ kind at a time |
+| `tools/flowers_sliver.mjs` | the triangles covering the flash have screen area **0** and **world** area **0**, spanning up to **14 px**. **6.7–8.5%** of every frame's tri stream is exactly that |
+
+A varying outside the hull of its own vertex values is not a shading result, it
+is a statement about **interpolation** — which is why "clamp the anther glow"
+and "it must be the pollen" were both dead ends (pollen was falsified early by
+`?pol=0,12,0.05`, which flashes at the same rate).
+
+**The mechanism.** `blade()` lays a quad grid over a parametrisation whose
+half-width collapses to a point at the leaf base, so the first column of quads
+arrives as two coincident vertices and one distant one — a segment wearing three
+vertices. It has no barycentric denominator; the rasteriser lights the odd
+fragment on it anyway, by fixed-point snapping and the fill rules, and hands
+that fragment varyings computed as finite-over-nothing. The half-res bloom chain
+then does what a bloom chain does to an impulse: three separable 5-tap blurs at
+radii 1, 2.6 and 4.2 have a **sparse** impulse response, a comb of bars about
+4 px apart, and that comb over a 64–100 px square is the "grid noise". The grid
+was never texels of anything — it is the blur kernel, seen naked.
+
+**Two fixes, both at a cause.**
+
+1. `10_capture.js` **drops a triangle with no area** and counts what it dropped.
+   Scale-free: `|e1 x e2| <= 1e-9 * max(|e1|², |e2|²)`, a floor at float32's own
+   arithmetic rather than a dial. Nothing legitimate goes — a zero-area triangle
+   cannot cover a pixel correctly — and the parity gate reconciles against the
+   count instead of being loosened for it: **shipped 267,420 == captured 249,540
+   + petal 9,360 + no-area 8,520**, exactly, 20 checks → 24.
+
+2. **That alone was not enough, and that is the part worth keeping.** It took the
+   scene peak 7,779 → 1,772 and the visible flash rate 3/75 s → 9/130 s, because
+   the residual is legitimate geometry seen **edge-on**, which cannot be removed:
+   a leaf has to be drawable from the side. So `30_scene.js` enforces the
+   interpolation contract instead, and the test is a **theorem**, not a
+   threshold: every vertex normal is unit and perspective-correct interpolation
+   is a convex combination, so `|vN| <= 1` holds for every correctly interpolated
+   fragment. Splitting the shaded colour on that test puts the **whole** spike
+   above it (56.10 at the peak block) and **0.69** below it. A fragment that
+   fails is not dim, it is meaningless, so it is discarded. The 1.01 is a float32
+   allowance; raising it does not make anything look better, it only lets the
+   flash back.
+
+**Measured, `garden=7 ff=2200`, 90 s of peak probe per cell:**
+
+| | seed 21 before | seed 21 after | seed 1337 before | seed 1337 after |
+|---|---|---|---|---|
+| frame-peak median | 2.38 | 1.84 | 6.72 | 1.97 |
+| frame-peak p99 | 369.5 | **5.2** | 439.9 | **19.1** |
+| frame-peak max | 7778.7 | **20.0** | 8124.5 | **175.9** |
+
+`tools/flowers_glitch.mjs`, 130–135 s each: **0 confirmed spikes in 1,955 frames
+at seed 21 and 0 in 2,164 at seed 4242**, against a 3-per-75 s baseline. The
+picture is unchanged — mean pixel 71.59 → 71.31 on the close shot and
+45.35 → 45.42 on the wide — and `tools/flowers_perf.mjs` is flat at the median
+(gap 8.6 ms both sides, p95 66.8 → 66.9, p99 100.0 → 108.4, fps 57.2 → 55.6).
+
+**⚠ The shipped page has the same zero-area triangles**, because `blade()` is
+`src/50_geom.js` and both pages call it. It was left alone here deliberately —
+this branch owns `flowers/` — but `canalisation.html` is emitting the same 7%
+of null geometry and has the same bloom chain to magnify it.
+
+### ⚠ A SECOND artefact, unrelated, unfixed, and NOT the one AJ reported
+
+While gating the fix a different one-frame defect turned up at `seed=1337`: a
+clean screen-axis-aligned **~128 px square of pure black**, anywhere on screen,
+for one frame. Everything known about it:
+
+- It is **not** the flash. It is a hole, not a splat, and it never carries the
+  bloom comb.
+- It **predates this branch** — measured on the pre-fix build at the same seed.
+- It is **not the instrument**. `tools/flowers_black.mjs` reads the canvas twice
+  in the same frame and compares: **376 collapsed tiles, 376 agreements, 0
+  disagreements**, so a second reader sees the same black.
+- It is seed-dependent and common where it occurs: 13 events in 135 s at
+  seed 1337, **zero** in 1,955 frames at seed 21 and 2,164 at seed 4242.
+- 128 px is a raster tile, which is a hint and not a diagnosis.
+
+It has only ever been seen under Playwright's headed ANGLE-on-Metal, and nobody
+has watched for it in a real browser. **That is the next thing to do about it**,
+before any mechanism is proposed — it may be a capture-stack artefact rather
+than something the piece does.
