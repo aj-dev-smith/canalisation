@@ -163,6 +163,44 @@ const geom = await pg.evaluate(() => {
     gap: typeof flDirGap === 'function' ? flDirGap(F, aEye) * 180 / Math.PI : undefined,
     lowFloors: [F.R * 1.1 + 4, F.hTop * 1.35],
   };
+  // THE LANE the traverse would take, and how wide it actually is. The
+  // derivation says "no drawn station lies in this band"; the number says
+  // whether that band is a corridor or a crack. It also walks the lane end to
+  // end and reports the closest any drawn station comes to the moving eye,
+  // which is the question a still of one instant cannot answer.
+  if (typeof flDirCorridor === 'function') {
+    const kw = Math.max(0.5, cam.aspect) * 2 * Math.tan(cam.fov * Math.PI / 360);
+    const T = 32;
+    const K = typeof FL_GLIDE_K === 'number' ? FL_GLIDE_K : 3;
+    const L = Math.max(8, F.Rout);
+    const v = K * FL_DRIFT * kw * L;
+    const ln = flDirCorridor(F, 0.5 * T * K * FL_DRIFT * kw * F.Rout);
+    const c = Math.cos(ln.ang), s = Math.sin(ln.ang);
+    const rx = Math.sin(ln.ang), rz = -Math.cos(ln.ang);
+    const bx = F.cx + rx * ln.off, bz = F.cz + rz * ln.off;
+    const yE = Math.max(1.0, F.hMid);
+    let worst = 1e9, worstT = 0, worstD = 1e9;
+    const steps = 64;
+    for (let i = 0; i <= steps; i++) {
+      const t = ((i / steps) - 0.5) * v * T;
+      const ex = bx + c * t, ez = bz + s * t;
+      for (const g of fl.garden) {
+        if (!g.S) continue;
+        for (const ax of g.S.plant.axes) for (const p of ax.pts) {
+          const d = Math.hypot(p[0] - ex, p[1] - yE, p[2] - ez);
+          if (d < worst) { worst = d; worstT = t; }
+        }
+      }
+      // and against everything the field DRAWS, in plan — a stem is not what
+      // ends up on the lens, a blade is
+      for (const p of F.drawn) {
+        const d = Math.hypot(p[0] - ex, p[1] - ez);
+        if (d < worstD) worstD = d;
+      }
+    }
+    law.lane = { half: ln.half, off: ln.off, len: ln.len, deg: ln.ang * 180 / Math.PI,
+      v, travel: v * T, eyeY: yE, worst, worstT, worstD };
+  }
   return { rows, span: [lo, hi], yspan: [ylo, yhi], xbar: off / wsum, F, law,
     eye: cam.position.toArray(), fov: cam.fov, aspect: cam.aspect };
 });
@@ -312,6 +350,12 @@ for (const r of geom.rows) {
   console.log(`\nLAW   the eye stands on heading ${f(L.aEyeDeg, 1)}deg at ${f(L.dEye, 1)} from the middle`);
   console.log(`      flDirClearance on that heading (margin hMid ${f(L.hMid, 1)}) = ${f(L.clearance, 1)}   low floors ${L.lowFloors.map(v => f(v, 1)).join(' / ')}`);
   console.log(`      nearest gap centre to it: ${f(L.gap, 1)}deg`);
+  if (L.lane) {
+    const n = L.lane;
+    console.log(`      LANE  ${f(n.deg, 1)}deg  offset ${f(n.off, 1)}  half-width ${f(n.half, 2)}  length ${f(n.len, 1)}`);
+    console.log(`            eye y ${f(n.eyeY, 1)}  speed ${f(n.v, 2)} u/s  travel over 32 s ${f(n.travel, 1)}`);
+    console.log(`            closest STEM station to the moving eye ${f(n.worst, 2)} (at t ${f(n.worstT, 1)});  closest DRAWN point in plan ${f(n.worstD, 2)}`);
+  }
 }
 if (pollen) {
   console.log(`\nMOTES ${pollen.n} live grains  ·  shot ${pollen.shot}  ·  subject ${pollen.subj ? 'specimen ' + pollen.subj.i + ' axis ' + pollen.subj.ax : 'none'}  ·  target ${pollen.tgt.map(v => f(v, 1)).join(', ')}`);

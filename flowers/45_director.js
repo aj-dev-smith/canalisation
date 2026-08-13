@@ -71,9 +71,16 @@
 // by up to a third with how good that subject is (flDirDwell). `trans` is gone
 // — a transition is paced by the distance it covers (flDirPace), which lands
 // within 0.4 s of both numbers this table used to carry.
+//
+// SIX SHOTS NOW, AND THE SIXTH IS THE ONLY ONE THAT GOES THROUGH. `glide` is a
+// tracking move down a lane between the specimens (flDirPoseGlide). It holds
+// 26 s — longer than any pose, because a traverse whose dwell is a pose's dwell
+// is a nudge — and it sits between `bank` and `dolly`, so the film reads as
+// outside, inside, through, across, at, up. The cycle is ~127 s against ~99.
 const FL_DIR_SHOTS = [
   { name: 'wide', hold: 16 },
   { name: 'bank', hold: 12 },
+  { name: 'glide', hold: 26 },
   { name: 'dolly', hold: 18 },
   { name: 'close', hold: 16 },
   { name: 'low', hold: 9 },
@@ -290,7 +297,13 @@ function flHull(pts) {
 
 function flDirField(specs) {
   let n = 0, sx = 0, sz = 0;
-  const fh = [], hs = [], pos = [], reach = [], plan = [], tops = [];
+  // `plan` is every drawn STATION; `drawn` is that plus where every organ
+  // REACHES. They answer different questions and are kept apart on purpose:
+  // where the plants stand (the heading, the hull) is a question about stems,
+  // and what is in the way of a lens (clearance, the traverse's lane) is a
+  // question about lamina. A blade on this catalogue is 10 to 22 units long
+  // against a station spacing of about one, so the two are not close.
+  const fh = [], hs = [], pos = [], reach = [], plan = [], drawn = [], tops = [];
   for (const s of specs) {
     if (!s.S) continue;
     const o = s.plan ? s.plan.origin : [0, 0, 0];
@@ -307,9 +320,21 @@ function flDirField(specs) {
         const rr = Math.hypot(p[0] - o[0], p[2] - o[2]);
         if (rr > rch) rch = rr;
         plan.push([p[0], p[2]]);
+        drawn.push([p[0], p[2]]);
         if (!bt || p[1] > bt[2]) bt = [p[0], p[2], p[1]];
       }
       if (bt) tops.push(bt);
+      // and where this axis's organs reach: an organ is drawn from its own
+      // frame outward along that frame's x by about its length, so half-way and
+      // all the way out are two points that bracket a blade. `len` rather than
+      // drawnBladeLen — a clearance test should over-state, and a senescing
+      // blade that has shortened is still tissue in the air.
+      for (const org of ax.organs) {
+        const fr = org.frame;
+        if (!fr || !(org.len > 0.05)) continue;
+        drawn.push([fr.o[0] + fr.x[0] * org.len * 0.5, fr.o[2] + fr.x[2] * org.len * 0.5]);
+        drawn.push([fr.o[0] + fr.x[0] * org.len, fr.o[2] + fr.x[2] * org.len]);
+      }
     }
     hs.push(ymax); reach.push(rch);
     // the weight is the specimen's own station count — how much PLANT is
@@ -391,7 +416,7 @@ function flDirField(specs) {
     const w = flFieldSpan({ cx, cz, hull }, a).half;
     if (w > pw) { pw = w; pa = a; }
   }
-  return { cx, cz, R, Rout, hMid, hHi, hTop: med(hs), pa, n, discs, hull, plan, tops };
+  return { cx, cz, R, Rout, hMid, hHi, hTop: med(hs), pa, n, discs, hull, plan, drawn, tops };
 }
 
 // THE FIELD ACROSS THE FRAME, from a heading. `half` is how far the field
@@ -760,17 +785,63 @@ function flDirPoseEstab(dir, F, cam) {
   // frame is an end that can change its mind — and changing it is a 180-degree
   // jump of the establishing eye, the most violent thing this director could
   // possibly do. Same argument as the subject being picked on the cut.
+  //
+  // ⚠ AND IT IS RE-DECIDED IF THE FIELD STOPS BEING THE ONE IT WAS DECIDED ON,
+  // BUT ONLY WHERE NO CLOCK IS RUNNING. Under ?shot=wide the director never
+  // cuts, so the choice was made on the first frame it ever ran — inside the
+  // fast-forward, on a stand of seedlings — and then held for the session. Two
+  // builds of the same code photographed the two different ends of the same
+  // diameter that way (drawn stations across the frame, 1.53 and 1.19), which is
+  // the sharpest possible statement that the choice was not being made on the
+  // field anyone sees. So a quarter change in the field's own height re-opens
+  // it: a growing stand crosses that many times a second, a grown one never.
+  //
+  // ⚠ AND THE FIRST VERSION OF THAT RULE HAD NO `overrun` IN IT, WHICH PUT THE
+  // TELEPORT BACK. tools/flowers_clip.mjs over 285 s: seven samples above 50
+  // units/s, all inside `wide`, at elapsed 10.9 to 24.7 — the middle of a HOLD,
+  // where a 180-degree flip of the eye and a reset of the damped distance are
+  // the only things that could move the camera at all. Peak 196 u/s against
+  // FL_DIR_VPEAK's 26. `overrun` is true only once the shot clock has run past
+  // this shot's own length, which happens when there is no clock — the pinned
+  // capture case, and nothing else.
   const a0 = flDirAng(dir, F);
-  if (dir.cut || dir.estabEnd === undefined) {
+  const overrun = dir.el > flDirTrans(dir)
+    + FL_DIR_SHOTS[dir.shot].hold * (dir.holdK || 1);
+  if (dir.cut || dir.estabEnd === undefined
+    || (overrun && Math.abs(F.hHi - dir.estabH) > 0.25 * dir.estabH)) {
     dir.estabEnd = solve(a0 + Math.PI).fill > solve(a0).fill ? Math.PI : 0;
+    dir.estabH = F.hHi;
+    dir.estabD = undefined;   // a new end is a new pose, not a place to drift to
   }
   const sol = solve(a0 + dir.estabEnd);
-  const a = sol.ang, c = Math.cos(a), s = Math.sin(a), D = sol.D;
+  const a = sol.ang, c = Math.cos(a), s = Math.sin(a);
   // and the lateral shift that centres what is drawn, re-read at the distance
   // actually used — `mid` is in tangent units, so mid*D is the world offset at
   // the field's own depth, and one correction is enough because the residual is
   // second order in (depth spread / D).
-  const ex = flFieldSpanP(F, a, D);
+  //
+  // ⚠ BOTH OF THESE ARE DAMPED, AND THE REASON IS A MEASURED TELEPORT. The field
+  // is re-solved every 500 ms on a stand that is still growing, and neither the
+  // distance nor the lateral shift is a smooth function of it: `mid` is the
+  // midpoint of a support interval, so one new vertex on the hull — an arm that
+  // has just grown past the old extreme — moves it by tens of units in one
+  // measurement. 40_boot then lerps the camera 12% of the way to the want every
+  // frame, which turns a 30-unit step in the want into 3.6 units in one frame.
+  // tools/flowers_clip.mjs saw exactly that: seven samples of a 280 s film over
+  // 50 units/s, all of them inside `wide`, all of them late in the run, peaking
+  // at 239 — against FL_DIR_VPEAK of 26. A first-order lag at 0.01 a frame (a
+  // ~1.7 s time constant at 60 fps) is slower than anything the eye reads as a
+  // move here and an order of magnitude slower than the step it is smoothing.
+  // Set outright on the cut, because a cut IS a step.
+  const exM = flFieldSpanP(F, a, sol.D);
+  if (dir.cut || dir.estabD === undefined) {
+    dir.estabD = sol.D;
+    dir.estabMid = exM.mid * sol.D;
+  } else {
+    dir.estabD += (sol.D - dir.estabD) * 0.01;
+    dir.estabMid += (exM.mid * sol.D - dir.estabMid) * 0.01;
+  }
+  const D = dir.estabD;
   const yT = fovH * D * (0.5 - k[2]);
   // THE CRANE, and it is the one shot that gets a vertical drift on top of the
   // shared orbit. An establishing frame's job is to say what the place is, and
@@ -788,7 +859,7 @@ function flDirPoseEstab(dir, F, cam) {
   // ends up in the middle of the picture instead of the centroid of the
   // origins. Those are different points whenever the field is lopsided, which
   // a dart-thrown field of seven always is.
-  const mx = Math.sin(a) * ex.mid * D, mz = -Math.cos(a) * ex.mid * D;
+  const mx = Math.sin(a) * dir.estabMid, mz = -Math.cos(a) * dir.estabMid;
   dir.wantEye.set(F.cx + mx + c * D, yE, F.cz + mz + s * D);
   // aimed at the MIDDLE, unlike every other shot here: the establishing frame
   // is the one whose subject is the whole field, so there is nothing to push
@@ -892,7 +963,7 @@ function flDirClearance(F, a, margin) {
   const c = Math.cos(a), s = Math.sin(a), rx = Math.sin(a), rz = -Math.cos(a);
   const m2 = margin * margin;
   let D = 0;
-  for (const p of F.plan) {
+  for (const p of F.drawn) {
     const perp = (p[0] - F.cx) * rx + (p[1] - F.cz) * rz;
     const q = m2 - perp * perp;
     if (q <= 0) continue;
@@ -1000,6 +1071,165 @@ function flDirPoseLow(dir, F) {
   dir.wantTgt.set(ex - c * L * Math.cos(th), yE + L * Math.sin(th), ez - s * L * Math.cos(th));
   flDirPace(dir, dir.wantEye.x, dir.wantEye.y, dir.wantEye.z);
   return Math.max(3, F.R * 0.8);
+}
+
+// --- THE TRAVERSE. ---------------------------------------------------------
+//
+// Five poses stand outside the stand and look in. That is not an accident and
+// it is written up twice above: an eye anywhere inside the ring is inside a
+// canopy, and both earlier attempts at an interior shot photographed a wall of
+// blurred leaf. But "you cannot stand anywhere inside" and "there is nowhere
+// inside to stand" are different claims, and only the first one was ever
+// measured. A stand of seven planted on a jittered ring has LANES in it, and a
+// lane is derivable from the same stations everything else here is derived
+// from.
+//
+// THE WIDEST LANE IS THE LARGEST GAP IN A PROJECTION. Pick a direction of
+// travel; project every drawn station onto the axis PERPENDICULAR to it; sort.
+// Two consecutive values with nothing between them are a band of the plan that
+// no station lies in — a corridor running the whole length of the field, clear
+// by construction rather than clear where it was checked. The widest corridor
+// over all directions is then a sweep, the same 3-degree sweep the establishing
+// heading uses and for the same reason.
+//
+// Two constraints on which gap counts, both stated:
+//   - THE LANE MUST BE INSIDE THE STAND. The largest gap in that projection is
+//     often between the main cluster and one flung-out Ember Creeper arm tip,
+//     which is a real and perfectly clear lane that runs along the OUTSIDE of
+//     the field. This is a traverse; it has to go through. So only gaps whose
+//     centre is within the middle half of the field's perpendicular extent are
+//     considered.
+//   - ⚠ A STATION IS A STEM, NOT A BLADE. The corridor is clear of every drawn
+//     axis point and says nothing about the lamina hanging off them, which is
+//     the one part of this derivation that is weaker than it looks. What it
+//     buys is that the camera never passes through a STEM, and the measured
+//     half-widths are in the tools.
+// `H` is how far along the lane the camera will actually travel either side of
+// the middle, and it is what makes this a usable derivation rather than a
+// pretty one. Asked of the WHOLE field the widest clear lane at ?garden=7 is
+// 2.01 units of half-width — a crack, not a corridor, because a lane has to
+// miss every plant over 67 units to qualify. The camera covers 25 of those 67,
+// and only what it passes can be in its way: matter beyond the travelled
+// segment is in the PICTURE, which is the point, and not on the lens.
+function flDirCorridor(F, H) {
+  let best = null;
+  for (let d = 0; d < 180; d += 3) {
+    const a = d * Math.PI / 180;
+    const c = Math.cos(a), s = Math.sin(a), rx = Math.sin(a), rz = -Math.cos(a);
+    const us = [];
+    let lo = 1e9, hi = -1e9;
+    for (const p of F.drawn) {
+      const al = (p[0] - F.cx) * c + (p[1] - F.cz) * s;
+      if (al < lo) lo = al;
+      if (al > hi) hi = al;
+      if (Math.abs(al) > H) continue;
+      us.push((p[0] - F.cx) * rx + (p[1] - F.cz) * rz);
+    }
+    if (us.length < 2) continue;
+    us.sort((p, q) => p - q);
+    const span = us[us.length - 1] - us[0];
+    for (let i = 1; i < us.length; i++) {
+      const half = (us[i] - us[i - 1]) / 2, off = (us[i] + us[i - 1]) / 2;
+      if (Math.abs(off) > span * 0.25) continue;   // the middle half of the field
+      if (!best || half > best.half) best = { half, off, ang: a, len: hi - lo };
+    }
+  }
+  return best || { half: 0, off: 0, ang: F.pa, len: Math.max(8, F.Rout * 2) };
+}
+
+// THE GLIDE — a tracking move down that lane, at flower height, aimed at the
+// vanishing point ahead of it. Everything a viewer sees passes the camera
+// instead of the camera passing around it, which is the one thing five orbiting
+// poses cannot do.
+//
+// THE SPEED IS THE FILM'S OWN DRIFT, TIMES THREE. FL_DRIFT is a screen-referred
+// rate — the picture translating by a fraction of its own width per second —
+// and the whole argument for it is that "gentle" only means anything on screen.
+// A traverse is a move rather than a drift, so it gets a stated multiple of that
+// one rate and nothing else:
+//
+//     v = FL_GLIDE_K * FL_DRIFT * (frame width at the aim distance)
+//
+// which on ?garden=7&seed=21 is 3 * 0.0075 * 1.06 * 38 = 0.91 units/s, or
+// 5.7 cm/s in WORLD.unitM. Over a 26-second dwell plus its transition that is
+// about 30 units of travel through a field 61 units across. FL_GLIDE_K = 3 is
+// the one number here that is chosen, and it is chosen as a ceiling: at 1 the
+// move is indistinguishable from the drift the other five shots already carry,
+// and the rate this measures is the one tools/flowers_clip.mjs reports.
+//
+// THE AIM IS THE FAR END OF THE LANE, not a subject. Aiming at a flower while
+// passing it swings the camera through a large angle at closest approach, which
+// is a whip and not a glide; aiming down the lane puts the corridor's vanishing
+// point in the middle of the frame with the flanking plants streaming past the
+// edges. It also does the focus work for free: 40_boot sets uFocus to the
+// camera-to-target distance, so the plane of focus rides a fixed distance ahead
+// and every flower in the lane resolves as it reaches that plane and softens
+// again as it passes. Nothing new was needed for the rack; it is the shipped
+// lens pointed forwards.
+const FL_GLIDE_K = 3;
+function flDirPoseGlide(dir, F, u) {
+  // the lane is solved on the cut and held. It is a 60 x (every station) sweep
+  // with a sort inside it, and — more to the point — a lane that is re-solved
+  // while the camera is in it is a swerve.
+  if (dir.cut || !dir.lane) {
+    // how far the camera will travel either side of the middle, wanted BEFORE
+    // the lane is solved because the lane only has to be clear over it. The aim
+    // lead is not known yet either, so it is estimated at Rout — the field's own
+    // outer radius — which is what half a lane's length comes to anyway.
+    const T0 = flDirTrans(dir) + FL_DIR_SHOTS[dir.shot].hold * (dir.holdK || 1);
+    const H = 0.5 * T0 * FL_GLIDE_K * FL_DRIFT * (dir.kw || 1.06) * F.Rout;
+    const ln = flDirCorridor(F, H);
+    // WHICH WAY DOWN IT: the end nearer the pose the camera is cutting from, so
+    // the entrance is the shortest move the transition could have been asked to
+    // make. flDirPace prices it either way; this keeps the price low.
+    const c = Math.cos(ln.ang), s = Math.sin(ln.ang);
+    const rx = Math.sin(ln.ang), rz = -Math.cos(ln.ang);
+    const bx = F.cx + rx * ln.off, bz = F.cz + rz * ln.off;
+    const dA = Math.hypot(bx - c * H - dir.fromEye.x, bz - s * H - dir.fromEye.z);
+    const dB = Math.hypot(bx + c * H - dir.fromEye.x, bz + s * H - dir.fromEye.z);
+    dir.lane = { ang: dB < dA ? ln.ang + Math.PI : ln.ang, off: ln.off,
+      half: ln.half, len: ln.len, bx, bz };
+  }
+  const ln = dir.lane;
+  const c = Math.cos(ln.ang), s = Math.sin(ln.ang);
+  // the aim lead, and the same length the speed is referred to, so that the
+  // travel over the shot is exactly the 2H the lane was solved to be clear over
+  const L = Math.max(8, F.Rout);
+  const v = FL_GLIDE_K * FL_DRIFT * (dir.kw || 1.06) * L;
+  const T = flDirTrans(dir) + FL_DIR_SHOTS[dir.shot].hold * (dir.holdK || 1);
+  // centred on the field: the middle of the shot is the middle of the stand, so
+  // the move both enters and leaves rather than arriving
+  const t = (u - 0.5) * v * T;
+  const ex = ln.bx + c * t, ez = ln.bz + s * t;
+  const yE = Math.max(FL_DIR_EYE_FLOOR, F.hMid);
+  dir.wantEye.set(ex, yE, ez);
+  // THE AIM LOOKS DOWN THE LANE AND LEANS INTO THE PLANTS. A lane is by
+  // construction the emptiest line through the stand, so a camera that aims
+  // exactly along it aims at the one direction with nothing in it — measured on
+  // the film, the last third of the traverse was a crowded left half and a bare
+  // right one. So the aim is offset laterally onto the mean lateral position of
+  // everything the field draws AHEAD of the eye, within the aim lead: the same
+  // move the establishing frame makes when it slides onto the occupied sector,
+  // made forwards and continuously. Clamped to a third of the frame's own half
+  // width so it leans rather than swings, and the whole thing is smoothed by
+  // 40_boot's 0.12 target lerp.
+  //
+  // It also replaces the shared orbit on this shot. Every other pose adds
+  // flDirOrbit so that an arrived camera is never still; a traverse is never
+  // arrived, and an orbit term on top of the translation is two motions with
+  // nothing relating them.
+  let mx = 0, mn = 0;
+  for (const p of F.drawn) {
+    const al = (p[0] - ex) * c + (p[1] - ez) * s;
+    if (al < 2 || al > L) continue;
+    mx += (p[0] - ex) * s - (p[1] - ez) * c;
+    mn++;
+  }
+  const lim = 0.33 * (dir.kw || 1.06) * L * 0.5;
+  const lat = mn ? Math.max(-lim, Math.min(lim, mx / mn)) : 0;
+  dir.wantTgt.set(ex + c * L + s * lat, yE, ez + s * L - c * lat);
+  flDirPace(dir, dir.wantEye.x, dir.wantEye.y, dir.wantEye.z);
+  return Math.max(3, F.R * 0.5);
 }
 
 // Advance the shot clock. Returns the name of the shot to play this frame, and

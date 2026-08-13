@@ -17,7 +17,7 @@
 // single-specimen piece exactly (held to byte identity by the formref harness
 // + parity).
 //
-// ?shot=wide|bank|dolly|close|low pins the garden director to one shot, for stills.
+// ?shot=wide|bank|glide|dolly|close|low pins the garden director to one shot, for stills.
 
 function flBoot() {
   const q = new URLSearchParams(location.search);
@@ -109,7 +109,7 @@ function flBoot() {
   hint.textContent = 'drag to orbit · wheel to dolly';
   console.info('canalisation flowers — ?species= ?seed= ?speed= ?ff= '
     + '?form=abc|columbine|daisy|double|wild ?zygo= ?renew= ?homeo= ?disc= '
-    + '?aniso= ?garden=2..12 ?radius= ?shot=wide|bank|dolly|close|low');
+    + '?aniso= ?garden=2..12 ?radius= ?shot=wide|bank|glide|dolly|close|low');
   // The form rail. A form is decided at founding — every organ's identity is
   // read off sp the step it is founded — so switching means regrowing, and
   // the honest way to regrow deterministically is a reload with the form in
@@ -327,7 +327,7 @@ function flBoot() {
   // distance). null on the solo page, where the shipped law below still runs
   // untouched.
   let dofPlan = null;
-  // ?shot=wide|bank|dolly|close|low pins the director to one shot — a capture
+  // ?shot=wide|bank|glide|dolly|close|low pins the director to one shot — a capture
   // affordance, the same category as ?ff=, so a still of a named shot is
   // reproducible. Unpinned (the page as watched) it cycles.
   let pinIdx = -2;   // resolved on first use — FL_DIR_SHOTS is in its TDZ at boot
@@ -527,6 +527,11 @@ function flBoot() {
       const u = flDirU(director);
       let rWant;
       if (name === 'dolly') { rWant = flDirPoseDolly(director, F, bb, u); dofPlan = { k: 0.35, min: 1.5 }; }
+      // THE TRAVERSE (45_director.js). Its lens is the shallowest of the field
+      // shots on purpose: the focal plane rides a fixed distance ahead down the
+      // lane, so `k` is what decides how thick the slab of sharp flowers is as
+      // they pass. It needs no subject — the aim is the far end of the lane.
+      else if (name === 'glide') { rWant = flDirPoseGlide(director, F, u); dofPlan = { k: 0.22, min: 1.5 }; }
       else if (name === 'low') { rWant = flDirPoseLow(director, F); dofPlan = { k: 0.45, min: 3.0 }; }
       // the establishing frame is SOLVED from the live camera's own fov and
       // aspect, so it is the one pose that is handed the camera
