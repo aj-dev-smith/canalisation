@@ -26,6 +26,12 @@
 //     field, and a low upward shot with the plants against the sky glow.
 //  3. THE VIEWER OWNS THE CAMERA WHEN THEY TOUCH IT, and for much longer than
 //     the solo page's six seconds — see FL_DIR_ORBIT_HOLD.
+//  4. NOTHING EVER STOPS MOVING. A shot that has arrived at its pose is a
+//     still, and a still with a 0.6 Hz stem swaying in it reads as a freeze
+//     frame with a bug in it rather than as a held frame. Every shot carries a
+//     perpetual drift at ONE screen-referred rate — see FL_DRIFT — and the
+//     transitions are paced off the DISTANCE they cover rather than off a
+//     constant, so the whole film moves at one speed.
 //
 // NOTE ON LOAD ORDER, which is the 25_ground.js pitfall in its other form:
 // this file sorts AFTER 40_boot.js, and 40_boot.js calls flBoot() at its own
@@ -58,33 +64,147 @@
 //     dolly  18   still the longest — the only shot that is going somewhere
 //     close  16   the subject
 //     low     9   punctuation
-// 71 s of hold + 27.5 s of transition = 98.5 s, against 92 s for the old four
+// 71 s of hold + ~28 s of transition = ~99 s, against 92 s for the old four
 // (72 + 20). One more shot for six and a half seconds of cycle.
+//
+// `hold` is a BASE now: the two shots that have a subject stretch or shrink it
+// by up to a third with how good that subject is (flDirDwell). `trans` is gone
+// — a transition is paced by the distance it covers (flDirPace), which lands
+// within 0.4 s of both numbers this table used to carry.
 const FL_DIR_SHOTS = [
-  { name: 'wide', hold: 16, trans: 7.5 },
+  { name: 'wide', hold: 16 },
   { name: 'bank', hold: 12 },
   { name: 'dolly', hold: 18 },
   { name: 'close', hold: 16 },
   { name: 'low', hold: 9 },
 ];
-// Seconds of eased travel between shots. 5 s across the ~25 units a wide-to-
-// close move covers is ~5 u/s at the peak of a smoothstep — a glide, not a
-// whip. A shot's hold does NOT start until its transition has finished, so the
-// director can never cut mid-move.
+// A TRANSITION IS PACED BY ITS OWN LENGTH, NOT BY A CONSTANT — and that
+// derivation reproduces both of the numbers it replaces, which is the reason to
+// trust it. Those numbers were 5.0 s for four shots and a hand-added 7.5 s for
+// `wide`, and the note that set them did the arithmetic out loud: a smoothstep
+// peaks at 1.5x its mean, the worst ordinary move at ?garden=7 is ~87 units and
+// took 5 s (17.4 u/s mean, 26 at the peak), and the establishing frame stands
+// at 88.7 units where `bank` stands at 47.9, which makes that move ~136 units
+// and wanted 7.5 s to peak at the same 27.
 //
-// A shot may state its own, and `wide` does. Every cut flips the heading end
-// for end, so a transition crosses the field: at ?garden=7 the old worst move
-// was ~87 units in 5 s (17 u/s mean, ~26 at the peak of a smoothstep, since a
-// smoothstep peaks at 1.5x its mean). The establishing shot stands at 88.7
-// units where `bank` stands at 47.9, which takes that move to ~136 units and
-// would have peaked near 41 u/s — 2.6 m/s in WORLD.unitM, a jog. 7.5 s puts it
-// back at 27, within a unit of the peak the other four already have. It is
-// NOT the 59-62 u/s whip the close-up's arrival gate was built for; it is the same
-// arithmetic caught one shot earlier.
-const FL_DIR_TRANS = 5.0;
+// So the constant that was actually being held fixed across both was the PEAK
+// SPEED, and the two durations are what it implies:
+//
+//     trans = 1.5 * distance / FL_DIR_VPEAK,  clamped
+//
+// 87 units -> 5.02 s and 136 -> 7.85 s, against the 5.0 and 7.5 that were set
+// by hand. It is worth having as a law rather than as two numbers because the
+// director's distances are not fixed: ?garden=12 is a 107-unit-wide field where
+// ?garden=3 is 31, and the close-up's move length depends on which flower won.
+// 26 u/s is 1.63 m/s in WORLD.unitM — a walk. The clamp keeps a 6-unit nudge
+// from cutting in a quarter of a second and a ?garden=12 crane from taking
+// fifteen; both ends were hit in the shipped range.
+const FL_DIR_VPEAK = 26;
+const FL_DIR_TRANS = [3.5, 9.0];   // seconds, [min, max]
 function flDirTrans(dir) {
+  return dir.transS || 5.0;
+}
+// Called by each pose on the frame it cuts on, once the pose it is moving TO is
+// known. `pt` is the point the eye is travelling to — wantEye for the four
+// field poses, and the subject's own corolla centre for the close-up, whose
+// final standoff is a few units and is set inside the shipped framer rather
+// than here (over-estimating a 40-unit move by 8 units is a third of a second).
+function flDirPace(dir, x, y, z) {
+  if (!dir.cut) return;
+  const d = Math.hypot(x - dir.fromEye.x, y - dir.fromEye.y, z - dir.fromEye.z);
+  dir.transS = Math.max(FL_DIR_TRANS[0],
+    Math.min(FL_DIR_TRANS[1], 1.5 * d / FL_DIR_VPEAK));
+}
+// How far through the whole shot (transition + hold) we are. The dolly's travel
+// is a function of this, so it has to be the SAME number the shot clock cuts
+// on — the two used to be computed in different files off different holds.
+function flDirU(dir) {
   const sh = FL_DIR_SHOTS[dir.shot];
-  return (sh && sh.trans) || FL_DIR_TRANS;
+  return Math.min(1, dir.el / (flDirTrans(dir) + sh.hold * (dir.holdK || 1)));
+}
+
+// --- THE PERPETUAL DRIFT, and it is ONE number for the whole film. ---
+//
+// A pose that has been reached is a still. The four field poses are recomputed
+// identically every frame and the camera lerps onto them in about a second, so
+// three of the five shots spent most of their hold frozen; the close-up's three
+// exponential lerps do the same thing more slowly. A garden with a 0.6 Hz stem
+// mode swaying inside a locked frame does not read as a held shot, it reads as
+// a paused one.
+//
+// The rate is SCREEN-REFERRED, which is the only frame in which "gentle" means
+// anything: the picture translates by FL_DRIFT of its own width per second,
+// whatever the shot's distance. The frame at distance d is `fovH*d` units tall
+// and `A*fovH*d` wide, both read off the live camera (flDirLens) exactly as the
+// establishing pose reads them. Two consequences worth stating:
+//
+//   - A LATERAL DRIFT IS DISTANCE-SCALED. 0.75%/s at the establishing shot's
+//     88.7 units is 0.70 u/s = 4.4 cm/s in WORLD.unitM; at the close-up's ~8
+//     units it is 0.06 u/s = 0.4 cm/s. Same speed on screen, two orders apart
+//     in the world — which is the whole point, since a viewer sees the screen.
+//   - AN ORBIT IS A CONSTANT ANGULAR RATE, because v = omega*d and the rate
+//     scales with d: omega = FL_DRIFT * A * fovH = 0.0080 rad/s = 0.46 deg/s,
+//     the same in every shot at every distance. That is why the orbit is added
+//     to the shot HEADING (flDirAng) rather than to each pose: all four field
+//     poses put their eye and their target on that heading, so one term arcs
+//     the eye and swings the aim together, and the close-up gets the same arc
+//     for free through flDirOutward.
+//
+// 0.0075 is BY EYE and it is the one number here an eye had to settle — the
+// same category as the wind's uRef and the needle-fade threshold. What is
+// derived is that a single fraction can serve every shot at once. Read it as
+// "the frame slides about a sixth of its own width across a twenty-second
+// shot"; at 1.5x it reads as a move rather than a drift, and at half it is
+// indistinguishable from the sway.
+//
+// MEASURED, on the film rather than on the code — `node tools/flowers_clip.mjs
+// shots/cine 'garden=7&seed=21&ff=3000' 150`, which records the tab and reports
+// the camera's own speed. Against the same 150 s before this landed:
+//
+//     STATIONARY (under 0.1 %frame/s)   15.1%  ->  0.0% of samples
+//     peak speed                        43.7   ->  27.3 u/s   (VPEAK is 26)
+//     capture, weighted over the loop   58.5   ->  61.1 ms
+//
+// and the drift itself, as the slow decile of each shot's own screen rate —
+// what the camera is doing once it has arrived, in %frame/s:
+//
+//     wide  0.101 -> 0.805    bank 0.021 -> 0.580    low 0.015 -> 0.485
+//     close 0.873 -> 0.723    dolly 2.114 -> 3.635
+//
+// Those five numbers say exactly where the defect was. The three static poses
+// were at a fiftieth to a hundredth of the drift they carry now — frozen, and
+// the 15.1% is them. The CLOSE-UP was never the offender and is slightly slower
+// than it was: its three exponential lerps take a long time to converge, so it
+// always crept. The dolly is its own travel and is faster only because it no
+// longer decelerates into the cut.
+//
+// The last line is the one to check when touching this: camera motion dirties
+// a capture (40_boot's camMoved), and a drift that never stops could in
+// principle have made every frame a recapture. It cannot, and the reason is
+// structural rather than lucky — camMoved only ever redraws the HERO, and only
+// while the close-up's sight-line cull is engaged, so four shots in five are
+// untouched by a moving camera by construction.
+const FL_DRIFT = 0.0075;
+// The lens, cached on the director once a frame: kw = frame widths, kh = frame
+// heights, per unit of distance. Read rather than written down because a window
+// is not 1.41 wide by decree — the same argument flDirPoseEstab makes.
+function flDirLens(dir, cam) {
+  const fovH = 2 * Math.tan(cam.fov * Math.PI / 360);
+  dir.kh = fovH;
+  dir.kw = Math.max(0.5, cam.aspect) * fovH;
+}
+// Drift elapses over the SHOT, not forever. ?shot=wide pins the director and
+// leaves el running unbounded, and a drift linear in el would have craned the
+// establishing eye a hundred units up by the time a capture tool had settled.
+// It saturates where the cut would have come.
+function flDirDriftT(dir) {
+  const sh = FL_DIR_SHOTS[dir.shot];
+  return Math.min(dir.el, flDirTrans(dir) + sh.hold * (dir.holdK || 1));
+}
+// The orbit, in radians: a constant angular rate, sign alternating per cut so
+// the film does not spend ten minutes turning one way.
+function flDirOrbit(dir) {
+  return dir.spin * FL_DRIFT * (dir.kw || 1.06) * flDirDriftT(dir);
 }
 // How long a drag owns the camera. The solo page uses 6 s, which is right for
 // one subject in the middle of the frame: you turn it, you look, it resumes.
@@ -121,6 +241,10 @@ function flDirMake() {
     fromEye: new THREE.Vector3(), fromTgt: new THREE.Vector3(), fromR: 8,
     wantEye: new THREE.Vector3(), wantTgt: new THREE.Vector3(),
     field: null, scan: -1e9, subj: null, pickT: -1e9, cut: true,
+    // the drift and the pacing: which way this shot orbits, how long its move
+    // was paced at, how long its hold was stretched to, and the lens the
+    // screen-referred rate is measured in
+    spin: 1, transS: 5.0, holdK: 1, sAvg: 0, kw: 1.06, kh: 0.752,
   };
 }
 
@@ -214,9 +338,11 @@ function flDirField(specs) {
 
 // The heading a shot is taken from: the field's long axis, flipped end for end
 // between shots and jittered, so no two consecutive shots come from the same
-// side and none of them points at the empty quarter.
+// side and none of them points at the empty quarter — plus the perpetual orbit,
+// which is a term in the HEADING precisely so that every pose built on it arcs
+// its eye and swings its aim together instead of sliding sideways.
 function flDirAng(dir, F) {
-  return F.pa + dir.flip + dir.jit;
+  return F.pa + dir.flip + dir.jit + flDirOrbit(dir);
 }
 
 // How OPEN a flower is: the mean development of the petals that are drawn.
@@ -322,11 +448,24 @@ function flDirPick(specs, eye, scoreAxis, F) {   // eslint-disable-line no-unuse
 // The horizontal direction from the middle of the field out through a flower,
 // which is the side a close-up should be taken from. Falls back to the shot's
 // own heading for a flower standing on the centre.
+// It carries the orbit too, which is how the CLOSE-UP drifts: the shipped
+// framer builds its eye direction by blending the flower's own facing with
+// this vector, then eases onto it at 0.012 a frame, so turning this slowly
+// walks the camera around the corolla at the same 0.46 deg/s everything else
+// moves at — about ten degrees of parallax across the shot, against a
+// background at ten times the range. Nothing else here could move the close-up
+// without reaching inside the framer the solo page shares.
+//
+// ⚠ Under ?focus=flower the shot clock never runs, so dir.el stays 0 and this
+// term is exactly zero. That mode is a capture affordance and a still of it
+// should be reproducible; the drift belongs to the film.
 function flDirOutward(dir, F, bb) {
   let x = bb.c[0] - F.cx, z = bb.c[2] - F.cz;
   const l = Math.hypot(x, z);
+  const o = flDirOrbit(dir), co = Math.cos(o), so = Math.sin(o);
   if (l < 0.75) { const a = flDirAng(dir, F); return { x: Math.cos(a), z: Math.sin(a) }; }
-  return { x: x / l, z: z / l };
+  x /= l; z /= l;
+  return { x: x * co - z * so, z: x * so + z * co };
 }
 
 // --- the poses. Each writes dir.wantEye / dir.wantTgt and returns the
@@ -411,12 +550,22 @@ function flDirPoseEstab(dir, F, cam) {
   const D = Math.max(dW, dH, F.Rout * 1.15 + 6);
   const a = flDirAng(dir, F), c = Math.cos(a), s = Math.sin(a);
   const yT = fovH * D * (0.5 - k[2]);
-  const yE = Math.max(FL_DIR_EYE_FLOOR, yT + fovH * D * (k[3] - 0.5));
+  // THE CRANE, and it is the one shot that gets a vertical drift on top of the
+  // shared orbit. An establishing frame's job is to say what the place is, and
+  // the thing this one cannot say from a fixed eye is that the field has a
+  // FLOOR — the ground has no horizon on these palettes (see below), so the
+  // only cue left is parallax. Rising moves the depression angle from 2.2 to
+  // about 9 degrees over the shot, which slides the near plants down the frame
+  // against the far ones. Same rate as the orbit, read against frame HEIGHT
+  // rather than width, so it drifts at the same speed on screen.
+  const yD = FL_DRIFT * (dir.kh || fovH) * D * flDirDriftT(dir);
+  const yE = Math.max(FL_DIR_EYE_FLOOR, yT + fovH * D * (k[3] - 0.5) + yD);
   dir.wantEye.set(F.cx + c * D, yE, F.cz + s * D);
   // aimed at the MIDDLE, unlike every other shot here: the establishing frame
   // is the one whose subject is the whole field, so there is nothing to push
   // into the near half of the picture.
   dir.wantTgt.set(F.cx, yT, F.cz);
+  flDirPace(dir, dir.wantEye.x, dir.wantEye.y, dir.wantEye.z);
   // the fog's scale (uFogNear = dist - 1.1 r) and the lens range. Half the
   // field's height rather than Rout alone: at ?garden=3 the stand is tall and
   // narrow, and fogging from 1.1*Rout would start the haze 15 units in front
@@ -448,6 +597,10 @@ function flDirPoseBank(dir, F) {
   const D = Math.max(F.R * 1.5 + 5, F.hTop * 2.0);
   dir.wantEye.set(F.cx + c * D, Math.max(FL_DIR_EYE_FLOOR, F.hMid * 0.25), F.cz + s * D);
   dir.wantTgt.set(F.cx - c * F.R * 0.30, F.hMid * 0.95, F.cz - s * F.R * 0.30);
+  // no vertical drift here and none in `low`: those two poses ARE their eye
+  // height (a fifth of flower height, and a kneel), so a crane deletes the shot
+  // rather than moving it. They carry the shared orbit and nothing else.
+  flDirPace(dir, dir.wantEye.x, dir.wantEye.y, dir.wantEye.z);
   return F.R * 1.05;
 }
 
@@ -467,7 +620,17 @@ function flDirPoseBank(dir, F) {
 function flDirPoseDolly(dir, F, bb, u) {
   const a = flDirAng(dir, F), c = Math.cos(a), s = Math.sin(a);
   const D = Math.max(F.R * 1.25 + 4, F.hTop * 1.45);
-  const t = (2 * smoothstep(0, 1, u) - 1) * F.R * 0.95;
+  // ⚠ THE DOLLY USED TO STOP. Its travel was `2*smoothstep(0,1,u)-1` over the
+  // whole shot, which is an ease at BOTH ends — so the one shot in the list
+  // that is going somewhere spent its last four seconds arriving and its last
+  // two parked, which is the freeze frame this pass exists to remove. It eases
+  // in over the first fifth and then runs at a constant rate straight through
+  // the cut, so the camera is still moving on the frame the next shot blends
+  // from. `a0/2` is the area the ease gives away and dividing by `1 - a0/2`
+  // puts f(1) back at 1, so the shot covers exactly the chord it always did.
+  const a0 = 0.2;
+  const f = u < a0 ? u * u / (2 * a0) : u - a0 / 2;
+  const t = (2 * (f / (1 - a0 / 2)) - 1) * F.R * 0.95;
   dir.wantEye.set(F.cx + c * D - s * t,
     Math.max(FL_DIR_EYE_FLOOR, F.hMid * 0.42),
     F.cz + s * D + c * t);
@@ -476,6 +639,9 @@ function flDirPoseDolly(dir, F, bb, u) {
   dir.wantTgt.set(lerp(F.cx, bb.c[0], 0.65),
     lerp(F.hMid * 0.85, bb.c[1], 0.65),
     lerp(F.cz, bb.c[2], 0.65));
+  // paced off where the eye ENTERS the chord, not off the middle of it: the
+  // travel is already running when the transition lands
+  flDirPace(dir, dir.wantEye.x, dir.wantEye.y, dir.wantEye.z);
   return Math.max(3, F.R * 0.7);
 }
 
@@ -497,6 +663,7 @@ function flDirPoseLow(dir, F) {
   const D = Math.max(F.R * 1.1 + 4, F.hTop * 1.35);
   dir.wantEye.set(F.cx + c * D, FL_DIR_EYE_FLOOR * 0.85, F.cz + s * D);
   dir.wantTgt.set(F.cx - c * F.R * 0.15, F.hMid * 1.45, F.cz - s * F.R * 0.15);
+  flDirPace(dir, dir.wantEye.x, dir.wantEye.y, dir.wantEye.z);
   return Math.max(3, F.R * 0.8);
 }
 
@@ -508,7 +675,7 @@ function flDirClock(dir, now) {
   const sh = FL_DIR_SHOTS[dir.shot];
   const el = (now - dir.t0) / 1000;
   dir.cut = false;
-  if (el > flDirTrans(dir) + sh.hold) {
+  if (el > flDirTrans(dir) + sh.hold * (dir.holdK || 1)) {
     dir.shot = (dir.shot + 1) % FL_DIR_SHOTS.length;
     dir.t0 = now;
     // The heading is the field's long axis (flDirAng); what walks between
@@ -519,8 +686,69 @@ function flDirClock(dir, now) {
     dir.ang = (dir.ang + 2.39996323) % TAU;
     dir.flip = dir.flip ? 0 : Math.PI;
     dir.jit = (dir.ang / TAU - 0.5) * 1.0;   // +-0.5 rad, never repeating
+    // and which way the drift orbits, off the same irrational walk. A constant
+    // direction reads as one continuous circuit of the garden, which sounds
+    // better than it looks: with the heading already flipping end for end at
+    // every cut, half the shots would then orbit INTO the move they just made.
+    dir.spin = dir.jit >= 0 ? 1 : -1;
+    dir.holdK = 1;
     dir.cut = true;
   }
   dir.el = dir.cut ? 0 : el;
   return FL_DIR_SHOTS[dir.shot].name;
+}
+
+// HOW LONG TO HOLD ON A SUBJECT, AND IT IS THE SUBJECT THAT SAYS. The two shots
+// that have one — `close` and `dolly` — hold a base 16 and 18 seconds whatever
+// they found, so the film gives a five-petal corolla on the far rim exactly as
+// long as the best flower in the garden. `flowerScore` already ranks them, and
+// the director already carries the winner's score.
+//
+// The reference is the director's OWN running mean of the scores it has picked,
+// which is the only scale available that does not need a number written down:
+// what "a good subject" means in a field of Nightglass Parasols is not what it
+// means in a field of Cathedral Ferns, and the garden's composition is a seed's
+// business. +-1/3, by eye, and clamped — a subject three times the average is
+// not worth three times the screen time, and nothing should ever be cut so
+// short that it reads as a mistake. The EMA is slow (1/6) so one exceptional
+// flower does not immediately become the new normal.
+function flDirDwell(dir, score) {
+  if (!(score > 0)) { dir.holdK = 1; return; }
+  if (!(dir.sAvg > 0)) dir.sAvg = score;
+  const k = score / dir.sAvg;
+  dir.sAvg += (score - dir.sAvg) / 6;
+  const name = FL_DIR_SHOTS[dir.shot].name;
+  dir.holdK = (name === 'close' || name === 'dolly')
+    ? Math.max(0.7, Math.min(1.35, 0.62 + 0.38 * k)) : 1;
+}
+
+// THE FOCUS RACK — the cheapest atmosphere in the piece, and it is already
+// paid for. The defocus pass reads alpha as linear depth and blurs by
+// `|z - uFocus| / uRange`, and 40_boot has always set uFocus to the
+// camera-to-target distance — so the lens is a real lens pointed at the subject
+// and nothing has ever pulled focus with it.
+//
+// A shot therefore ENTERS out of focus and resolves: the plane of focus starts
+// in front of the subject, on whatever foreground the shot is looking through,
+// and racks back onto the subject over the second half of the move. The
+// amplitude is not chosen — it is the lens's own depth of field, `uRange`,
+// which is exactly the distance over which this pass goes from sharp to fully
+// blurred. Racking by 1.2 of it means the subject starts unambiguously soft
+// and finishes sharp, in every shot, without any shot having to say by how
+// much: a close-up's range is 0.22 of its focal distance and the establishing
+// shot's is 0.55 of a distance ten times larger.
+//
+// Capped at 0.45 of the focal distance so the near plane can never cross the
+// camera on the wide shot, where 1.2 uRange is 58 units and the subject is 89
+// away. The window is [0.35, 1.35] of the transition: the rack starts a third
+// into the move, so the first thing that happens on a cut is the move, and it
+// finishes a third of a transition AFTER the camera has settled, so the last
+// thing that resolves in a new frame is the subject.
+const FL_RACK = [0.35, 1.35, 1.2, 0.45];
+function flDirFocus(dir, fDist, range) {
+  if (!dir || !(range > 0)) return fDist;
+  const T = flDirTrans(dir);
+  const w = smoothstep(FL_RACK[0] * T, FL_RACK[1] * T, dir.el);
+  const amp = Math.min(FL_RACK[2] * range, FL_RACK[3] * fDist);
+  return fDist - (1 - w) * amp;
 }

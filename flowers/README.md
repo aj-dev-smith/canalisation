@@ -459,22 +459,104 @@ bound of *every* specimen at once. Measured at `?garden=7&seed=21&ff=3000`: radi
 camera 84.2 units out, six plants bunched into one column and most of the frame empty.
 A field photographed from far away and above is not a field; it is a diagram of one.
 
-Four shots cycle, each with a hold set by eye (the rule: a shot must outlast the
-viewer's first read of it and stop before it becomes a still) and 5 s of eased travel
-between them, with the hold not starting until the move has finished so the director
-can never cut mid-transition:
+Five shots cycle, each with a hold set by eye (the rule: a shot must outlast the
+viewer's first read of it and stop before it becomes a still), with the hold not
+starting until the move has finished so the director can never cut mid-transition:
 
 | shot | hold | what it is |
 |---|---|---|
-| `wide` | 20 s | the field from just outside it, eye at a fifth of flower height, aimed *past* the centre |
-| `dolly` | 24 s | a walk along a chord outside the ring, aim held on one flower while everything between sweeps past |
+| `wide` | 16 s | the establishing frame, *solved* rather than tuned — the field's full width across `fW` of the frame or its top across `fH` of it, whichever binds |
+| `bank` | 12 s | the field from just outside it, eye at a fifth of flower height, aimed *past* the centre |
+| `dolly` | 18 s | a walk along a chord outside the ring, aim held on one flower while everything between sweeps past |
 | `close` | 16 s | the best flower **anywhere in the field** |
-| `low` | 12 s | kneeling, aimed above the flowers so the bank reads against the sky's glow |
+| `low` | 9 s | kneeling, aimed above the flowers so the bank reads against the sky's glow |
 
-`?shot=wide|dolly|close|low` pins one, for stills — a capture affordance in the same
-category as `?ff=`. `?focus=flower` is the fifth thing the camera can be doing and it
-is not in the rotation: it is the solo page's close-up law, extended to score every
+`?shot=wide|bank|dolly|close|low` pins one, for stills — a capture affordance in the
+same category as `?ff=`. `?focus=flower` is the sixth thing the camera can be doing and
+it is not in the rotation: it is the solo page's close-up law, extended to score every
 flower in the field.
+
+The two shots with a subject stretch that hold by up to a third with how good the
+subject is, against the director's own running mean of the scores it has picked — the
+only scale available that does not need a number written down, since what counts as a
+good corolla in a field of Nightglass Parasols is not what it means in a field of
+Cathedral Ferns.
+
+#### Nothing in it stops moving (2026-08-12)
+
+Watched as a *film* — `tools/flowers_clip.mjs`, which is the first thing here that
+records the page rather than photographing it — the list above had one defect above
+every other. Three of the five shots are static poses recomputed identically every
+frame, so the camera eases onto them in about a second and then holds **absolutely
+still**; the close-up's three exponential lerps do the same thing more slowly. Measured
+over 120 s at `?garden=7&seed=21&ff=3000`, the camera spent **15.4% of its samples
+moving slower than a thousandth of the frame width a second**. A garden with a 0.6 Hz
+stem mode swaying inside a locked frame does not read as a held shot. It reads as a
+paused one.
+
+So every shot carries a perpetual drift at **one screen-referred rate**: the picture
+translates by `FL_DRIFT` = 0.75% of its own width per second whatever the shot's
+distance. Two consequences are worth the arithmetic. A lateral drift is
+**distance-scaled** — 4.4 cm/s at the establishing shot's 88.7 units, 0.4 cm/s at the
+close-up's 8, the same speed on screen. And an **orbit is therefore a constant angular
+rate**, 0.46 °/s, independent of everything; which is why the orbit is a term in the
+shot *heading* rather than in each pose, since all four field poses put their eye and
+their target on that heading, so one term arcs the eye and swings the aim together, and
+the close-up gets the same arc through `flDirOutward` without reaching inside the framer
+the solo page shares. The establishing shot takes a slow crane on top, because the one
+thing it cannot say from a fixed eye is that the field has a floor. The drift saturates
+where the cut would have come, so `?shot=` still settles for a still.
+
+**The transitions are the same story one level up, and the derivation reproduces the two
+numbers it replaces.** 5.0 s for four shots and a hand-added 7.5 s for `wide` were both
+solving for a peak speed — out loud, in the comment that set them — so the peak speed is
+the constant now and the durations are what it implies: `trans = 1.5 * distance /
+26 u/s` (a smoothstep peaks at 1.5x its mean; 26 u/s is 1.63 m/s, a walk). That gives
+5.02 s and 7.85 s against the 5.0 and 7.5 that were set by hand, and it *caps* the whip
+the fixed transition allowed. And the **dolly no longer stops**: its travel was eased at
+both ends, so the one shot that is going somewhere spent its last seconds parked.
+
+The **lens racks**, too, and it was already paid for: `uFocus` has always been the
+camera-to-target distance and nothing ever pulled focus with it. A shot now enters with
+its subject soft and resolves onto it over the second half of the move, with the
+amplitude taken from the lens's own depth of field (`uRange` is exactly the distance
+over which this pass goes sharp to fully blurred) rather than chosen — so a close-up
+whose range is 0.22 of its focal distance and an establishing shot whose range is 0.55
+of a distance ten times larger both rack by one depth of field without either having to
+say by how much.
+
+Measured over the same 150 s of the same seed, before → after:
+
+| | before | after |
+|---|---|---|
+| stationary (< 0.1 %frame/s) | 15.1% | **0.0%** of samples |
+| peak camera speed | 43.7 | **27.3** u/s (`FL_DIR_VPEAK` is 26) |
+| capture, weighted over the loop | 58.5 | 61.1 ms |
+| specimens recaptured a frame | 3.95 | 4.03 of 7 |
+
+and the drift itself, as the slow decile of each shot's own screen rate — what the
+camera does once it has arrived, in %frame/s:
+
+| | `wide` | `bank` | `low` | `close` | `dolly` |
+|---|---|---|---|---|---|
+| before | 0.101 | 0.021 | 0.015 | 0.873 | 2.114 |
+| after | **0.805** | **0.580** | **0.485** | 0.723 | 3.635 |
+
+Those five columns say exactly where the defect was. The three static poses were at a
+fiftieth to a hundredth of the drift they carry now, and the 15.1% is them. The
+**close-up was never the offender** and is slightly slower than it was — its three
+exponential lerps take a long time to converge, so it always crept. The dolly is its own
+travel and is faster only because it no longer decelerates into the cut.
+
+⚠ The capture line is the one that had to be **checked and not assumed**: camera motion
+dirties a stream (`camMoved`), and a drift that never stops could in principle have made
+every frame a recapture. It cannot, and the reason is structural rather than lucky —
+`camMoved` only ever redraws the **hero**, and only while the close-up's sight-line cull
+is engaged, so four shots in five are untouched by a moving camera by construction. The
++4.5% above is inside the run-to-run spread and is not a measurement of the drift: a
+second pair at 120 s came back 52.4 → 52.4 ms, and the two runs cannot see the same
+plants, because a field that is still growing is heavier at the end of a window than at
+the start and the shot shares are not identical.
 
 Three measurements decided more of that file than any preference did. The camera stands
 off the field's **short** axis (from the plan covariance of the origins) because a stand
@@ -553,8 +635,16 @@ overrides it, which is how the A/B was shot.
 node tools/flowers_shot.mjs shots/g.png 'garden=7&seed=21&ff=3000&speed=0&shot=wide'
 node tools/flowers_perf.mjs 'garden=7&seed=21'      # rAF gap sampler, 30 s of LIVE growth
 node tools/flowers_horizon.mjs shots/h 'garden=7' # the horizon from three camera heights
+node tools/flowers_clip.mjs shots/cine 'garden=7&seed=21&ff=3000' 90   # the page as a FILM
 node test/flowers_capture.mjs '{"n":7,"steps":3000}'   # the field profiler, headless
 ```
+
+`flowers_clip.mjs` is the only artifact here that shows the piece **moving**, and it is
+the instrument the director's drift was measured with: it records the tab with
+Playwright's `recordVideo` while sampling the camera at 4 Hz, and reports speed in frame
+widths per second, the stationary fraction, and the capture cost. Extract frames with
+`ffmpeg -i clip.webm -vf fps=1 f%03d.png` and read them — consecutive frames a second
+apart are the only evidence that the camera language is continuous.
 
 `flowers_horizon.mjs` exists because the boot's framer owns the camera and picks one
 height, so no shot tool here could answer "does the ground melt from a low camera"; it
