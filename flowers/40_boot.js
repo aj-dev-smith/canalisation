@@ -91,14 +91,20 @@ function flBoot() {
   // trimodal distribution (Todesco 2022 [D]: 0.33 / 0.59 / 0.78, sd ~0.16 —
   // we jitter by a modest fraction of that). Same PRNG discipline as the
   // fruit's chemistry: a derived stream off the specimen seed.
-  // LIMITATION (garden): uBull and the spots atlas are scene-wide and stay
-  // the HERO's — every member's petals sample the hero's bullseye threshold
-  // and the hero's baked spot rows. Whisper-level pigment, wrong per species;
-  // a per-specimen uniform + a wider atlas is the fix when it earns a look.
+  // PER MEMBER, not scene-wide. It used to be drawn once from the HERO's seed
+  // and applied to every petal in the field, so seven species wore one
+  // specimen's pigment program. Each member draws its own from its own seed
+  // with the same derived stream, which means a member's flowers are stable
+  // across reloads AND identical to what the solo page grows for that seed —
+  // the hero's number is unchanged, because plan[0].seed IS the URL's seed.
   {
-    const r = mulberry32((seed ^ 0xb0117e) >>> 0);
     const modes = [0.33, 0.59, 0.78];
-    scene.petMat.uniforms.uBull.value = modes[Math.floor(r() * 3)] + (r() - 0.5) * 0.10;
+    const bullOf = (sd) => {
+      const r = mulberry32((sd ^ 0xb0117e) >>> 0);
+      return modes[Math.floor(r() * 3)] + (r() - 0.5) * 0.10;
+    };
+    for (let i = 0; i < specs.length; i++)
+      scene.setBull(i, bullOf(plan ? plan[i].seed : seed));
   }
   const hud = document.getElementById('hud');
   const hint = document.getElementById('hint');
@@ -642,7 +648,12 @@ function flBoot() {
       flDrawSpecimen(env, s.B, s.S, i === 0 ? cull : null);
       s._drawn = true;
     }
-    scene.uploadMany(specs.filter(s => s.S).map(s => s.B));
+    // the member index goes with the buffer: a specimen that has not
+    // germinated yet is not in the list, so a list position is not a member
+    // number, and the petal stream picks its pigment material by member
+    const upB = [], upM = [];
+    for (let i = 0; i < specs.length; i++) if (specs[i].S) { upB.push(specs[i].B); upM.push(i); }
+    scene.uploadMany(upB, upM);
     capMs = capMs * 0.9 + (performance.now() - t0) * 0.1;
   }
 
@@ -798,12 +809,18 @@ function flBoot() {
     pollen.resize(scene.camera.position,
       scene.fogU.uFogD.value, scene.fogU.uFogNear.value);
     scene.uploadPollen(pollen.buf, pollen.n * 7);
-    // spot fields bake lazily in the draw loop; ship each to the GPU once.
-    // HERO's library only: the 3-row atlas is scene-wide (see uBull note).
-    const plib = S.plant.leaves.plib || [];
-    for (let li = 0; li < plib.length; li++) {
-      const L = plib[li];
-      if (L._flSpots && !L._flSpotsUp) { scene.setSpots(li, L._flSpots); L._flSpotsUp = true; }
+    // Spot fields bake lazily in the draw loop; ship each to the GPU once.
+    // EVERY member's, into that member's own atlas. 20_draw.js has always run
+    // flSpotsRun for whatever petal it is drawing, so a field of seven was
+    // already baking 21 reaction-diffusion fields — and uploading three. The
+    // other eighteen were computed, paid for, and discarded.
+    for (let i = 0; i < specs.length; i++) {
+      if (!specs[i].S) continue;
+      const plib = specs[i].S.plant.leaves.plib || [];
+      for (let li = 0; li < plib.length; li++) {
+        const L = plib[li];
+        if (L._flSpots && !L._flSpotsUp) { scene.setSpots(i, li, L._flSpots); L._flSpotsUp = true; }
+      }
     }
     updateFraming();
     // the lens: focus on the plane the camera is looking at, with the shipped

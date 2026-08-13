@@ -319,6 +319,10 @@ computed by the engine, none previously drawn.
   once per library petal, never the same twice. Two numerical departures are
   flagged in that file's header.
 
+Both of those are **per specimen**, and in a field they mean it — see *Every
+flower in the field is its own* below, which is where they stopped being one
+draw from the hero's seed applied to everybody.
+
 **What the second pass corrected (all measured, none guessed)**: the
 pigment stack ran at full strength and turned the bake's smooth pale ramp
 into sharp maroon blotches — isolating raw albedo in the live shader
@@ -586,6 +590,54 @@ corolla and a wall of leaf — measured on `?garden=7&seed=21`, the hero close-u
 33.9 ms with the flower visible while `?focus=flower` on a Cathedral Fern two plants over
 is 131 ms of the subject's own blades across the lens. Delete the thumb the day the cull
 follows the subject instead of specimen 0.
+
+### Every flower in the field is its own (`30_scene.js`, `40_boot.js`)
+
+The bullseye threshold and the baked spot atlas are **per-specimen** quantities —
+one number and three reaction-diffusion fields off that plant's own seed — and both
+arrived in the garden as scene-wide uniforms drawn once from the **hero**. A field of
+seven species showed one specimen's pigment program seven times.
+
+It was worse than redundant. `20_draw.js` has always run `flSpotsRun` for whatever
+petal it is drawing, whoever owns it, so `garden=7` was already baking **twenty-one**
+Mimulus fields and uploading three; the other eighteen were computed, paid for, and
+thrown away. This draws what the page was already spending.
+
+**The mechanism is a split draw, not a wider vertex.** The petal stream is one
+concatenated buffer (`uploadMany`), so a uniform cannot vary inside it, and the three
+obvious routes each cost something real: widening `petb` 16 → 17 floats ripples
+through `10_capture.js`, the strides and the parity gate; an atlas row offset is a
+per-*vertex* quantity too and ripples identically; a world-position hash in the shader
+is free but per-**place** rather than per-seed, so two members standing near each other
+would match. `uploadMany` already walks the list and knows each buffer's extent, so
+**N geometry groups against N materials** makes a per-specimen uniform an honest
+per-specimen uniform with the vertex format, the capture and the gate untouched. It
+costs N−1 extra draw calls a frame at N ≤ 12, against ~700 for the streams already,
+and it measures inside the noise (`flowers_perf` at `garden=7`: median gap 8.4 ms both
+sides, p99 108.3 → 108.2, fps 55.5 → 56.2). With one member the groups are cleared and
+the material is a single material — the shipped single draw, not a new path.
+
+The jitter comes off each member's **own** seed with the same derived-stream discipline
+as the fruit's chemistry (`mulberry32(seed ^ 0xb0117e)`), so a member's flowers are
+stable across reloads and identical to what the solo page grows for that seed. The
+hero's number does not move, because `plan[0].seed` **is** the URL's seed.
+
+Measured with `tools/flowers_ident.mjs`, which reads the pigment table straight off the
+materials and compares two builds pixel for pixel:
+
+| | before | after |
+|---|---|---|
+| distinct bullseye thresholds, `garden=7&seed=21` | 1 (0.5771 for all seven) | **7**, spanning 0.2829–0.7909 |
+| distinct spot atlases | 1 | **7**, 0 collisions |
+| solo page vs a pre-change build, seeds 21 and 4207 | — | **mean pixel delta 0.0000/255**, 0.000% of 2.23M px |
+
+⚠ **And it reads at a close-up and not at a bank shot, which is the design and should
+not be argued with.** `shot=close` moves 7.56% of the frame at a mean of 0.554/255 —
+the same non-hero corolla loses a broad dark proximal band and gains its own discrete
+spot field, unmistakable side by side. `shot=bank` moves 1.32% at 0.041/255, and the
+amplified diff map is black everywhere except non-hero corollas. Round 2 turned this
+stack down deliberately after full strength read as maroon blotches; **the fix for "you
+cannot see it at fifty units" is the director, not the gain.**
 
 ### The ground, and a field's own sky (`25_ground.js`)
 

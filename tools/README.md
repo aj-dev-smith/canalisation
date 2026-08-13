@@ -359,6 +359,29 @@ It is the post chain's own footprint, not a tile size. Nor is the missing bloom
 comb evidence against the bloom path: a comb is what a *finite* impulse leaves at
 sparse taps, and a NaN has no magnitude to comb with.
 
+- `flowers_ident.mjs '<query>' [pageA] [pageB]` — **is every flower in the field
+  the hero's, and did giving each its own change the page that only ever had one
+  plant?** Prints a pigment table straight off the petal materials — a bullseye
+  threshold and a spot-atlas digest per member — and exits non-zero if two
+  members share a program. Given a second html it also compares the two frames
+  pixel for pixel. `NOPOL=1` empties the pollen first, `PNG=<prefix>` writes both
+  frames and a 16x-amplified diff map.
+
+  **It is also the cautionary tale on this page about A/B pixel comparison, and
+  it fell into both traps in one sitting.** Reading the WebGL canvas back with
+  `drawImage` — no `preserveDrawingBuffer` — returns an already-cleared buffer,
+  so its first version reported `mean 0.0000, IDENTICAL` for the solo page (right
+  answer, no evidence), for a garden of seven (wrong answer) and for a build
+  against itself. **Three identicals in a row at max delta exactly 0.0 is what a
+  broken instrument looks like, not a clean result**; it screenshots now and
+  refuses a black frame, the same guard `flowers_shot.mjs` carries. And
+  `FlowerScene.render(t)` takes wall time into `uT`, which drives the sky's glow
+  breath, the ground pool's breath and the grain hash — two runs of the SAME
+  build disagreed over 97% of the frame by a mean of 12/255, four times the
+  effect being measured. **Pin the clock as well as the camera**, and pin the
+  camera to *exact* equality: at a 1e-4 tolerance the easing framer and the
+  easing depth of field left 0.141% of the frame moving.
+
 ⚠ **Symlinking `node_modules` into a worktree: `ln -sfn`, and never from the repo
 root.** The advice under `clip.mjs` above is right and it is sharp: run
 `ln -sfn /abs/path/to/node_modules node_modules` **from inside the worktree**.
