@@ -692,6 +692,11 @@ const drift = (t) => {
 const _p = new THREE.Vector3();
 window.__hold = false;
 renderer.setAnimationLoop((t) => { if (!window.__hold) drift(t); });
+// deterministic time for offline filming: demo/film.mjs holds the RAF loop
+// and drives this instead, one fabricated timestamp per frame — wall-clock
+// recording under software GL is a slideshow, but a stepped render is smooth
+// at any renderer speed because the clock is ours, not the machine's
+window.__stepMs = (ms) => drift(t0 + ms);
 
 window.__stats = () => ({
   triangles: renderer.info.render.triangles, calls: renderer.info.render.calls,
