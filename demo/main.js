@@ -644,6 +644,82 @@ for (let i = 0; i < Math.round(45 * DENSITY); i++) {
 }
 console.log(`sowed ${planted} plants`);
 
+// --- the flight --------------------------------------------------------------
+// The pollinator's tour: ?cam=flight (and the film tool's default). A
+// Catmull-Rom spline threaded through the SOWN field — waypoints are found
+// off the actual claimed plant positions, so the path adapts to what grew:
+// in low over the far drifts, close past an adult, blade-height through the
+// mid-field, half a loop around the hero, a skim across the pond and its
+// moon streak, then up and out facing the moon. Terrain-aware, plant-aware
+// (a soft push off any stem it strays into), with a flutter bob and a bank
+// into the turns, both small — a camera that moves like an insect and cuts
+// like one are different things, and only the first is wanted.
+const FLIGHT_S = 20;
+const flightCurve = (() => {
+  const P = (x, z, h) => new THREE.Vector3(x, ground(x, z) + h, z);
+  // the nearest adult to a spot, so a "flyby" is of a plant that exists
+  const adultNear = (x, z) => {
+    let best = null, bd = 1e9;
+    for (const p of claimed) {
+      if (p.r < 0.8) continue;
+      const d = Math.hypot(p.x - x, p.z - z);
+      if (d < bd) { bd = d; best = p; }
+    }
+    return best ?? { x, z };
+  };
+  const a1 = adultNear(-4, 2.5), a2 = adultNear(-2, -2.5), a3 = adultNear(3, -2);
+  return new THREE.CatmullRomCurve3([
+    P(-15, 8.5, 2.4),                      // in over the far field
+    P(-8.5, 5, 1.0),                       // descending
+    P(a1.x + 0.8, a1.z + 0.5, 0.7),        // first flyby, shoulder height
+    P((a1.x + a2.x) / 2 - 0.6, (a1.z + a2.z) / 2, 0.5),
+    P(a2.x - 0.7, a2.z - 0.4, 0.6),        // second flyby
+    P(-1.3, 1.6, 0.9),                     // approach the hero
+    P(1.4, 1.2, 1.1),                      // half a loop around it
+    P(1.6, -0.9, 0.8),
+    P(a3.x + 0.6, a3.z + 0.6, 0.55),       // out through the coral drift
+    P(4.2, -3.8, 0.45),                    // dropping toward the water
+    new THREE.Vector3(5.2, POND.y + 0.35, -5.0),  // the skim — moon in the water
+    P(7.6, -7.6, 1.2),                     // climbing out
+    P(10.2, -10.6, 2.3),                   // and away, facing the moon
+  ]);
+})();
+const CAM_MODE = Q.get('cam') ?? 'drift';
+function flightCam(s) {
+  // ease both ends so the flight leaves and arrives instead of starting
+  const u = (1 - Math.cos(Math.PI * Math.min(Math.max(s / FLIGHT_S, 0), 1))) / 2;
+  const pos = flightCurve.getPointAt(u);
+  // flutter: two incommensurate bobs, centimetres — an insect, not a drone
+  pos.y += Math.sin(s * 2.1) * 0.035 + Math.sin(s * 3.7) * 0.02;
+  // soft push off any plant the spline strays through
+  for (const p of claimed) {
+    const dx = pos.x - p.x, dz = pos.z - p.z, d = Math.hypot(dx, dz);
+    if (d < 0.45 && d > 1e-6 && pos.y < 1.7) {
+      const push = (0.45 - d) * 0.8;
+      pos.x += (dx / d) * push; pos.z += (dz / d) * push;
+    }
+  }
+  pos.y = Math.max(pos.y, ground(pos.x, pos.z) + 0.22);
+  // look where you are going, a beat ahead — until the exit, where the gaze
+  // swings back over the shoulder toward the moon: the climb-out flies AWAY
+  // from the moon's azimuth, and the scout pass showed the old look-ahead
+  // ending the film on featureless sky. The farewell starts during the pond
+  // skim, so the streak and the moonlit field are what the water reflects.
+  const look = flightCurve.getPointAt(Math.min(u + 0.045, 1));
+  const farewell = sm(clamp01((u - 0.72) / 0.22));
+  if (farewell > 0) {
+    look.lerp(new THREE.Vector3(
+      pos.x + MOON.x * 40, pos.y + MOON.y * 40 - 6, pos.z + MOON.z * 40), farewell);
+  }
+  cam.position.copy(pos);
+  cam.up.set(0, 1, 0);
+  cam.lookAt(look);
+  // bank into the turn: roll off the horizontal turn rate, capped gentle
+  const t1 = flightCurve.getTangentAt(u), t2 = flightCurve.getTangentAt(Math.min(u + 0.02, 1));
+  const roll = Math.max(-0.10, Math.min(0.10, (t1.x * t2.z - t1.z * t2.x) * 6));
+  cam.rotateZ(roll);
+}
+
 // --- framings ----------------------------------------------------------------
 const FRAMES = {
   // wide faces the moon — an overview with the light source in frame; field
@@ -704,9 +780,13 @@ const drift = (t) => {
     mp.setXYZ(i, _p.x, _p.y, _p.z);
   }
   mp.needsUpdate = true;
-  const a = 0.72 + s * 0.021, r = 11.4 - Math.sin(s * 0.05) * 1.3;
-  cam.position.set(Math.sin(a) * r, 2.1 + Math.sin(s * 0.11) * 0.4, Math.cos(a) * r);
-  cam.lookAt(0, 1.15, 0);
+  if (CAM_MODE === 'flight') {
+    flightCam(s % (FLIGHT_S + 2));   // live viewing loops with a beat of rest
+  } else {
+    const a = 0.72 + s * 0.021, r = 11.4 - Math.sin(s * 0.05) * 1.3;
+    cam.position.set(Math.sin(a) * r, 2.1 + Math.sin(s * 0.11) * 0.4, Math.cos(a) * r);
+    cam.lookAt(0, 1.15, 0);
+  }
   draw();
 };
 const _p = new THREE.Vector3();
@@ -722,6 +802,7 @@ window.__stepMs = (ms) => drift(t0 + ms);
 // frame rate is asking to be trusted instead of measured. EMA over frame
 // times; software GL will honestly say 1, real GPUs say what they say.
 const fpsEl = document.createElement('div');
+fpsEl.id = 'fps';   // so the film tool can hide it — a meter in a film frame is a boom mic in shot
 fpsEl.style.cssText = 'position:fixed;top:10px;right:12px;color:#9fb4ad;opacity:.8;'
   + 'font:12px ui-monospace,monospace;text-shadow:0 1px 2px #000;pointer-events:none;text-align:right';
 document.body.appendChild(fpsEl);

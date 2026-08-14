@@ -21,8 +21,9 @@ import { serve } from './serve.mjs';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const outDir = process.argv[2] || 'shots';
-const seconds = +(process.argv[3] || 12);
+const seconds = +(process.argv[3] || 20);
 const fps = +(process.argv[4] || 24);
+const camMode = process.argv[5] || 'flight';   // the pollinator's tour; 'drift' for the old orbit
 const W = +(process.env.WIDTH || 1280), H = +(process.env.HEIGHT || 800);
 mkdirSync(outDir, { recursive: true });
 
@@ -49,10 +50,12 @@ const browser = await chromium.launch({ args: ['--use-gl=swiftshader'] });
 const page = await browser.newPage({ viewport: { width: W, height: H } });
 page.on('pageerror', (e) => console.error('page error:', e.message));
 
-await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'load' });
+await page.goto(`http://127.0.0.1:${port}/?cam=${camMode}`, { waitUntil: 'load' });
 await page.waitForFunction('window.__ready === true', null, { timeout: 240000 });
-// a film frame is a picture, not a document — the HUD stays on the live page
-await page.addStyleTag({ content: '#hud { display: none; }' });
+// a film frame is a picture, not a document — the HUD and the fps meter stay
+// on the live page and out of the film. The meter got baked into a whole
+// scout pass's frames before this listed it.
+await page.addStyleTag({ content: '#hud, #fps { display: none; }' });
 await page.evaluate('window.__hold = true');
 
 const n = Math.round(seconds * fps);
