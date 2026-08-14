@@ -52,6 +52,39 @@ The moon is one direction shared by the sky dome, the key light and the
 water's streak — one light source, three readers, or the picture disagrees
 with itself about where its own light comes from.
 
+## Performance, honestly
+
+The scene is built like a real-time scene: the plants are **static geometry**
+(growth happened offline — no simulation runs in this page, which is the
+difference from the engine's own browser app), the wind is pure vertex
+shader, 64k grass blades are **one** instanced draw call, and bloom works at
+quarter resolution. What that adds up to on your GPU is the number the
+always-on meter in the corner shows — a demo that hides its own frame rate
+is asking to be trusted instead of measured. Nothing here can honestly quote
+you an fps: every capture in this repo runs on software GL where this scene
+is ~1 fps by construction, and the repo's own docs say headless frame rates
+are not worth reading.
+
+Knobs, all URL parameters, cinematic defaults: `?dpr=1` caps resolution
+(the biggest lever on laptops), `?grass=16000` thins the meadow,
+`?plants=0.5` sows half the field, `?post=none` skips the composer.
+
+The honest weight problem is **bytes, not triangles**: the field's fourteen
+GLBs total ~50 MB, dominated by non-indexed lamina soups and per-stub vein
+tubes. Fine for a local clone (you grew them); heavy for a hosted page. The
+known fixes, in order of payoff: strand-order metadata in the bridge (halves
+tube geometry — see tools/README.md), meshopt/Draco compression, and a
+lamina weld. None are done; all are honest work, not hacks.
+
+## Releasing it
+
+`.github/workflows/demo-pages.yml` grows the stand (cached by manifest+source
+hash), assembles a static site, and deploys to GitHub Pages on manual
+trigger — so the demo runs on each visitor's own GPU, which is the only
+place its performance means anything. One-time setup: Settings → Pages →
+Source: "GitHub Actions", then run the workflow. All demo URLs are relative,
+so it serves from a subpath.
+
 ## The wind
 
 The field is **the engine's own** — the page imports `src/37_wind.js` itself

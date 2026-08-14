@@ -1,0 +1,65 @@
+# THE DEMO, RELEASED. Grows the stand, assembles a static site, deploys it to
+# GitHub Pages — so the field runs on the VISITOR'S GPU, which is the only
+# place its performance means anything (headless fps in CI is explicitly not
+# worth reading; the repo's docs say so and this pipeline agrees).
+#
+# Manual trigger only, deliberately: growing 14 specimens is ~25 min on a
+# laptop and this runner is ~4.5x slower, so the cold run is long. The cache
+# makes every later run cheap — its key is the manifest AND the source, since
+# a change to either grows a different plant.
+#
+# One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
+name: demo to pages
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: cache the grown stand
+        uses: actions/cache@v4
+        with:
+          path: export
+          key: demo-assets-${{ hashFiles('demo/build_assets.mjs', 'src/*.js', 'tools/blender_export.mjs', 'tools/gltf_export.mjs') }}
+      - name: grow the stand (cache hit = seconds; cold = hours, see header)
+        run: node demo/build_assets.mjs
+      - name: assemble the site
+        run: |
+          mkdir -p site/export site/src
+          cp demo/index.html demo/main.js site/
+          cp export/demo_*.glb site/export/
+          cp src/37_wind.js src/00_math.js site/src/
+          node --input-type=module -e "
+            const { vendorThree } = await import('./demo/serve.mjs');
+            const { cpSync } = await import('node:fs');
+            cpSync(vendorThree(), 'site/vendor', { recursive: true });
+          "
+          du -sh site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

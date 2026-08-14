@@ -28,7 +28,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // JS for the CPU-side drifters — one field, three readers, same file the
 // simulation runs. Everything it needs is pure math (00_math.js), so the
 // browser can import it exactly as Node does.
-import { windField, windAt, windGLSL, WORLD as WIND_WORLD } from '/src/37_wind.js';
+import { windField, windAt, windGLSL, WORLD as WIND_WORLD } from './src/37_wind.js';
 
 // --- the field ---------------------------------------------------------------
 // A WILD FIELD, NOT AN ARRANGEMENT. Three things make a stand read as wild,
@@ -41,20 +41,20 @@ import { windField, windAt, windGLSL, WORLD as WIND_WORLD } from '/src/37_wind.j
 // Where each drift sits is still staging, same honesty note as ever; what is
 // NOT staging is every plant in it.
 const ASSETS = {
-  fern5: { url: '/export/demo_cathedral_fern_5.glb', kind: 'adult' },
-  fern21s: { url: '/export/demo_cathedral_fern_21_sen.glb', kind: 'adult' },
-  fern3j: { url: '/export/demo_cathedral_fern_3_juv.glb', kind: 'juv' },
-  creep7: { url: '/export/demo_ember_creeper_7.glb', kind: 'adult' },
-  creep12: { url: '/export/demo_ember_creeper_12.glb', kind: 'adult' },
-  creep21j: { url: '/export/demo_ember_creeper_21_juv.glb', kind: 'juv' },
-  creep33j: { url: '/export/demo_ember_creeper_33_juv.glb', kind: 'juv' },
-  para3: { url: '/export/demo_nightglass_parasol_3.glb', kind: 'adult' },
-  para9: { url: '/export/demo_nightglass_parasol_9.glb', kind: 'adult' },
-  para5j: { url: '/export/demo_nightglass_parasol_5_juv.glb', kind: 'juv' },
-  para17j: { url: '/export/demo_nightglass_parasol_17_juv.glb', kind: 'juv' },
-  coral5: { url: '/export/demo_sun_coral_5.glb', kind: 'adult' },
-  coral2: { url: '/export/demo_sun_coral_2.glb', kind: 'adult' },
-  coral9j: { url: '/export/demo_sun_coral_9_juv.glb', kind: 'juv' },
+  fern5: { url: './export/demo_cathedral_fern_5.glb', kind: 'adult' },
+  fern21s: { url: './export/demo_cathedral_fern_21_sen.glb', kind: 'adult' },
+  fern3j: { url: './export/demo_cathedral_fern_3_juv.glb', kind: 'juv' },
+  creep7: { url: './export/demo_ember_creeper_7.glb', kind: 'adult' },
+  creep12: { url: './export/demo_ember_creeper_12.glb', kind: 'adult' },
+  creep21j: { url: './export/demo_ember_creeper_21_juv.glb', kind: 'juv' },
+  creep33j: { url: './export/demo_ember_creeper_33_juv.glb', kind: 'juv' },
+  para3: { url: './export/demo_nightglass_parasol_3.glb', kind: 'adult' },
+  para9: { url: './export/demo_nightglass_parasol_9.glb', kind: 'adult' },
+  para5j: { url: './export/demo_nightglass_parasol_5_juv.glb', kind: 'juv' },
+  para17j: { url: './export/demo_nightglass_parasol_17_juv.glb', kind: 'juv' },
+  coral5: { url: './export/demo_sun_coral_5.glb', kind: 'adult' },
+  coral2: { url: './export/demo_sun_coral_2.glb', kind: 'adult' },
+  coral9j: { url: './export/demo_sun_coral_9_juv.glb', kind: 'juv' },
 };
 // per species: which assets, how many drifts, drift population, patch tightness
 const GROUPS = [
@@ -118,10 +118,21 @@ function ground(x, z) {
   return h;
 }
 
+// --- release knobs -----------------------------------------------------------
+// All URL parameters, cinematic defaults: ?post=none kills the composer,
+// ?dpr=1 caps resolution, ?grass=16000 thins the meadow, ?plants=0.5 sows
+// half the field. The fps meter is always on — a demo that hides its own
+// frame rate is asking to be trusted instead of measured.
+const Q = new URLSearchParams(location.search);
+const POST = Q.get('post') ?? 'bloom';
+const DPR = +(Q.get('dpr') || Math.min(devicePixelRatio, 2));
+const GRASS_N = Math.max(0, +(Q.get('grass') || 64000) | 0);
+const DENSITY = Math.min(2, Math.max(0.1, +(Q.get('plants') || 1)));
+
 // --- renderer ----------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(DPR);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 document.body.appendChild(renderer.domElement);
@@ -141,7 +152,6 @@ const C = (a, mul = 1) => new THREE.Color().setRGB(a[0] * mul, a[1] * mul, a[2] 
 // that hands some viewers the documented black frame: threshold at quarter
 // res, one separable 9-tap gaussian, additive composite with a vignette.
 // ?post=none skips everything (the bisect switch that found this; kept).
-const POST = new URLSearchParams(location.search).get('post') ?? 'bloom';
 const dbs = new THREE.Vector2();
 renderer.getDrawingBufferSize(dbs);
 const rtScene = new THREE.WebGLRenderTarget(dbs.x, dbs.y, { type: THREE.HalfFloatType });
@@ -202,10 +212,19 @@ function fsPass(mat, target) {
   renderer.setRenderTarget(target);
   renderer.render(fsScene, fsCam);
 }
+// renderer.info resets per render() call, so after the bloom passes it holds
+// the composite quad — 1 call, 1 triangle — which a perf probe faithfully
+// reported as the whole scene. Snapshot the SCENE pass's numbers.
+const lastInfo = { calls: 0, triangles: 0 };
 function draw() {
-  if (POST === 'none') { renderer.setRenderTarget(null); renderer.render(scene, cam); return; }
+  if (POST === 'none') {
+    renderer.setRenderTarget(null); renderer.render(scene, cam);
+    lastInfo.calls = renderer.info.render.calls; lastInfo.triangles = renderer.info.render.triangles;
+    return;
+  }
   renderer.setRenderTarget(rtScene);
   renderer.render(scene, cam);
+  lastInfo.calls = renderer.info.render.calls; lastInfo.triangles = renderer.info.render.triangles;
   thresholdMat.uniforms.tex.value = rtScene.texture;
   fsPass(thresholdMat, rtA);
   for (let i = 0; i < 2; i++) {
@@ -407,7 +426,7 @@ const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
   // grass rides the same field at a floppier gain — no emissive, so boost 0
   // and the #ifdef compiles the glow line out
   patchMaterial(mat, 0, 0.1, 0.05);
-  const COUNT = 64000;
+  const COUNT = GRASS_N;
   const mesh = new THREE.InstancedMesh(blade, mat, COUNT);
   const rnd = mulberry32(909);
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler(),
@@ -603,7 +622,7 @@ for (const g of GROUPS) {
   for (let d = 0; d < g.drifts; d++) {
     const a = fieldRnd() * Math.PI * 2, rr = 2.2 + Math.sqrt(fieldRnd()) * 12.5;
     const cx = Math.cos(a) * rr, cz = Math.sin(a) * rr;
-    const n = g.per[0] + Math.floor(fieldRnd() * (g.per[1] - g.per[0] + 1));
+    const n = Math.max(1, Math.round((g.per[0] + Math.floor(fieldRnd() * (g.per[1] - g.per[0] + 1))) * DENSITY));
     for (let i = 0; i < n; i++) {
       const u = Math.max(fieldRnd(), 1e-6), v = fieldRnd();
       const rad = g.sigma * Math.sqrt(-2 * Math.log(u)) * 0.7, th = v * Math.PI * 2;
@@ -617,7 +636,7 @@ for (const g of GROUPS) {
 }
 // loners — the stragglers between drifts that keep the patches from reading
 // as islands
-for (let i = 0; i < 45; i++) {
+for (let i = 0; i < Math.round(45 * DENSITY); i++) {
   const a = fieldRnd() * Math.PI * 2, rr = 2 + Math.sqrt(fieldRnd()) * 16;
   const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
   const key = keys[(fieldRnd() * keys.length) | 0];
@@ -672,6 +691,7 @@ function advect(p, dt, gain) {
 }
 const drift = (t) => {
   const s = (t - t0) / 1000, dt = Math.min((t - tLast) / 1000, 0.1);
+  meter(t - tLast);
   tLast = t;
   windT = (300 + s) * PT_PER_SEC;
   for (const sh of windShaders) sh.uniforms.uWindT.value = windT;
@@ -698,8 +718,24 @@ renderer.setAnimationLoop((t) => { if (!window.__hold) drift(t); });
 // at any renderer speed because the clock is ours, not the machine's
 window.__stepMs = (ms) => drift(t0 + ms);
 
+// the fps meter — always on, top right, because a demo that hides its own
+// frame rate is asking to be trusted instead of measured. EMA over frame
+// times; software GL will honestly say 1, real GPUs say what they say.
+const fpsEl = document.createElement('div');
+fpsEl.style.cssText = 'position:fixed;top:10px;right:12px;color:#9fb4ad;opacity:.8;'
+  + 'font:12px ui-monospace,monospace;text-shadow:0 1px 2px #000;pointer-events:none;text-align:right';
+document.body.appendChild(fpsEl);
+let emaMs = 0, fpsTick = 0;
+function meter(dtMs) {
+  emaMs = emaMs ? emaMs * 0.92 + dtMs * 0.08 : dtMs;
+  if (++fpsTick % 12 === 0) {
+    fpsEl.textContent = `${(1000 / emaMs).toFixed(0)} fps · ${emaMs.toFixed(1)} ms · `
+      + `${lastInfo.calls} calls · ${(lastInfo.triangles / 1e6).toFixed(2)}M tris`;
+  }
+}
+
 window.__stats = () => ({
-  triangles: renderer.info.render.triangles, calls: renderer.info.render.calls,
+  triangles: lastInfo.triangles, calls: lastInfo.calls,
   meshes, lines, tris: Math.round(tris), plants: planted,
 });
 window.__ready = true;
