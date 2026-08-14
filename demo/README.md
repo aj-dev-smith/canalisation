@@ -52,10 +52,26 @@ The moon is one direction shared by the sky dome, the key light and the
 water's streak — one light source, three readers, or the picture disagrees
 with itself about where its own light comes from.
 
-## What phase 3 would add
+## The wind
 
-The wind. `src/37_wind.js` already emits GLSL from one baked mode table, so a
-three.js material patch (`onBeforeCompile`) could move this stand with the
-same physically-derived field the browser uses — 0.56–0.64 Hz stem modes, a
-real gust spectrum, nothing hand-animated. That is the feature no other
-vegetation asset has, and it is sitting in the repo already generated.
+The field is **the engine's own** — the page imports `src/37_wind.js` itself
+(served raw; it depends only on `00_math.js`, which is pure math), bakes the
+mode table once, and injects `windGLSL()`'s emitted source into every plant
+and grass material. One field, three readers: the vertex shaders lean the
+canopy, `windAt()` advects the mist and the spore motes on the CPU, and both
+sum the same baked numbers the simulation sums — a copy in demo/ would be
+the two-airs bug the module exists to prevent, reintroduced by hand.
+
+What is approximated is the **response**: a quasi-static first-mode lean,
+`(y/H)^1.5` off each plant's own exported height, because the bend solver is
+a simulation and this page is a scene. The ladder's slow octaves (0.13–0.5 Hz)
+dominate the loading and read honestly this way; what is forgone is ringing.
+`amp` — metres of lean per m/s — is the one aesthetic number in the wind
+path, sized to the native piece's measured band (the floppiest herb leans
+1.9°). Stills sample the ladder at a fixed plant time so captures reproduce
+bit-exact; `__frame(name, tSec)` A/Bs the wind itself, and the check that
+gates it: same `t` → diff 0.0000, `t + 1.5 s` → 2.5% of pixels moved.
+
+`node demo/clip.mjs shots 20` records the webm — the only artifact here that
+shows it moving. Under software GL it is a low-frame-rate record of
+true-rate motion; do not read stutter as a solver bug.

@@ -80,6 +80,10 @@ export function serve(port = +(process.env.PORT ?? 8460)) {
     if (url === '/' || url === '/index.html') file = join(ROOT, 'demo', 'index.html');
     else if (url.startsWith('/vendor/')) file = join(CACHE, url.slice(8));
     else if (url.startsWith('/export/')) file = join(ROOT, 'export', url.slice(8));
+    // the page imports the SHIPPED wind module — src/37_wind.js and the math it
+    // pulls — because the whole point of that file is that there is one field,
+    // and a copy in demo/ would be the two-airs bug being reintroduced by hand
+    else if (url.startsWith('/src/')) file = join(ROOT, 'src', url.slice(5));
     else file = join(ROOT, 'demo', url);
     // stay inside the repo — a static server that follows `..` is a gift
     if (!normalize(file).startsWith(ROOT)) { res.writeHead(403); res.end(); return; }

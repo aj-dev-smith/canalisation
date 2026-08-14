@@ -23,6 +23,12 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+// THE SHIPPED AIR, not a copy of it. windField() bakes the mode table once,
+// windGLSL() emits the same numbers as shader source, windAt() sums them in
+// JS for the CPU-side drifters — one field, three readers, same file the
+// simulation runs. Everything it needs is pure math (00_math.js), so the
+// browser can import it exactly as Node does.
+import { windField, windAt, windGLSL, WORLD as WIND_WORLD } from '/src/37_wind.js';
 
 // --- the field ---------------------------------------------------------------
 // A WILD FIELD, NOT AN ARRANGEMENT. Three things make a stand read as wild,
@@ -220,6 +226,23 @@ function draw() {
 // with itself about where its own light comes from
 const MOON = new THREE.Vector3(-0.55, 0.28, 0.72).normalize();
 
+// --- the wind ----------------------------------------------------------------
+// The field is the engine's own: log-law profile, Kolmogorov octave ladder,
+// Taylor advection, divergence-free, at the shipped force-2 weather. What is
+// approximated here is the RESPONSE — a plant leans along the field with a
+// first-mode cantilever weight (y/H)^1.5, quasi-statically, because the bend
+// solver (39a_stem.js) is a simulation and this page is a scene. The field's
+// slowest octaves are 0.13-0.5 Hz, well under any stem's own mode, so the
+// quasi-static read is honest for what dominates; what it forgoes is ringing.
+// t is PLANT TIME (125 units per second), exactly as the module warns.
+const WF = windField({ seed: 2527 });
+const WIND_SRC = windGLSL(WF, 'canWind');
+const M2UNIT = (1 / WIND_WORLD.unitM).toFixed(4);            // metres -> world units
+const VEL2MS = (WIND_WORLD.unitM * WIND_WORLD.ptPerSec).toFixed(4); // field -> m/s
+const PT_PER_SEC = WIND_WORLD.ptPerSec;
+const windShaders = [];
+let windT = 300 * PT_PER_SEC;   // where stills sample the gust ladder; drifts live
+
 // --- load the stand ----------------------------------------------------------
 const loader = new GLTFLoader();
 const keys = Object.keys(ASSETS);
@@ -381,6 +404,9 @@ const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
   blade.setIndex(idx);
   blade.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ roughness: 1, side: THREE.DoubleSide });
+  // grass rides the same field at a floppier gain — no emissive, so boost 0
+  // and the #ifdef compiles the glow line out
+  patchMaterial(mat, 0, 0.1, 0.05);
   const COUNT = 64000;
   const mesh = new THREE.InstancedMesh(blade, mat, COUNT);
   const rnd = mulberry32(909);
@@ -433,6 +459,7 @@ scene.add(rim);
   ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256);
   const tex = new THREE.CanvasTexture(cv);
   const rnd = mulberry32(5150);
+  window.__mists = [];
   for (let i = 0; i < 11; i++) {
     const m = new THREE.SpriteMaterial({
       map: tex, color: C(P.fog, 2.0), transparent: true,
@@ -443,6 +470,7 @@ scene.add(rim);
     s.position.set(Math.cos(a) * r, 0.5 + rnd() * 0.9, Math.sin(a) * r);
     s.scale.set(14 + rnd() * 14, 2.2 + rnd() * 2.2, 1);
     scene.add(s);
+    window.__mists.push(s);
   }
 }
 
@@ -465,12 +493,39 @@ scene.add(rim);
     blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
   });
   scene.add(new THREE.Points(g, m));
+  window.__motes = g.attributes.position;
 }
 
-// --- the emissive patch: alpha back into glow --------------------------------
-function patchMaterial(m, boost) {
+// --- the material patch: alpha back into glow, and the air into the vertex ---
+// One onBeforeCompile doing both. heightM is the plant's own grown height (off
+// the bbox its exporter wrote), so the bend weight tops out at the actual tip;
+// amp is metres of lean per m/s of wind — the one aesthetic number in the wind
+// path, sized so a gust at the shipped weather leans a herb a few centimetres,
+// which is the band the native piece measures (1.9 deg on the floppiest).
+function patchMaterial(m, boost, heightM, amp) {
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uEmisBoost = { value: boost };
+    sh.uniforms.uWindT = { value: windT };
+    sh.uniforms.uWindAmp = { value: amp };
+    sh.uniforms.uInvH = { value: 1 / Math.max(heightM, 0.01) };
+    windShaders.push(sh);
+    sh.vertexShader = sh.vertexShader
+      .replace('void main() {',
+        `${WIND_SRC}\nuniform float uWindT, uWindAmp, uInvH;\nvoid main() {`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+      {
+        #ifdef USE_INSTANCING
+          vec3 wpw = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+        #else
+          vec3 wpw = (modelMatrix * vec4(transformed, 1.0)).xyz;
+        #endif
+        // evaluate at the VERTEX, not the base: the ladder's big octaves are
+        // far larger than a plant so it still moves as one thing, and the
+        // small ones put per-leaf texture on top for free
+        vec3 uw = canWind(wpw * ${M2UNIT}, uWindT) * ${VEL2MS};
+        float bendw = pow(clamp(transformed.y * uInvH, 0.0, 1.0), 1.5);
+        transformed += vec3(uw.x, uw.y * 0.3, uw.z) * (uWindAmp * bendw);
+      }`);
     sh.fragmentShader = sh.fragmentShader
       .replace('void main() {', 'uniform float uEmisBoost;\nvoid main() {')
       .replace('#include <emissivemap_fragment>',
@@ -484,9 +539,11 @@ function patchMaterial(m, boost) {
 
 let tris = 0, meshes = 0, lines = 0;
 for (const k of keys) {
+  const bb = scenes[k].userData?.bbox;
+  const hM = bb ? (bb.max[1] - bb.min[1]) * (scenes[k].userData.unitM ?? WIND_WORLD.unitM) : 1.2;
   scenes[k].traverse((o) => {
     if (o.isMesh) {
-      patchMaterial(o.material, 2.2);
+      patchMaterial(o.material, 2.2, hM, 0.02);
       o.material.transparent = false;   // alpha is emissive weight, not opacity
       meshes++;
       const g = o.geometry;
@@ -578,11 +635,15 @@ const FRAMES = {
   grove: { eye: [-5.4, 0.9, -3.6], look: [1.4, 1.1, 1.1], fov: 55 },
   pond: { eye: [8.9, 0.8, -8.8], look: [0, 1.25, 0.4], fov: 44 },
 };
-window.__frame = (name) => {
+window.__frame = (name, tSec = 300) => {
   const f = FRAMES[name]; if (!f) return Object.keys(FRAMES);
   cam.position.fromArray(f.eye);
   cam.fov = f.fov; cam.updateProjectionMatrix();
   cam.lookAt(new THREE.Vector3().fromArray(f.look));
+  // stills sample the gust ladder at one fixed plant time, so a capture is
+  // reproducible — the field still shows in them as differential lean. tSec
+  // is there so two stills can A/B the wind itself.
+  for (const sh of windShaders) sh.uniforms.uWindT.value = tSec * PT_PER_SEC;
   draw();
   return name;
 };
@@ -597,14 +658,38 @@ addEventListener('resize', () => {
   rtB.setSize(dbs.x >> 2, dbs.y >> 2);
 });
 
-let t0 = performance.now();
+let t0 = performance.now(), tLast = performance.now();
+const _w = new Float32Array(3);
+// one drifter step: sample the shipped field AT the drifter, in world units
+// and plant time, and carry it downwind. Mist is heavy air (slow), a spore is
+// nearly the air itself.
+function advect(p, dt, gain) {
+  windAt(_w, WF, p.x * 16, p.y * 16, p.z * 16, windT);
+  p.x += _w[0] * 7.8125 * gain * dt;
+  p.y += _w[1] * 7.8125 * gain * 0.4 * dt;
+  p.z += _w[2] * 7.8125 * gain * dt;
+  if (Math.hypot(p.x, p.z) > 19) { p.x *= -0.94; p.z *= -0.94; }  // re-enter upwind
+}
 const drift = (t) => {
-  const s = (t - t0) / 1000;
+  const s = (t - t0) / 1000, dt = Math.min((t - tLast) / 1000, 0.1);
+  tLast = t;
+  windT = (300 + s) * PT_PER_SEC;
+  for (const sh of windShaders) sh.uniforms.uWindT.value = windT;
+  for (const sp of window.__mists) advect(sp.position, dt, 0.12);
+  const mp = window.__motes;
+  for (let i = 0; i < mp.count; i++) {
+    _p.set(mp.getX(i), mp.getY(i), mp.getZ(i));
+    advect(_p, dt, 0.5);
+    if (_p.y < 0.15 || _p.y > 3.2) _p.y = 0.3 + (i % 7) * 0.3;
+    mp.setXYZ(i, _p.x, _p.y, _p.z);
+  }
+  mp.needsUpdate = true;
   const a = 0.72 + s * 0.021, r = 11.4 - Math.sin(s * 0.05) * 1.3;
   cam.position.set(Math.sin(a) * r, 2.1 + Math.sin(s * 0.11) * 0.4, Math.cos(a) * r);
   cam.lookAt(0, 1.15, 0);
   draw();
 };
+const _p = new THREE.Vector3();
 window.__hold = false;
 renderer.setAnimationLoop((t) => { if (!window.__hold) drift(t); });
 
