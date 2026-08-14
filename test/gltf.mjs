@@ -274,7 +274,7 @@ const CONVERTER = fileURLToPath(new URL('../tools/gltf_export.mjs', import.meta.
 function convert(fixtureBase, out, env) {
   const res = spawnSync(process.execPath, [CONVERTER, fixtureBase, out], {
     encoding: 'utf8',
-    env: { ...process.env, RADIAL: '', VEIN_MIN_W: '', LINES: '', ...env },
+    env: { ...process.env, RADIAL: '', VEIN_MIN_W: '', LINES: '', VEINS: '', ...env },
   });
   return res;
 }
@@ -688,6 +688,33 @@ try {
     const tv = H.json.accessors[primOf(H, 'veins').attributes.POSITION].count;
     ok(tv === RINGS * RAD2, `RADIAL=${RAD2} widens the ring rather than the strand count`,
       `${tv} vertices, expected ${RINGS * RAD2}`);
+  });
+
+  // --- VEINS=lines: centrelines INSTEAD of tubes ----------------------------
+  //
+  // The mode exists because a conifer's foliage IS its segments: 175k unchained
+  // needle stubs swept as prisms cost 81 MB to say what the browser says with
+  // glowing lines. The check that matters is the ABSENCE — a lines-only file
+  // must not carry a tube mesh at all.
+
+  section('VEINS=lines replaces tubes with centrelines', () => {
+    const outL = join(dir, 'l.glb');
+    const runL = convert(base, outL, { VEINS: 'lines' });
+    ok(runL.status === 0, 'the converter exits zero with VEINS=lines', runL.stderr);
+    const H = readGLB(readFileSync(outL));
+    ok(H.problems.length === 0, 'and writes a parseable GLB', H.problems.join('; '));
+    ok(!nodeByName(H, 'veins'), 'there is NO tube node — absence is the feature');
+    const nd = nodeByName(H, 'veins-lines');
+    ok(!!nd, 'the centreline node is there in its place');
+    const p = primOf(H, 'veins-lines');
+    ok(p.mode === 1, 'it is LINES', p.mode);
+    ok(H.json.accessors[p.attributes.POSITION].count === RINGS,
+      'one vertex per strand point', H.json.accessors[p.attributes.POSITION].count);
+    ok(H.json.accessors[p.indices].count === (RINGS - STRANDS) * 2,
+      'one line per segment', H.json.accessors[p.indices].count);
+
+    const runBad = convert(base, join(dir, 'lbad.glb'), { VEINS: 'prisms' });
+    ok(runBad.status !== 0, 'and an unknown VEINS value is refused, not defaulted');
   });
 
   // --- the clamp, on its own fixture ---------------------------------------

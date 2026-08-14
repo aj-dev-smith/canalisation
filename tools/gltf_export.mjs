@@ -49,6 +49,13 @@
 //   LINES=1      ALSO emit the strand centrelines as a mode-1 LINES node
 //                "veins-lines" — a far-LOD that costs two vertices a segment
 //                against the tube's 2 x RADIAL, for a consumer to swap in.
+//   VEINS=lines  centrelines INSTEAD of tubes — no "veins" node at all. This
+//                is not a compromise, it is the browser's own move: needles
+//                and veins on screen are additive glowing line ribbons, and a
+//                conifer's foliage IS its segments, so sweeping 175k unchained
+//                needle stubs into prisms cost 81 MB to say what 10 MB of
+//                lines says in the piece's native idiom. (VEINS=both == LINES=1;
+//                VEINS=tubes is the default.)
 //
 // No dependencies, `node:fs` only: the GLB writer is a hundred lines at the
 // bottom of this file. A glTF exporter is a buffer, a list of bufferViews and a
@@ -71,7 +78,13 @@ const out = process.argv[3] || `${base}.glb`;
 
 const RADIAL = Math.max(3, (+(process.env.RADIAL || 5)) | 0);
 const VEIN_MIN_W = +(process.env.VEIN_MIN_W || 0);
-const LINES = process.env.LINES === '1';
+const VEINS = process.env.VEINS || (process.env.LINES === '1' ? 'both' : 'tubes');
+if (!['tubes', 'lines', 'both'].includes(VEINS)) {
+  console.error(`VEINS must be tubes, lines or both (got '${VEINS}')`);
+  process.exit(1);
+}
+const TUBES = VEINS !== 'lines';
+const LINES = VEINS !== 'tubes';
 
 // Chaining tolerance. The bridge emits a strand's segments consecutively and
 // segment i+1's `a` is segment i's `b` bit for bit, so this is a float32
@@ -288,10 +301,10 @@ for (const r of runs) {
 }
 
 if (live.length) {
-  const pos = new Float32Array(tubeVerts * 3);
-  const nrm = new Float32Array(tubeVerts * 3);
-  const col = new Float32Array(tubeVerts * 4);
-  const idx = tubeVerts > 65535 ? new Uint32Array(tubeTris * 3) : new Uint16Array(tubeTris * 3);
+  const pos = TUBES ? new Float32Array(tubeVerts * 3) : null;
+  const nrm = TUBES ? new Float32Array(tubeVerts * 3) : null;
+  const col = TUBES ? new Float32Array(tubeVerts * 4) : null;
+  const idx = TUBES ? (tubeVerts > 65535 ? new Uint32Array(tubeTris * 3) : new Uint16Array(tubeTris * 3)) : null;
   // the strand centrelines, kept only for the LINES far-LOD
   const lpos = LINES ? new Float32Array(strandPts * 3) : null;
   const lcol = LINES ? new Float32Array(strandPts * 4) : null;
@@ -323,6 +336,18 @@ if (live.length) {
       R[i] = Math.max(SEG.a[s + 7], W_EPS) * unitM;
       C[i * 4] = SEG.a[s + 8]; C[i * 4 + 1] = SEG.a[s + 9]; C[i * 4 + 2] = SEG.a[s + 10]; C[i * 4 + 3] = clamp01(SEG.a[s + 11]);
     }
+
+    // The centrelines need only P and C; everything from here to the index
+    // loop is the tube's frame, skipped whole when VEINS=lines.
+    if (LINES) {
+      for (let i = 0; i < np; i++) {
+        const o = lo + i;
+        lpos[o * 3] = P[i * 3]; lpos[o * 3 + 1] = P[i * 3 + 1]; lpos[o * 3 + 2] = P[i * 3 + 2];
+        lcol[o * 4] = C[i * 4]; lcol[o * 4 + 1] = C[i * 4 + 1]; lcol[o * 4 + 2] = C[i * 4 + 2]; lcol[o * 4 + 3] = C[i * 4 + 3];
+        if (i) { lidx[lio++] = o - 1; lidx[lio++] = o; }
+      }
+    }
+    if (!TUBES) { lo += np; continue; }
 
     // TANGENTS BY CENTRAL DIFFERENCE, with the ends one-sided. A zero-length
     // interior step (two ribbons stacked on the same point, which the capture
@@ -380,12 +405,6 @@ if (live.length) {
         nrm[o * 3] = ox; nrm[o * 3 + 1] = oy; nrm[o * 3 + 2] = oz;
         col[o * 4] = cr; col[o * 4 + 1] = cg; col[o * 4 + 2] = cb; col[o * 4 + 3] = ca;
       }
-      if (LINES) {
-        const o = lo + i;
-        lpos[o * 3] = P[i * 3]; lpos[o * 3 + 1] = P[i * 3 + 1]; lpos[o * 3 + 2] = P[i * 3 + 2];
-        lcol[o * 4] = cr; lcol[o * 4 + 1] = cg; lcol[o * 4 + 2] = cb; lcol[o * 4 + 3] = ca;
-        if (i) { lidx[lio++] = o - 1; lidx[lio++] = o; }
-      }
     }
     for (let i = 0; i < np - 1; i++) {
       const b0 = vo + i * RADIAL, b1 = b0 + RADIAL;
@@ -405,16 +424,18 @@ if (live.length) {
     doubleSided: false,
   });
   const veinMat = gltf.materials.length - 1;
-  gltf.meshes.push({
-    name: 'veins',
-    primitives: [{
-      mode: 4,
-      indices: idxAcc(idx),
-      attributes: { POSITION: attrAcc(pos, 3, true), NORMAL: attrAcc(nrm, 3, false), COLOR_0: attrAcc(col, 4, false) },
-      material: veinMat,
-    }],
-  });
-  addNode('veins', gltf.meshes.length - 1);
+  if (TUBES) {
+    gltf.meshes.push({
+      name: 'veins',
+      primitives: [{
+        mode: 4,
+        indices: idxAcc(idx),
+        attributes: { POSITION: attrAcc(pos, 3, true), NORMAL: attrAcc(nrm, 3, false), COLOR_0: attrAcc(col, 4, false) },
+        material: veinMat,
+      }],
+    });
+    addNode('veins', gltf.meshes.length - 1);
+  }
 
   if (LINES) {
     gltf.meshes.push({
@@ -526,10 +547,9 @@ console.log(`
   ${N(nSeg)} segments in -> ${N(live.length)} strands out  (${(live.length ? sweptSeg / live.length : 0).toFixed(1)} segments/strand, longest ${N(maxRun)} points)${
   segDropped ? `\n  VEIN_MIN_W ${VEIN_MIN_W}: ${N(segDropped)} segments dropped (${(segDropped / (nSeg || 1) * 100).toFixed(1)}%)` : ''}${
   degenerate ? `\n  !! ${N(degenerate)} zero-length strands skipped — they have no tangent to sweep` : ''}
-  tubes at RADIAL ${RADIAL}: ${N(tubeVerts)} vertices, ${N(tubeTris)} triangles
+  ${TUBES ? `tubes at RADIAL ${RADIAL}: ${N(tubeVerts)} vertices, ${N(tubeTris)} triangles` : `VEINS=lines: no tubes swept`}
 
-  lamina  ${N(laminaTris)} triangles (non-indexed)
-  veins   ${N(tubeTris)} triangles${LINES ? `\n  lines   ${N(strandPts - live.length)} line segments (far-LOD)` : ''}
+  lamina  ${N(laminaTris)} triangles (non-indexed)${TUBES ? `\n  veins   ${N(tubeTris)} triangles` : ''}${LINES ? `\n  lines   ${N(strandPts - live.length)} line segments${TUBES ? ' (far-LOD)' : ''}` : ''}
   points  ${N(PT.n)}
 
   bbox ${bb ? bb.min.map(v => (v * unitM).toFixed(2)).join(', ') + ' .. ' + bb.max.map(v => (v * unitM).toFixed(2)).join(', ') : '?'} m
