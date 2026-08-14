@@ -24,20 +24,40 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-// --- the stand, as staging ---------------------------------------------------
-// Positions are staging, not simulation results — the same honesty note as the
-// Blender exporter's arc. Eight distinct seeds, so twins are rare; the two
-// remaining clones stand far apart at different yaws.
-const STAND = [
-  { url: '/export/demo_cathedral_fern_5.glb', hero: true, at: [[0, 0.3]] },
-  { url: '/export/demo_cathedral_fern_21_sen.glb', at: [[-4.7, 3.2]] },
-  { url: '/export/demo_ember_creeper_7.glb', at: [[-3.2, 2.4], [3.9, 2.6]] },
-  { url: '/export/demo_ember_creeper_12.glb', at: [[2.2, -3.6]] },
-  { url: '/export/demo_nightglass_parasol_3.glb', at: [[-1.9, -2.4], [4.9, 0.9]] },
-  { url: '/export/demo_nightglass_parasol_9.glb', at: [[1.8, 4.3]] },
-  { url: '/export/demo_sun_coral_5.glb', at: [[3.1, -1.5]] },
-  { url: '/export/demo_sun_coral_2.glb', at: [[5.8, 3.4], [-1.0, -4.6]] },
+// --- the field ---------------------------------------------------------------
+// A WILD FIELD, NOT AN ARRANGEMENT. Three things make a stand read as wild,
+// and all three are ecology rather than art: NUMBERS (~150 individuals, not a
+// dozen), AGE STRUCTURE (juveniles outnumber adults — the juvenile assets are
+// the same species grown fewer steps, which is honest size variation; nothing
+// is scaled), and CLUSTERED DISPERSAL (plants grow in drifts where seeds
+// fell, so each species gets patch centres and members scatter around them —
+// uniform-random placement is the diorama look wearing a different hat).
+// Where each drift sits is still staging, same honesty note as ever; what is
+// NOT staging is every plant in it.
+const ASSETS = {
+  fern5: { url: '/export/demo_cathedral_fern_5.glb', kind: 'adult' },
+  fern21s: { url: '/export/demo_cathedral_fern_21_sen.glb', kind: 'adult' },
+  fern3j: { url: '/export/demo_cathedral_fern_3_juv.glb', kind: 'juv' },
+  creep7: { url: '/export/demo_ember_creeper_7.glb', kind: 'adult' },
+  creep12: { url: '/export/demo_ember_creeper_12.glb', kind: 'adult' },
+  creep21j: { url: '/export/demo_ember_creeper_21_juv.glb', kind: 'juv' },
+  creep33j: { url: '/export/demo_ember_creeper_33_juv.glb', kind: 'juv' },
+  para3: { url: '/export/demo_nightglass_parasol_3.glb', kind: 'adult' },
+  para9: { url: '/export/demo_nightglass_parasol_9.glb', kind: 'adult' },
+  para5j: { url: '/export/demo_nightglass_parasol_5_juv.glb', kind: 'juv' },
+  para17j: { url: '/export/demo_nightglass_parasol_17_juv.glb', kind: 'juv' },
+  coral5: { url: '/export/demo_sun_coral_5.glb', kind: 'adult' },
+  coral2: { url: '/export/demo_sun_coral_2.glb', kind: 'adult' },
+  coral9j: { url: '/export/demo_sun_coral_9_juv.glb', kind: 'juv' },
+};
+// per species: which assets, how many drifts, drift population, patch tightness
+const GROUPS = [
+  { assets: ['fern5', 'fern21s', 'fern3j'], adultShare: 0.45, drifts: 3, per: [3, 6], sigma: 1.6 },
+  { assets: ['creep7', 'creep12', 'creep21j', 'creep33j'], adultShare: 0.3, drifts: 5, per: [6, 12], sigma: 2.1 },
+  { assets: ['para3', 'para9', 'para5j', 'para17j'], adultShare: 0.3, drifts: 5, per: [6, 13], sigma: 1.9 },
+  { assets: ['coral5', 'coral2', 'coral9j'], adultShare: 0.35, drifts: 5, per: [6, 12], sigma: 2.0 },
 ];
+const HERO = { key: 'fern5', at: [0, 0.3] };
 
 // --- seeded noise, so the whole environment reproduces -----------------------
 function mulberry32(a) {
@@ -107,9 +127,12 @@ const C = (a, mul = 1) => new THREE.Color().setRGB(a[0] * mul, a[1] * mul, a[2] 
 
 // --- load the stand ----------------------------------------------------------
 const loader = new GLTFLoader();
-const loaded = await Promise.all(STAND.map((s) => loader.loadAsync(s.url)));
-const pal = loaded.find((_, i) => STAND[i].hero).scene.userData?.palette
-  ?? loaded[0].scene.userData?.palette ?? null;
+const keys = Object.keys(ASSETS);
+const loadedList = await Promise.all(keys.map((k) => loader.loadAsync(ASSETS[k].url)));
+const scenes = {};
+keys.forEach((k, i) => { scenes[k] = loadedList[i].scene; });
+const pal = scenes[HERO.key].userData?.palette
+  ?? loadedList[0].scene.userData?.palette ?? null;
 const P = {
   bgTop: pal?.bgTop ?? [0.012, 0.02, 0.028], bgBot: pal?.bgBot ?? [0.004, 0.007, 0.01],
   bgGlow: pal?.bgGlow ?? [0.02, 0.03, 0.03], fog: pal?.fog ?? [0.01, 0.016, 0.02],
@@ -150,7 +173,7 @@ const P = {
   });
   scene.add(new THREE.Mesh(geo, mat));
 }
-scene.fog = new THREE.FogExp2(C(P.fog), 0.055);
+scene.fog = new THREE.FogExp2(C(P.fog), 0.044);
 
 // --- terrain -----------------------------------------------------------------
 const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
@@ -251,14 +274,14 @@ const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
   blade.setIndex(idx);
   blade.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ roughness: 1, side: THREE.DoubleSide });
-  const COUNT = 42000;
+  const COUNT = 64000;
   const mesh = new THREE.InstancedMesh(blade, mat, COUNT);
   const rnd = mulberry32(909);
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler(),
     S = new THREE.Vector3(), T = new THREE.Vector3(), col = new THREE.Color();
   let placed = 0;
   while (placed < COUNT) {
-    const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * 14;
+    const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * 21;
     const x = Math.cos(a) * r, z = Math.sin(a) * r, y = ground(x, z);
     if (y < POND.y + 0.06) continue;                    // not in the water
     T.set(x, y - 0.004, z);
@@ -266,7 +289,7 @@ const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
     S.setScalar(0.7 + rnd() * 0.9);
     M.compose(T, Q.setFromEuler(E), S);
     mesh.setMatrixAt(placed, M);
-    col.copy(moss).lerp(soil, rnd() * 0.55).multiplyScalar(0.75 + rnd() * 0.5);
+    col.copy(moss).lerp(soil, rnd() * 0.55).multiplyScalar(1.0 + rnd() * 0.6);
     mesh.setColorAt(placed, col);
     placed++;
   }
@@ -300,9 +323,8 @@ function patchMaterial(m, boost) {
 }
 
 let tris = 0, meshes = 0, lines = 0;
-for (let i = 0; i < loaded.length; i++) {
-  const src = loaded[i].scene;
-  src.traverse((o) => {
+for (const k of keys) {
+  scenes[k].traverse((o) => {
     if (o.isMesh) {
       patchMaterial(o.material, 1.5);
       o.material.transparent = false;   // alpha is emissive weight, not opacity
@@ -325,20 +347,72 @@ for (let i = 0; i < loaded.length; i++) {
       o.material.depthWrite = false;
     }
   });
-  const rnd = mulberry32(101 + i);
-  for (const [x, z] of STAND[i].at) {
-    const inst = STAND[i].at.length > 1 ? src.clone() : src;
-    inst.position.set(x, ground(x, z), z);
-    inst.rotation.y = rnd() * Math.PI * 2;
-    scene.add(inst);
+}
+
+// --- sow the field -----------------------------------------------------------
+// Clustered dispersal with collision: each species gets drift centres, members
+// scatter around them with a gaussian, adults keep more ground than juveniles.
+// Clones share geometry and materials with their asset; only the transform is
+// per-plant. Everything is seeded, so the field reproduces.
+const fieldRnd = mulberry32(7301);
+const claimed = [];
+const inPond = (x, z, m = 0.5) => Math.hypot(x - POND.x, z - POND.z) < POND.r + m;
+// nothing sows inside a camera — a drift once landed exactly on the pond
+// framing and the capture was the inside of a Sun Coral canopy
+const CAMS = [[13.8, 10.8], [4.6, 0.6], [-5.4, -3.6], [8.9, -8.8]];
+function claim(x, z, need) {
+  if (Math.hypot(x, z) > 18 || inPond(x, z)) return false;
+  for (const c of CAMS) if (Math.hypot(c[0] - x, c[1] - z) < 1.6) return false;
+  for (const p of claimed) {
+    if (Math.hypot(p.x - x, p.z - z) < Math.max(need, p.r)) return false;
+  }
+  claimed.push({ x, z, r: need });
+  return true;
+}
+function plant(key, x, z) {
+  const inst = scenes[key].clone();
+  inst.position.set(x, ground(x, z), z);
+  inst.rotation.y = fieldRnd() * Math.PI * 2;
+  scene.add(inst);
+}
+
+claim(HERO.at[0], HERO.at[1], 1.2);
+plant(HERO.key, HERO.at[0], HERO.at[1]);
+let planted = 1;
+
+for (const g of GROUPS) {
+  const adults = g.assets.filter((k) => ASSETS[k].kind === 'adult');
+  const juvs = g.assets.filter((k) => ASSETS[k].kind === 'juv');
+  for (let d = 0; d < g.drifts; d++) {
+    const a = fieldRnd() * Math.PI * 2, rr = 2.2 + Math.sqrt(fieldRnd()) * 12.5;
+    const cx = Math.cos(a) * rr, cz = Math.sin(a) * rr;
+    const n = g.per[0] + Math.floor(fieldRnd() * (g.per[1] - g.per[0] + 1));
+    for (let i = 0; i < n; i++) {
+      const u = Math.max(fieldRnd(), 1e-6), v = fieldRnd();
+      const rad = g.sigma * Math.sqrt(-2 * Math.log(u)) * 0.7, th = v * Math.PI * 2;
+      const x = cx + Math.cos(th) * rad, z = cz + Math.sin(th) * rad;
+      const adult = fieldRnd() < g.adultShare;
+      const pool = adult && adults.length ? adults : (juvs.length ? juvs : adults);
+      const key = pool[(fieldRnd() * pool.length) | 0];
+      if (claim(x, z, adult ? 0.85 : 0.38)) { plant(key, x, z); planted++; }
+    }
   }
 }
+// loners — the stragglers between drifts that keep the patches from reading
+// as islands
+for (let i = 0; i < 45; i++) {
+  const a = fieldRnd() * Math.PI * 2, rr = 2 + Math.sqrt(fieldRnd()) * 16;
+  const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+  const key = keys[(fieldRnd() * keys.length) | 0];
+  if (claim(x, z, ASSETS[key].kind === 'adult' ? 0.85 : 0.38)) { plant(key, x, z); planted++; }
+}
+console.log(`sowed ${planted} plants`);
 
 // --- framings ----------------------------------------------------------------
 const FRAMES = {
-  wide: { eye: [11.2, 2.4, 8.8], look: [0, 1.15, 0], fov: 38 },
+  wide: { eye: [13.8, 3.4, 10.8], look: [0, 0.9, 0], fov: 40 },
   hero: { eye: [4.6, 1.35, 0.6], look: [0, 1.3, 0.3], fov: 42 },
-  grove: { eye: [-3.9, 0.55, -2.7], look: [0.6, 1.05, 0.7], fov: 52 },
+  grove: { eye: [-5.4, 0.9, -3.6], look: [1.4, 1.1, 1.1], fov: 55 },
   pond: { eye: [8.9, 0.8, -8.8], look: [0, 1.25, 0.4], fov: 44 },
 };
 window.__frame = (name) => {
@@ -369,6 +443,6 @@ renderer.setAnimationLoop((t) => { if (!window.__hold) drift(t); });
 
 window.__stats = () => ({
   triangles: renderer.info.render.triangles, calls: renderer.info.render.calls,
-  meshes, lines, tris: Math.round(tris),
+  meshes, lines, tris: Math.round(tris), plants: planted,
 });
 window.__ready = true;

@@ -43,6 +43,15 @@ const MANIFEST = [
   { species: 'Nightglass Parasol', seed: 9, steps: 4000, stage: 'peak', out: 'demo_nightglass_parasol_9', conv: { VEIN_MIN_W: '0.006' } },
   { species: 'Sun Coral', seed: 5, steps: 4000, stage: 'peak', out: 'demo_sun_coral_5', conv: { VEIN_MIN_W: '0.006' } },
   { species: 'Sun Coral', seed: 2, steps: 4000, stage: 'peak', out: 'demo_sun_coral_2', conv: { VEIN_MIN_W: '0.006' } },
+  // the juvenile cohort — same species, fewer steps. A wild field's size
+  // variation is age structure, and growing it is the honest version of the
+  // scale slider nobody gets to touch here.
+  { species: 'Cathedral Fern', seed: 3, steps: 2000, stage: '', out: 'demo_cathedral_fern_3_juv', conv: { VEIN_MIN_W: '0.006' } },
+  { species: 'Ember Creeper', seed: 21, steps: 1900, stage: '', out: 'demo_ember_creeper_21_juv', conv: { VEIN_MIN_W: '0.006' } },
+  { species: 'Ember Creeper', seed: 33, steps: 1400, stage: '', out: 'demo_ember_creeper_33_juv', conv: { VEIN_MIN_W: '0.006' } },
+  { species: 'Nightglass Parasol', seed: 5, steps: 1900, stage: '', out: 'demo_nightglass_parasol_5_juv', conv: { VEIN_MIN_W: '0.006' } },
+  { species: 'Nightglass Parasol', seed: 17, steps: 1400, stage: '', out: 'demo_nightglass_parasol_17_juv', conv: { VEIN_MIN_W: '0.006' } },
+  { species: 'Sun Coral', seed: 9, steps: 1900, stage: '', out: 'demo_sun_coral_9_juv', conv: { VEIN_MIN_W: '0.006' } },
 ];
 
 const run = (cmd, args, env) => {

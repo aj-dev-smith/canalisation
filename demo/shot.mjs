@@ -28,7 +28,7 @@ await page.waitForFunction('window.__ready === true', null, { timeout: 180000 })
 
 const fails = [];
 const stats = await page.evaluate('window.__stats()');
-console.log(`loaded: ${stats.meshes} meshes, ${stats.lines} line nodes, ${stats.tris.toLocaleString()} asset triangles`);
+console.log(`loaded: ${stats.plants ?? '?'} plants, ${stats.meshes} asset meshes, ${stats.lines} line nodes, ${stats.tris.toLocaleString()} asset triangles`);
 if (!(stats.tris > 0)) fails.push('no asset triangles loaded');
 
 for (const name of ['wide', 'hero', 'grove', 'pond']) {
