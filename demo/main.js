@@ -125,6 +125,101 @@ const cam = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 320)
 
 const C = (a, mul = 1) => new THREE.Color().setRGB(a[0] * mul, a[1] * mul, a[2] * mul);
 
+// --- bloom: the native look, finally — and HAND-ROLLED, with a reason -------
+// The engine's browser renderer draws veins as additive LIGHT and grades the
+// frame; without a bloom pass the emissive channel this exporter ships is a
+// whisper. UnrealBloomPass renders BLACK in this container's headless GL on
+// every backend (default, angle, swiftshader — all bisected to 0.0000 mean
+// while a plain RenderPass+OutputPass composer drew fine, so it is the pass
+// and not the float targets). Owning ~60 lines beats shipping a dependency
+// that hands some viewers the documented black frame: threshold at quarter
+// res, one separable 9-tap gaussian, additive composite with a vignette.
+// ?post=none skips everything (the bisect switch that found this; kept).
+const POST = new URLSearchParams(location.search).get('post') ?? 'bloom';
+const dbs = new THREE.Vector2();
+renderer.getDrawingBufferSize(dbs);
+const rtScene = new THREE.WebGLRenderTarget(dbs.x, dbs.y, { type: THREE.HalfFloatType });
+const rtA = new THREE.WebGLRenderTarget(dbs.x >> 2, dbs.y >> 2, { type: THREE.HalfFloatType, depthBuffer: false });
+const rtB = new THREE.WebGLRenderTarget(dbs.x >> 2, dbs.y >> 2, { type: THREE.HalfFloatType, depthBuffer: false });
+
+const fsScene = new THREE.Scene();
+const fsCam = new THREE.Camera();
+const fsGeo = new THREE.BufferGeometry();   // one big triangle, no matrices
+fsGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 3, -1, -1, 3], 2));
+const fsMesh = new THREE.Mesh(fsGeo, null);
+fsMesh.frustumCulled = false;
+fsScene.add(fsMesh);
+const FSV = `varying vec2 vUv; void main(){ vUv = position.xy * 0.5 + 0.5;
+  gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+const thresholdMat = new THREE.ShaderMaterial({
+  uniforms: { tex: { value: null }, thr: { value: 0.55 }, knee: { value: 0.25 } },
+  vertexShader: FSV,
+  fragmentShader: `varying vec2 vUv; uniform sampler2D tex; uniform float thr, knee;
+    void main(){
+      // additive emissive lines can stack to Inf in a half-float target, and
+      // Inf through the ACES rational is NaN, which the blur then smears into
+      // black rectangles — watched. Clamp at the door.
+      vec3 c = min(max(texture2D(tex, vUv).rgb, 0.0), 64.0);
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      gl_FragColor = vec4(c * smoothstep(thr, thr + knee, l), 1.0); }`,
+});
+const blurMat = new THREE.ShaderMaterial({
+  uniforms: { tex: { value: null }, dir: { value: new THREE.Vector2() } },
+  vertexShader: FSV,
+  fragmentShader: `varying vec2 vUv; uniform sampler2D tex; uniform vec2 dir;
+    void main(){
+      vec3 c = texture2D(tex, vUv).rgb * 0.227;
+      c += (texture2D(tex, vUv + dir * 1.385).rgb + texture2D(tex, vUv - dir * 1.385).rgb) * 0.316;
+      c += (texture2D(tex, vUv + dir * 3.231).rgb + texture2D(tex, vUv - dir * 3.231).rgb) * 0.070;
+      gl_FragColor = vec4(c, 1.0); }`,
+});
+const compMat = new THREE.ShaderMaterial({
+  uniforms: { base: { value: null }, glowTex: { value: null }, strength: { value: 0.9 } },
+  vertexShader: FSV,
+  fragmentShader: `varying vec2 vUv; uniform sampler2D base, glowTex; uniform float strength;
+    void main(){
+      vec3 c = min(max(texture2D(base, vUv).rgb, 0.0), 64.0)
+             + min(max(texture2D(glowTex, vUv).rgb, 0.0), 64.0) * strength;
+      // three only tone maps when rendering to SCREEN, so the target holds
+      // linear HDR — the grade has to happen here or it silently vanishes:
+      // ACES (Narkowicz fit), a gentle vignette, then the sRGB the screen expects
+      c *= 1.15;
+      c = (c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14);
+      float d = length(vUv - 0.5);
+      c *= 1.0 - 0.34 * smoothstep(0.35, 0.78, d);
+      gl_FragColor = vec4(pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0); }`,
+});
+
+function fsPass(mat, target) {
+  fsMesh.material = mat;
+  renderer.setRenderTarget(target);
+  renderer.render(fsScene, fsCam);
+}
+function draw() {
+  if (POST === 'none') { renderer.setRenderTarget(null); renderer.render(scene, cam); return; }
+  renderer.setRenderTarget(rtScene);
+  renderer.render(scene, cam);
+  thresholdMat.uniforms.tex.value = rtScene.texture;
+  fsPass(thresholdMat, rtA);
+  for (let i = 0; i < 2; i++) {
+    blurMat.uniforms.tex.value = rtA.texture;
+    blurMat.uniforms.dir.value.set((1 + i) / rtA.width, 0);
+    fsPass(blurMat, rtB);
+    blurMat.uniforms.tex.value = rtB.texture;
+    blurMat.uniforms.dir.value.set(0, (1 + i) / rtA.height);
+    fsPass(blurMat, rtA);
+  }
+  compMat.uniforms.base.value = rtScene.texture;
+  compMat.uniforms.glowTex.value = rtA.texture;
+  fsPass(compMat, null);
+}
+
+// the moon's place in the sky is shared by the dome, the key light and the
+// water's streak — one direction, three readers, or the picture disagrees
+// with itself about where its own light comes from
+const MOON = new THREE.Vector3(-0.55, 0.28, 0.72).normalize();
+
 // --- load the stand ----------------------------------------------------------
 const loader = new GLTFLoader();
 const keys = Object.keys(ASSETS);
@@ -150,10 +245,11 @@ const P = {
       // the dome's floor is the FOG colour: the far terrain resolves to fog,
       // and if the sky resolves to anything else the horizon is a stripe
       top: { value: C(P.bgTop) }, bot: { value: C(P.fog) }, glow: { value: C(P.bgGlow) },
+      moonDir: { value: MOON }, moonCol: { value: C(P.bgGlow, 6).lerp(new THREE.Color(0.9, 0.95, 1.0), 0.55) },
     },
     vertexShader: `varying vec3 vp; void main(){ vp = position;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-    fragmentShader: `varying vec3 vp; uniform vec3 top, bot, glow;
+    fragmentShader: `varying vec3 vp; uniform vec3 top, bot, glow, moonDir, moonCol;
       float hash(vec3 c){ return fract(sin(dot(c, vec3(12.9898, 78.233, 45.164))) * 43758.5453); }
       void main(){
         vec3 d = normalize(vp);
@@ -162,6 +258,11 @@ const P = {
         vec3 c = mix(bot, top, smoothstep(0.52, 0.95, t));
         // the glow band sits a few degrees ABOVE the horizon, never on it
         c += glow * exp(-abs(d.y) * 6.0) * smoothstep(0.004, 0.05, d.y);
+        // the moon: a disc, a limb, and a wide halo the fog would give it
+        float md = dot(d, moonDir);
+        c += moonCol * smoothstep(0.9989, 0.99955, md);            // disc, ~2.7 deg
+        c += moonCol * 0.35 * pow(max(md, 0.0), 220.0);            // halo
+        c += moonCol * 0.06 * pow(max(md, 0.0), 24.0);             // sky wash
         // stars: hashed cells with a round falloff INSIDE the cell — lighting
         // the whole cell draws squares, a cell at this resolution being ~0.26
         // degrees, which is several pixels. Watched, not guessed.
@@ -208,11 +309,14 @@ const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
     // angles a ground camera sees, water mirrors the horizon, and in this
     // world the horizon is the fog — the zenith is near-black, and mixing
     // toward it left the pond reading as a hole a second time
-    uniforms: { deep: { value: C(P.bgBot, 1.6) }, skyc: { value: C(P.fog, 2.4) }, glow: { value: C(P.bgGlow, 1.2) } },
+    uniforms: {
+      deep: { value: C(P.bgBot, 1.6) }, skyc: { value: C(P.fog, 2.4) }, glow: { value: C(P.bgGlow, 1.2) },
+      moonDir: { value: MOON }, moonCol: { value: C(P.bgGlow, 6).lerp(new THREE.Color(0.9, 0.95, 1.0), 0.55) },
+    },
     vertexShader: `varying vec3 vw; varying vec3 vn;
       void main(){ vec4 w = modelMatrix * vec4(position,1.0); vw = w.xyz; vn = vec3(0.,1.,0.);
       gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: `varying vec3 vw; varying vec3 vn; uniform vec3 deep, skyc, glow;
+    fragmentShader: `varying vec3 vw; varying vec3 vn; uniform vec3 deep, skyc, glow, moonDir, moonCol;
       void main(){
         vec3 V = normalize(cameraPosition - vw);
         // a floor under the fresnel: real water reflects ~2% at normal
@@ -220,6 +324,9 @@ const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
         // the sky share needs to start above zero to read as a surface
         float fr = 0.18 + 0.82 * pow(1.0 - max(dot(V, vn), 0.0), 2.5);
         vec3 c = mix(deep, skyc, fr) + glow * fr * 0.5;
+        // the moon's streak — same direction the dome draws the disc in
+        vec3 R = reflect(-V, vn);
+        c += moonCol * pow(max(dot(R, moonDir), 0.0), 180.0) * 1.6;
         gl_FragColor = vec4(c, 0.92); }`,
   });
   const m = new THREE.Mesh(geo, mat);
@@ -299,13 +406,66 @@ const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
 }
 
 // --- lights: the palette's key and ambient, not a studio ---------------------
-scene.add(new THREE.HemisphereLight(C(P.ambTop, 1.15), C(P.ambBot, 0.9), 0.85));
-const key = new THREE.DirectionalLight(C(P.key), 1.35);
-key.position.set(-14, 9, 10);
+// more sky fill than a studio would use: the key sits at a moon's low
+// elevation, and at that angle a doubleSided canopy shows black facets
+// wherever a blade turns away — watched as speckle across every drift
+scene.add(new THREE.HemisphereLight(C(P.ambTop, 1.15), C(P.ambBot, 0.9), 1.15));
+// the key IS the moon — same direction the dome draws the disc in,
+// its colour pulled toward the moon's, so shadows and sky agree
+const key = new THREE.DirectionalLight(C(P.key).lerp(new THREE.Color(0.8, 0.88, 1.0), 0.45), 1.5);
+key.position.copy(MOON).multiplyScalar(60);
 scene.add(key);
 const rim = new THREE.DirectionalLight(C(P.bgGlow, 3.0), 0.5);
 rim.position.set(10, 4, -14);
 scene.add(rim);
+
+// --- ground mist: billboard fog cards ----------------------------------------
+// Sprites so they face every framing. A radial-gradient canvas texture, huge,
+// near-transparent, hovering at chest height — the cheap trick every
+// atmospheric three.js scene uses, and it earns its place.
+{
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(128, 128, 10, 128, 128, 128);
+  g.addColorStop(0, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0.6, 'rgba(255,255,255,0.18)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(cv);
+  const rnd = mulberry32(5150);
+  for (let i = 0; i < 11; i++) {
+    const m = new THREE.SpriteMaterial({
+      map: tex, color: C(P.fog, 2.0), transparent: true,
+      opacity: 0.05 + rnd() * 0.06, depthWrite: false,
+    });
+    const s = new THREE.Sprite(m);
+    const a = rnd() * Math.PI * 2, r = 4 + rnd() * 14;
+    s.position.set(Math.cos(a) * r, 0.5 + rnd() * 0.9, Math.sin(a) * r);
+    s.scale.set(14 + rnd() * 14, 2.2 + rnd() * 2.2, 1);
+    scene.add(s);
+  }
+}
+
+// --- spore motes: the air over a field like this would not be empty ----------
+// Faint additive points; the bloom pass is what turns them into fireflies.
+{
+  const rnd = mulberry32(6060);
+  const N = 260;
+  const pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const a = rnd() * Math.PI * 2, r = 1.5 + Math.sqrt(rnd()) * 16;
+    pos[i * 3] = Math.cos(a) * r;
+    pos[i * 3 + 1] = 0.3 + rnd() * rnd() * 2.4;
+    pos[i * 3 + 2] = Math.sin(a) * r;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const m = new THREE.PointsMaterial({
+    color: C(P.bgGlow, 14), size: 0.035, sizeAttenuation: true,
+    blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
+  });
+  scene.add(new THREE.Points(g, m));
+}
 
 // --- the emissive patch: alpha back into glow --------------------------------
 function patchMaterial(m, boost) {
@@ -326,7 +486,7 @@ let tris = 0, meshes = 0, lines = 0;
 for (const k of keys) {
   scenes[k].traverse((o) => {
     if (o.isMesh) {
-      patchMaterial(o.material, 1.5);
+      patchMaterial(o.material, 2.2);
       o.material.transparent = false;   // alpha is emissive weight, not opacity
       meshes++;
       const g = o.geometry;
@@ -359,7 +519,7 @@ const claimed = [];
 const inPond = (x, z, m = 0.5) => Math.hypot(x - POND.x, z - POND.z) < POND.r + m;
 // nothing sows inside a camera — a drift once landed exactly on the pond
 // framing and the capture was the inside of a Sun Coral canopy
-const CAMS = [[13.8, 10.8], [4.6, 0.6], [-5.4, -3.6], [8.9, -8.8]];
+const CAMS = [[13.8, 10.8], [4.6, 0.6], [-5.4, -3.6], [8.9, -8.8], [12.6, -13.2]];
 function claim(x, z, need) {
   if (Math.hypot(x, z) > 18 || inPond(x, z)) return false;
   for (const c of CAMS) if (Math.hypot(c[0] - x, c[1] - z) < 1.6) return false;
@@ -410,7 +570,10 @@ console.log(`sowed ${planted} plants`);
 
 // --- framings ----------------------------------------------------------------
 const FRAMES = {
-  wide: { eye: [13.8, 3.4, 10.8], look: [0, 0.9, 0], fov: 40 },
+  // wide faces the moon — an overview with the light source in frame; field
+  // is the old moonless overview kept for the drift-density view
+  wide: { eye: [12.6, 3.6, -13.2], look: [-1.2, 2.3, 1.8], fov: 42 },
+  field: { eye: [13.8, 3.4, 10.8], look: [0, 0.9, 0], fov: 40 },
   hero: { eye: [4.6, 1.35, 0.6], look: [0, 1.3, 0.3], fov: 42 },
   grove: { eye: [-5.4, 0.9, -3.6], look: [1.4, 1.1, 1.1], fov: 55 },
   pond: { eye: [8.9, 0.8, -8.8], look: [0, 1.25, 0.4], fov: 44 },
@@ -420,7 +583,7 @@ window.__frame = (name) => {
   cam.position.fromArray(f.eye);
   cam.fov = f.fov; cam.updateProjectionMatrix();
   cam.lookAt(new THREE.Vector3().fromArray(f.look));
-  renderer.render(scene, cam);
+  draw();
   return name;
 };
 
@@ -428,6 +591,10 @@ window.__frame = (name) => {
 addEventListener('resize', () => {
   cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  renderer.getDrawingBufferSize(dbs);
+  rtScene.setSize(dbs.x, dbs.y);
+  rtA.setSize(dbs.x >> 2, dbs.y >> 2);
+  rtB.setSize(dbs.x >> 2, dbs.y >> 2);
 });
 
 let t0 = performance.now();
@@ -436,7 +603,7 @@ const drift = (t) => {
   const a = 0.72 + s * 0.021, r = 11.4 - Math.sin(s * 0.05) * 1.3;
   cam.position.set(Math.sin(a) * r, 2.1 + Math.sin(s * 0.11) * 0.4, Math.cos(a) * r);
   cam.lookAt(0, 1.15, 0);
-  renderer.render(scene, cam);
+  draw();
 };
 window.__hold = false;
 renderer.setAnimationLoop((t) => { if (!window.__hold) drift(t); });

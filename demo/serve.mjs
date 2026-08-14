@@ -22,23 +22,47 @@ export const THREE_VERSION = process.env.THREE_VERSION || '0.161.0';
 const CDN = process.env.THREE_CDN || `https://unpkg.com/three@${THREE_VERSION}`;
 const CACHE = join(ROOT, 'tools', '.cache', `three-${THREE_VERSION}`);
 
+// The roots; everything they import arrives by scanning. The postprocessing
+// chain alone is eight files deep in relative imports (EffectComposer pulls
+// CopyShader pulls ShaderPass pulls Pass…), and a hand-kept list of those is
+// a list that is wrong after the first version bump.
 const VENDOR = [
   'build/three.module.js',
   'examples/jsm/loaders/GLTFLoader.js',
   'examples/jsm/utils/BufferGeometryUtils.js',
+  'examples/jsm/postprocessing/EffectComposer.js',
+  'examples/jsm/postprocessing/RenderPass.js',
+  'examples/jsm/postprocessing/UnrealBloomPass.js',
+  'examples/jsm/postprocessing/OutputPass.js',
 ];
 
 export function vendorThree() {
-  for (const rel of VENDOR) {
+  const seen = new Set();
+  const fetch1 = (rel) => {
+    if (seen.has(rel)) return;
+    seen.add(rel);
     const dst = join(CACHE, rel);
-    if (existsSync(dst)) continue;
-    mkdirSync(join(dst, '..'), { recursive: true });
-    const r = spawnSync('curl', ['-sSfL', `${CDN}/${rel}`, '-o', dst], { stdio: 'inherit' });
-    if (r.status !== 0) {
-      console.error(`could not vendor ${rel} from ${CDN}`);
-      process.exit(1);
+    if (!existsSync(dst)) {
+      mkdirSync(join(dst, '..'), { recursive: true });
+      const r = spawnSync('curl', ['-sSfL', `${CDN}/${rel}`, '-o', dst], { stdio: 'inherit' });
+      if (r.status !== 0) {
+        console.error(`could not vendor ${rel} from ${CDN}`);
+        process.exit(1);
+      }
     }
-  }
+    // relative imports only — 'three' itself resolves through the importmap
+    const src = readFileSync(dst, 'utf8');
+    for (const m of src.matchAll(/from\s+['"](\.[^'"]+)['"]/g)) {
+      const parts = rel.split('/').slice(0, -1);
+      for (const seg of m[1].split('/')) {
+        if (seg === '.') continue;
+        else if (seg === '..') parts.pop();
+        else parts.push(seg);
+      }
+      fetch1(parts.join('/'));
+    }
+  };
+  for (const rel of VENDOR) fetch1(rel);
   return CACHE;
 }
 

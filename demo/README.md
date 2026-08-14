@@ -38,6 +38,20 @@ node demo/shot.mjs shots     # the three framings, gated non-black and non-flat
   the export. `VEINS=lines` and its recipe stay documented in tools/README.md
   for anyone who wants a tree anyway.
 
+## The grade
+
+The bloom is hand-rolled (threshold → quarter-res separable gaussian →
+additive composite with ACES and a vignette) because `UnrealBloomPass`
+renders black in headless GL on every backend — bisected, not assumed; the
+`?post=none` switch that found it is still in `main.js`. Two lessons are in
+comments where they bit: additive emissive lines can stack to Inf in a
+half-float target and Inf through the ACES rational is NaN, which the blur
+smears into black rectangles; and three.js only tone maps when rendering to
+screen, so a render-target pipeline that forgets to grade is silently linear.
+The moon is one direction shared by the sky dome, the key light and the
+water's streak — one light source, three readers, or the picture disagrees
+with itself about where its own light comes from.
+
 ## What phase 3 would add
 
 The wind. `src/37_wind.js` already emits GLSL from one baked mode table, so a
