@@ -1,38 +1,45 @@
-// THE STAND, IN SOMEONE ELSE'S RENDERER. Five grown specimens on a terrain,
-// lit and fogged — the demo the asset pipeline exists for.
+// THE STAND, IN SOMEONE ELSE'S RENDERER — grown specimens in the middle of
+// the standard procedural-landscape kit the three.js ecosystem trades in:
+// fbm terrain with ridged far hills, instanced grass, displaced-icosahedron
+// rocks, a pond, a starred sky. All of that is MODELLED ENVIRONMENT and the
+// HUD says so plainly. The plants are the part that was grown, and the line
+// between the two categories is this project's one rule, unchanged by
+// leaving the browser: environment may be authored, organisms may not.
 //
-// The rule this scene keeps: the LOOK comes out of the GLBs, not out of art
-// direction. Every specimen carries its species palette in its scene extras
-// (bgTop/bgBot, fog, key light, ambient) because the exporter put it there,
-// and the sky dome, the fog, and both lights below read the hero's palette
-// rather than a colour anyone picked. The terrain is the one modelled thing
-// in the frame and the HUD says so — it is environment, the same category as
-// the wind, and its colours are derived from the same palette so it reads as
-// the world the species evolved in rather than a stage it was dropped on.
+// The look still comes out of the GLBs: every specimen carries its species
+// palette in scene extras, and the sky, fog, lights, terrain tint, rock tint
+// and water all read the hero's palette rather than colours anyone picked.
 //
 // The emissive channel: the exporter bakes each vertex's emissive weight into
-// COLOR_0's alpha (the format doc in tools/gltf_export.mjs). Three.js reads a
-// VEC4 COLOR_0 as vertex colour + alpha, so a one-line onBeforeCompile turns
-// that alpha back into glow — the veins light up the way they do at home. The
-// conifer's needles arrive as LINES (VEINS=lines) and get additive blending,
-// which is literally how src/60_render.js draws them.
+// COLOR_0's alpha. Three.js reads VEC4 COLOR_0 as colour + alpha, so one
+// onBeforeCompile line turns that alpha back into glow — the veins light up
+// the way they do at home.
+//
+// The conifer is deliberately absent. It has never read as well as the herbs
+// (its one dominant vein strand is correct Picea and the reticulate network
+// is the only channel this engine is visible through — the ROADMAP 13 needle
+// verdict, applying to the export too), so the stand is herbs at several
+// seeds and two life stages.
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // --- the stand, as staging ---------------------------------------------------
 // Positions are staging, not simulation results — the same honesty note as the
-// Blender exporter's arc. Clones share a grown geometry; a clone at another
-// yaw is presentation, and the honest fix (more seeds) is a build_assets edit.
+// Blender exporter's arc. Eight distinct seeds, so twins are rare; the two
+// remaining clones stand far apart at different yaws.
 const STAND = [
-  { url: '/export/demo_ashfall_spire_7.glb', hero: true, at: [[0, 0]] },
-  { url: '/export/demo_ember_creeper_7.glb', at: [[-3.4, 2.6], [4.2, 1.1], [1.9, -4.6]] },
-  { url: '/export/demo_nightglass_parasol_3.glb', at: [[-1.8, -2.3], [2.6, 3.4], [-4.8, -1.2]] },
-  { url: '/export/demo_sun_coral_5.glb', at: [[3.3, -2.2], [-2.7, 4.4], [5.6, 3.0]] },
-  { url: '/export/demo_cathedral_fern_21_sen.glb', at: [[-4.9, 3.3], [4.6, -4.2]] },
+  { url: '/export/demo_cathedral_fern_5.glb', hero: true, at: [[0, 0.3]] },
+  { url: '/export/demo_cathedral_fern_21_sen.glb', at: [[-4.7, 3.2]] },
+  { url: '/export/demo_ember_creeper_7.glb', at: [[-3.2, 2.4], [3.9, 2.6]] },
+  { url: '/export/demo_ember_creeper_12.glb', at: [[2.2, -3.6]] },
+  { url: '/export/demo_nightglass_parasol_3.glb', at: [[-1.9, -2.4], [4.9, 0.9]] },
+  { url: '/export/demo_nightglass_parasol_9.glb', at: [[1.8, 4.3]] },
+  { url: '/export/demo_sun_coral_5.glb', at: [[3.1, -1.5]] },
+  { url: '/export/demo_sun_coral_2.glb', at: [[5.8, 3.4], [-1.0, -4.6]] },
 ];
 
-// --- seeded noise, so the terrain reproduces ---------------------------------
+// --- seeded noise, so the whole environment reproduces -----------------------
 function mulberry32(a) {
   return () => {
     a |= 0; a = (a + 0x6D2B79F5) | 0;
@@ -48,6 +55,7 @@ const lat = (() => {
   return (ix, iz) => g[((iz & 255) << 8) | (ix & 255)];
 })();
 const sm = (t) => t * t * (3 - 2 * t);
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
 function vnoise(x, z) {
   const ix = Math.floor(x), iz = Math.floor(z), fx = sm(x - ix), fz = sm(z - iz);
   const a = lat(ix, iz), b = lat(ix + 1, iz), c = lat(ix, iz + 1), d = lat(ix + 1, iz + 1);
@@ -58,14 +66,30 @@ function fbm(x, z) {
   for (let o = 0; o < 5; o++) { v += amp * vnoise(x * f, z * f); amp *= 0.5; f *= 2.03; }
   return v;
 }
-// height in metres. Gentle: the plants are 0.8-2.9 m and the ground should
-// undulate under them, not compete. The centre flattens so the hero stands
-// on ground rather than a slope.
+// ridged fbm — the far hills. |2n-1| folded and inverted is the standard trick
+function ridged(x, z) {
+  let v = 0, amp = 0.5, f = 1;
+  for (let o = 0; o < 4; o++) {
+    const n = 1 - Math.abs(2 * vnoise(x * f + 31.7, z * f + 11.3) - 1);
+    v += amp * n * n; amp *= 0.5; f *= 2.11;
+  }
+  return v;
+}
+
+// the pond: a carved basin, and the water level that fills it
+const POND = { x: 5.2, z: -5.0, r: 2.9, y: -0.16 };
+
+// height in metres. A gentle meadow in the middle, ridged hills far out, and
+// the basin carved last so the water has somewhere to sit.
 function ground(x, z) {
-  const h = (fbm(x * 0.09 + 7.3, z * 0.09 + 2.1) - 0.5) * 2.6
-    + (fbm(x * 0.55, z * 0.55) - 0.5) * 0.22;
   const r = Math.hypot(x, z);
-  return h * sm(Math.min(1, Math.max(0, (r - 1.5) / 6)));
+  let h = ((fbm(x * 0.09 + 7.3, z * 0.09 + 2.1) - 0.5) * 2.6
+    + (fbm(x * 0.55, z * 0.55) - 0.5) * 0.22)
+    * sm(clamp01((r - 1.5) / 6));
+  h += sm(clamp01((r - 20) / 22)) * ridged(x * 0.045, z * 0.045) * 7.5;
+  const dp = Math.hypot(x - POND.x, z - POND.z);
+  h -= 0.55 * Math.exp(-(dp * dp) / (2.0 * 2.0));
+  return h;
 }
 
 // --- renderer ----------------------------------------------------------------
@@ -77,7 +101,7 @@ renderer.toneMappingExposure = 1.15;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const cam = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 220);
+const cam = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 320);
 
 const C = (a, mul = 1) => new THREE.Color().setRGB(a[0] * mul, a[1] * mul, a[2] * mul);
 
@@ -86,8 +110,6 @@ const loader = new GLTFLoader();
 const loaded = await Promise.all(STAND.map((s) => loader.loadAsync(s.url)));
 const pal = loaded.find((_, i) => STAND[i].hero).scene.userData?.palette
   ?? loaded[0].scene.userData?.palette ?? null;
-// GLTFLoader puts scene-level extras on scene.userData; the exporter wrote the
-// palette there. If a foreign GLB ever lands here, fall back to a dusk.
 const P = {
   bgTop: pal?.bgTop ?? [0.012, 0.02, 0.028], bgBot: pal?.bgBot ?? [0.004, 0.007, 0.01],
   bgGlow: pal?.bgGlow ?? [0.02, 0.03, 0.03], fog: pal?.fog ?? [0.01, 0.016, 0.02],
@@ -96,60 +118,160 @@ const P = {
   blade: pal?.blade1 ?? [0.1, 0.2, 0.15],
 };
 
-// --- sky: the species' own backdrop, as a dome -------------------------------
+// --- sky: the species' backdrop as a dome, with a modelled star field --------
 {
-  const geo = new THREE.SphereGeometry(180, 24, 16);
+  const geo = new THREE.SphereGeometry(280, 24, 16);
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: {
-      // the dome's floor is the FOG colour, not the palette's bgBot: the far
-      // terrain resolves to fog, and if the sky resolves to anything else the
-      // horizon is a stripe. The palette's own backdrop takes over with height.
+      // the dome's floor is the FOG colour: the far terrain resolves to fog,
+      // and if the sky resolves to anything else the horizon is a stripe
       top: { value: C(P.bgTop) }, bot: { value: C(P.fog) }, glow: { value: C(P.bgGlow) },
     },
     vertexShader: `varying vec3 vp; void main(){ vp = position;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: `varying vec3 vp; uniform vec3 top, bot, glow;
+      float hash(vec3 c){ return fract(sin(dot(c, vec3(12.9898, 78.233, 45.164))) * 43758.5453); }
       void main(){
-        float t = clamp(normalize(vp).y * 0.5 + 0.5, 0.0, 1.0);
-        // hold the fog colour through the horizon (t=0.5) and only then climb
-        // to the palette's backdrop — mixing any earlier re-opens the seam the
-        // fog-coloured floor exists to close
+        vec3 d = normalize(vp);
+        float t = clamp(d.y * 0.5 + 0.5, 0.0, 1.0);
+        // hold the fog colour through the horizon and only then climb
         vec3 c = mix(bot, top, smoothstep(0.52, 0.95, t));
-        float ny = normalize(vp).y;
-        // the glow band sits a few degrees ABOVE the horizon, never on it —
-        // at y=0 it would brighten the sky against terrain the fog has already
-        // matched, and the seam would be back wearing the glow's colour
-        c += glow * exp(-abs(ny) * 6.0) * smoothstep(0.004, 0.05, ny);
+        // the glow band sits a few degrees ABOVE the horizon, never on it
+        c += glow * exp(-abs(d.y) * 6.0) * smoothstep(0.004, 0.05, d.y);
+        // stars: hashed cells with a round falloff INSIDE the cell — lighting
+        // the whole cell draws squares, a cell at this resolution being ~0.26
+        // degrees, which is several pixels. Watched, not guessed.
+        vec3 cell = floor(d * 220.0);
+        float s = step(0.9985, hash(cell)) * (0.35 + 0.65 * hash(cell + 7.0));
+        float core = smoothstep(0.22, 0.03, length(fract(d * 220.0) - 0.5));
+        c += vec3(0.85, 0.92, 1.0) * s * core * 0.8 * smoothstep(0.06, 0.35, d.y);
         gl_FragColor = vec4(c, 1.0); }`,
   });
   scene.add(new THREE.Mesh(geo, mat));
 }
-scene.fog = new THREE.FogExp2(C(P.fog), 0.064);
+scene.fog = new THREE.FogExp2(C(P.fog), 0.055);
 
-// --- terrain: the one modelled thing, wearing the palette --------------------
+// --- terrain -----------------------------------------------------------------
+const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
 {
-  const N = 220, SIZE = 90;
+  const N = 260, SIZE = 130;
   const geo = new THREE.PlaneGeometry(SIZE, SIZE, N, N);
   geo.rotateX(-Math.PI / 2);
   const p = geo.attributes.position;
   const col = new Float32Array(p.count * 3);
-  const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rock = C(P.stem, 0.6);
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), z = p.getZ(i), y = ground(x, z);
     p.setY(i, y);
-    // slope by finite difference, cheap and only used for tinting
     const s = Math.min(1, Math.hypot(ground(x + 0.4, z) - y, ground(x, z + 0.4) - y) * 3.2);
     const m = (fbm(x * 0.7 + 40, z * 0.7 + 9) - 0.3) * 1.6;
-    const c = soil.clone().lerp(moss, Math.max(0, Math.min(1, m)) * (1 - s)).lerp(rock, s * 0.55);
+    const c = soil.clone().lerp(moss, clamp01(m) * (1 - s)).lerp(rockC, s * 0.55);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+  scene.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
     vertexColors: true, roughness: 1, metalness: 0,
-  }));
-  mesh.receiveShadow = false;
+  })));
+}
+
+// --- water: a fresnel disc in the basin --------------------------------------
+{
+  const geo = new THREE.CircleGeometry(POND.r, 48);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, fog: false,
+    // the reflected colour is the FOG's, not the zenith's: at the grazing
+    // angles a ground camera sees, water mirrors the horizon, and in this
+    // world the horizon is the fog — the zenith is near-black, and mixing
+    // toward it left the pond reading as a hole a second time
+    uniforms: { deep: { value: C(P.bgBot, 1.6) }, skyc: { value: C(P.fog, 2.4) }, glow: { value: C(P.bgGlow, 1.2) } },
+    vertexShader: `varying vec3 vw; varying vec3 vn;
+      void main(){ vec4 w = modelMatrix * vec4(position,1.0); vw = w.xyz; vn = vec3(0.,1.,0.);
+      gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `varying vec3 vw; varying vec3 vn; uniform vec3 deep, skyc, glow;
+      void main(){
+        vec3 V = normalize(cameraPosition - vw);
+        // a floor under the fresnel: real water reflects ~2% at normal
+        // incidence but a pond with nothing to refract renders as a hole —
+        // the sky share needs to start above zero to read as a surface
+        float fr = 0.18 + 0.82 * pow(1.0 - max(dot(V, vn), 0.0), 2.5);
+        vec3 c = mix(deep, skyc, fr) + glow * fr * 0.5;
+        gl_FragColor = vec4(c, 0.92); }`,
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(POND.x, POND.y, POND.z);
+  scene.add(m);
+}
+
+// --- rocks: displaced icosahedra ---------------------------------------------
+{
+  const rnd = mulberry32(4111);
+  for (let i = 0; i < 12; i++) {
+    const rad = 0.12 + rnd() * rnd() * 0.7;
+    const geo = new THREE.IcosahedronGeometry(rad, 2);
+    const p = geo.attributes.position, off = rnd() * 90;
+    for (let v = 0; v < p.count; v++) {
+      const nx = p.getX(v) / rad, ny = p.getY(v) / rad, nz = p.getZ(v) / rad;
+      const d = 1 + (fbm(nx * 1.6 + off, nz * 1.6 + ny) - 0.5) * 0.7;
+      p.setXYZ(v, p.getX(v) * d, p.getY(v) * d * 0.85, p.getZ(v) * d);
+    }
+    geo.computeVertexNormals();
+    const a = rnd() * Math.PI * 2, r = 2.2 + rnd() * 12;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (Math.hypot(x - POND.x, z - POND.z) < POND.r + 0.4) continue;  // not in the pond
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      color: rockC.clone().lerp(soil, rnd() * 0.5), roughness: 1,
+    }));
+    m.position.set(x, ground(x, z) - rad * 0.12, z);
+    m.rotation.y = rnd() * Math.PI * 2;
+    scene.add(m);
+  }
+}
+
+// --- grass: one blade, instanced ---------------------------------------------
+// The ecosystem's signature move (see any of the recent procedural-terrain
+// repos). One bent blade, ~40k instances, per-instance colour off the same
+// moss the terrain wears — so the meadow and the ground read as one material.
+{
+  const H = 0.085, W = 0.011;
+  const blade = new THREE.BufferGeometry();
+  // four triangles up a slight curve; normals lean so both faces light
+  const pts = [], idx = [];
+  const SEGS = 4;
+  for (let s = 0; s <= SEGS; s++) {
+    const t = s / SEGS, y = t * H, lean = t * t * 0.35 * H, w = W * (1 - t * 0.85);
+    pts.push(-w / 2, y, lean, w / 2, y, lean);
+  }
+  for (let s = 0; s < SEGS; s++) {
+    const b = s * 2;
+    idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+  }
+  blade.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  blade.setIndex(idx);
+  blade.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ roughness: 1, side: THREE.DoubleSide });
+  const COUNT = 42000;
+  const mesh = new THREE.InstancedMesh(blade, mat, COUNT);
+  const rnd = mulberry32(909);
+  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler(),
+    S = new THREE.Vector3(), T = new THREE.Vector3(), col = new THREE.Color();
+  let placed = 0;
+  while (placed < COUNT) {
+    const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * 14;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r, y = ground(x, z);
+    if (y < POND.y + 0.06) continue;                    // not in the water
+    T.set(x, y - 0.004, z);
+    E.set((rnd() - 0.5) * 0.5, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.5);
+    S.setScalar(0.7 + rnd() * 0.9);
+    M.compose(T, Q.setFromEuler(E), S);
+    mesh.setMatrixAt(placed, M);
+    col.copy(moss).lerp(soil, rnd() * 0.55).multiplyScalar(0.75 + rnd() * 0.5);
+    mesh.setColorAt(placed, col);
+    placed++;
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   scene.add(mesh);
 }
 
@@ -186,14 +308,11 @@ for (let i = 0; i < loaded.length; i++) {
       o.material.transparent = false;   // alpha is emissive weight, not opacity
       meshes++;
       const g = o.geometry;
-      tris += g.index ? g.index.count / 3 : g.attributes.POSITION?.count / 3 || g.attributes.position.count / 3;
+      tris += g.index ? g.index.count / 3 : g.attributes.position.count / 3;
     } else if (o.isLine || o.isLineSegments) {
-      // the browser's own move: additive glowing lines, depth-read no-write.
-      // OPACITY IS LOAD-BEARING: a conifer is 235k segments, and at additive
-      // full strength the crown sums to a solid white cone — watched, not
-      // guessed. The browser gets away with it because its renderer grades
-      // and its ribbons thin with the LOD; a raw line pass has to pay with
-      // opacity instead.
+      // additive glowing lines, depth-read no-write — and OPACITY IS
+      // LOAD-BEARING at line counts like a conifer's (watched blowing out
+      // solid white); the herbs' far-LODs ride the same setting
       o.material.blending = THREE.AdditiveBlending;
       o.material.transparent = true;
       o.material.opacity = 0.16;
@@ -208,7 +327,7 @@ for (let i = 0; i < loaded.length; i++) {
   });
   const rnd = mulberry32(101 + i);
   for (const [x, z] of STAND[i].at) {
-    const inst = src === undefined ? null : (STAND[i].at.length > 1 ? src.clone() : src);
+    const inst = STAND[i].at.length > 1 ? src.clone() : src;
     inst.position.set(x, ground(x, z), z);
     inst.rotation.y = rnd() * Math.PI * 2;
     scene.add(inst);
@@ -216,11 +335,11 @@ for (let i = 0; i < loaded.length; i++) {
 }
 
 // --- framings ----------------------------------------------------------------
-// Deterministic and reachable from the shot tool: __frame(name) is a contract.
 const FRAMES = {
-  wide: { eye: [10.5, 2.1, 8.6], look: [0, 1.35, 0], fov: 38 },
-  hero: { eye: [4.8, 1.5, 2.4], look: [0, 1.55, 0], fov: 42 },
-  grove: { eye: [-4.6, 0.75, -3.4], look: [0.4, 1.25, 0.4], fov: 50 },
+  wide: { eye: [11.2, 2.4, 8.8], look: [0, 1.15, 0], fov: 38 },
+  hero: { eye: [4.6, 1.35, 0.6], look: [0, 1.3, 0.3], fov: 42 },
+  grove: { eye: [-3.9, 0.55, -2.7], look: [0.6, 1.05, 0.7], fov: 52 },
+  pond: { eye: [8.9, 0.8, -8.8], look: [0, 1.25, 0.4], fov: 44 },
 };
 window.__frame = (name) => {
   const f = FRAMES[name]; if (!f) return Object.keys(FRAMES);
@@ -239,14 +358,13 @@ addEventListener('resize', () => {
 
 let t0 = performance.now();
 const drift = (t) => {
-  // a slow orbital drift through the wide framing; the shot tool bypasses it
   const s = (t - t0) / 1000;
-  const a = 0.72 + s * 0.021, r = 10.9 - Math.sin(s * 0.05) * 1.2;
-  cam.position.set(Math.sin(a) * r, 1.9 + Math.sin(s * 0.11) * 0.35, Math.cos(a) * r);
-  cam.lookAt(0, 1.35, 0);
+  const a = 0.72 + s * 0.021, r = 11.4 - Math.sin(s * 0.05) * 1.3;
+  cam.position.set(Math.sin(a) * r, 2.1 + Math.sin(s * 0.11) * 0.4, Math.cos(a) * r);
+  cam.lookAt(0, 1.15, 0);
   renderer.render(scene, cam);
 };
-window.__hold = false;   // the shot tool sets this to stop the drift
+window.__hold = false;
 renderer.setAnimationLoop((t) => { if (!window.__hold) drift(t); });
 
 window.__stats = () => ({

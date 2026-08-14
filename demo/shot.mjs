@@ -31,7 +31,7 @@ const stats = await page.evaluate('window.__stats()');
 console.log(`loaded: ${stats.meshes} meshes, ${stats.lines} line nodes, ${stats.tris.toLocaleString()} asset triangles`);
 if (!(stats.tris > 0)) fails.push('no asset triangles loaded');
 
-for (const name of ['wide', 'hero', 'grove']) {
+for (const name of ['wide', 'hero', 'grove', 'pond']) {
   const crop = await page.evaluate((n) => {
     window.__hold = true;
     window.__frame(n);

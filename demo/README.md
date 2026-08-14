@@ -22,17 +22,21 @@ node demo/shot.mjs shots     # the three framings, gated non-black and non-flat
   scene extras. The sky dome, fog, hemisphere light and key light all read the
   hero's palette — the scene has no art direction that is not already in the
   species.
-- **The terrain is modelled**, and it is the only thing here that is. It is
-  environment, the same category as the wind in `src/37_wind.js` — seeded
-  value-noise fbm, wearing the palette's colours.
+- **The environment is modelled, and says so.** Terrain (fbm with ridged far
+  hills), 42k instanced grass blades, displaced-icosahedron rocks, a fresnel
+  pond, hashed stars — the standard procedural-landscape kit of the three.js
+  ecosystem, wearing the palette's colours. All of it is the same category as
+  the wind in `src/37_wind.js`: environment the plants stand in, never the
+  plants.
 - **Positions are staging.** Where a plant stands was never a simulation
-  result (`plantGarden` uses a PRNG too). Clones of a grown specimen appear at
-  different yaws; the honest fix for visible twins is more seeds in the
-  manifest, which is a one-line edit that costs a grow.
-- **The conifer's needles are additive lines at opacity 0.16** — the browser's
-  own idiom for needles (`VEINS=lines`), with the opacity paying for what the
-  browser's grade and LOD normally absorb. Watched blowing out solid white
-  without it.
+  result (`plantGarden` uses a PRNG too). The stand is eight distinct seeds
+  across four species and two life stages; the two remaining clones stand far
+  apart at different yaws.
+- **The conifer is deliberately absent.** Its one dominant vein strand is
+  correct *Picea*, and the reticulate vein network is the only channel this
+  engine is visible through — the ROADMAP 13 needle verdict, carrying over to
+  the export. `VEINS=lines` and its recipe stay documented in tools/README.md
+  for anyone who wants a tree anyway.
 
 ## What phase 3 would add
 

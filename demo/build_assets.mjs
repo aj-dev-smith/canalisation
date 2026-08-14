@@ -28,12 +28,21 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 
+// The conifer is not in the stand. Its one dominant vein strand is correct
+// Picea and the reticulate network is the only channel this engine is visible
+// through (the ROADMAP 13 needle verdict, carrying over to the export), so
+// the demo is herbs — eight distinct seeds, two life stages. VEINS=lines and
+// the spire's recipe stay documented in tools/README.md for anyone who wants
+// a tree anyway.
 const MANIFEST = [
-  { species: 'Ashfall Spire', seed: 7, steps: 5200, stage: '', out: 'demo_ashfall_spire_7', conv: { VEINS: 'lines' } },
-  { species: 'Ember Creeper', seed: 7, steps: 4000, stage: 'peak', out: 'demo_ember_creeper_7', conv: { VEIN_MIN_W: '0.006' } },
-  { species: 'Nightglass Parasol', seed: 3, steps: 4000, stage: 'peak', out: 'demo_nightglass_parasol_3', conv: { VEIN_MIN_W: '0.006' } },
-  { species: 'Sun Coral', seed: 5, steps: 4000, stage: 'peak', out: 'demo_sun_coral_5', conv: { VEIN_MIN_W: '0.006' } },
+  { species: 'Cathedral Fern', seed: 5, steps: 4000, stage: 'peak', out: 'demo_cathedral_fern_5', conv: { VEIN_MIN_W: '0.006' } },
   { species: 'Cathedral Fern', seed: 21, steps: 4000, stage: 'senescing', out: 'demo_cathedral_fern_21_sen', conv: { VEIN_MIN_W: '0.006' } },
+  { species: 'Ember Creeper', seed: 7, steps: 4000, stage: 'peak', out: 'demo_ember_creeper_7', conv: { VEIN_MIN_W: '0.006' } },
+  { species: 'Ember Creeper', seed: 12, steps: 4000, stage: 'peak', out: 'demo_ember_creeper_12', conv: { VEIN_MIN_W: '0.006' } },
+  { species: 'Nightglass Parasol', seed: 3, steps: 4000, stage: 'peak', out: 'demo_nightglass_parasol_3', conv: { VEIN_MIN_W: '0.006' } },
+  { species: 'Nightglass Parasol', seed: 9, steps: 4000, stage: 'peak', out: 'demo_nightglass_parasol_9', conv: { VEIN_MIN_W: '0.006' } },
+  { species: 'Sun Coral', seed: 5, steps: 4000, stage: 'peak', out: 'demo_sun_coral_5', conv: { VEIN_MIN_W: '0.006' } },
+  { species: 'Sun Coral', seed: 2, steps: 4000, stage: 'peak', out: 'demo_sun_coral_2', conv: { VEIN_MIN_W: '0.006' } },
 ];
 
 const run = (cmd, args, env) => {
