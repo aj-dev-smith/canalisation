@@ -214,17 +214,48 @@ function crop() {
     ink: ink / lum.length, w: cw, h: ch };
 }
 
+// FIT THE BOX'S CORNERS, NOT THE BOUNDING SPHERE. A sphere fit is one line and
+// it is what this tool did first — but a plant is tall and narrow (a Cathedral
+// Fern is 0.91 x 2.36 x 0.82 m, sphere radius 1.33), so fitting the sphere put
+// the specimen in about a third of the frame with the rest background. That is
+// the framing \`tree_shot.mjs\` exists because of: "looks lost" and "is too
+// sparse" are the same picture. It also blunts the check, since \`ink\` is
+// measured on the centre crop and a subject that small barely reaches it.
+//
+// The solve is exact rather than a fudge factor. Put the camera at \`c + dir*d\`;
+// for a corner \`a = q - c\` the camera-space offsets \`a·right\` and \`a·up\` do not
+// depend on d (both axes are perpendicular to dir), and the depth is \`a·v + d\`.
+// So each corner and each axis gives a lower bound \`d >= |offset|/t - a·v\`, and
+// the answer is the largest of them. Whole box in shot at every angle, tightly.
+function fitDistance(c, dir, up, right, v, halfV, halfH) {
+  const b = S.bbox;
+  let d = -Infinity;
+  for (let i = 0; i < 8; i++) {
+    const a = new THREE.Vector3(
+      (i & 1 ? b.max[0] : b.min[0]) - c.x,
+      (i & 2 ? b.max[1] : b.min[1]) - c.y,
+      (i & 4 ? b.max[2] : b.min[2]) - c.z);
+    const z = a.dot(v);
+    d = Math.max(d, Math.abs(a.dot(up)) / halfV - z, Math.abs(a.dot(right)) / halfH - z);
+  }
+  return d;
+}
+
 window.__shoot = (name) => {
   const a = ANGLES.find((x) => x.name === name);
   const c = new THREE.Vector3().fromArray(S.bbox.center), r = S.bbox.radius;
-  // Frame the whole bounding sphere off the VERTICAL fov, which on a 4:3 frame
-  // is the tighter one, plus a little air. Nothing here is tuned by eye — a
-  // proof wants the whole specimen in shot, not a composition.
-  const d = r / Math.sin(THREE.MathUtils.degToRad(cam.fov) / 2) * 1.06;
   const A = THREE.MathUtils.degToRad(a.az), E = THREE.MathUtils.degToRad(a.el);
-  cam.position.set(c.x + d * Math.cos(E) * Math.sin(A),
-    c.y + d * Math.sin(E),
-    c.z + d * Math.cos(E) * Math.cos(A));
+  const dir = new THREE.Vector3(Math.cos(E) * Math.sin(A), Math.sin(E), Math.cos(E) * Math.cos(A));
+  const v = dir.clone().negate();                       // camera -> centre
+  const right = new THREE.Vector3().crossVectors(v, new THREE.Vector3(0, 1, 0));
+  // Straight down would make that cross product degenerate; no angle here is,
+  // but a future one might be, and a NaN camera renders a clean empty frame.
+  if (right.lengthSq() < 1e-9) right.set(1, 0, 0);
+  right.normalize();
+  const up = new THREE.Vector3().crossVectors(right, v).normalize();
+  const halfV = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
+  const d = fitDistance(c, dir, up, right, v, halfV, halfV * cam.aspect) * 1.06;
+  cam.position.copy(c).addScaledVector(dir, d);
   cam.lookAt(c);
   // The key rides with the camera and is offset up and to one side, so a shape
   // reads at every angle. A world-fixed key becomes a backlight the moment the
@@ -336,9 +367,9 @@ if (!stats.error) {
 // same plant `tools/README.md` measures; one that comes back 37 m tall means the
 // `unitM` scale never got applied.
 console.log('');
-console.log('node              type       verts      tris       attributes');
+console.log('node              type          verts      tris       attributes');
 for (const n of stats.nodes || []) {
-  console.log(n.name.padEnd(17), n.type.padEnd(10),
+  console.log(n.name.padEnd(17), n.type.padEnd(13),
     String(n.verts).padEnd(10), String(n.tris | 0).padEnd(10), (n.attrs || []).join(' '));
 }
 if (stats.bbox) {
@@ -367,15 +398,33 @@ console.log(`\nrendered ${(stats.triangles || 0).toLocaleString()} triangles in 
 // The thresholds are deliberately far from the measured values rather than
 // tight around them, because this is a "did it draw" gate and not a look test.
 // Measured on Cathedral Fern seed 21 at 1280x960 on swiftshader: mean
-// 0.149-0.157 against a background of 0.145, ink 0.081-0.107. A lost context
-// reads 0.000 for the mean; a camera pointing past the specimen reads the
-// background's own 0.145 with an ink of exactly zero.
+// 0.1495-0.1584 against a background of 0.1451, ink 0.0817-0.1241. A lost
+// context reads 0.0000 for the mean; a camera pointing past the specimen reads
+// the background's own 0.1451 with an ink of exactly zero.
 //
-// BOTH BRANCHES HAVE BEEN WATCHED FAILING, which is the only reason to believe
-// either of them: a hand-written GLB holding two millimetre triangles a
-// kilometre apart is a valid file that loads, reports `triangles = 2`, and puts
-// nothing whatsoever in the centre crop. It fails here on `ink` at all three
-// angles. A gate you have not watched fail is not a gate you know about.
+// `ink` is low in absolute terms — a plant is mostly gaps, and this one is a
+// narrow spire — so the threshold is 0.002, more than an order of magnitude
+// under the smallest measured value and well over the zero a miss produces.
+// Do not tighten it toward the measured band: a sparser species or a far-LOD
+// export is a legitimately thinner picture, and this is a "did it draw" gate.
+//
+// ALL THREE FAILURE PATHS HAVE BEEN WATCHED FAILING, which is the only reason
+// to believe any of them — a gate you have not watched fail is not a gate you
+// know about, and this repo has a CI entry saying exactly that:
+//
+//   ink   a hand-written GLB holding two millimetre triangles a kilometre apart
+//         is a VALID file: it loads, three.js reports `triangles = 2`, and the
+//         centre crop comes back mean 0.1451 / ink 0.0000 at all three angles —
+//         the background, exactly, and nothing else. This is the case that
+//         justifies the whole file, because `triangles > 0` passes it.
+//   mean  reproduced by rendering an empty scene on a black clear, so the
+//         readback is a real all-zero drawing buffer: mean 0.0000, and the
+//         assertion fires at all three angles. ⚠ That is the lost context's
+//         PIXELS rather than a lost context — `WEBGL_lose_context` is not
+//         exposed on the swiftshader build here, so the cause could not be
+//         staged, only the symptom the check actually reads.
+//   error a GLB truncated to 200 kB fails on the loader path with
+//         "Invalid typed array length", before any angle is shot.
 if (!stats.error && !(stats.triangles > 0)) fails.push(`nothing drawn: renderer.info.render.triangles = ${stats.triangles}`);
 for (const s of shots) {
   if (s.mean < 0.02) fails.push(`${s.name}: centre crop is near-black (mean ${s.mean.toFixed(4)}) — the black-PNG failure, and the triangle count above does NOT rule it out`);
