@@ -40,7 +40,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: enable Pages if it is not already (build_type: workflow)
+      - name: enable Pages if it is not already
         uses: actions/configure-pages@v5
         with:
           enablement: true
