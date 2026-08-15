@@ -9,7 +9,11 @@
 # cache — keyed on manifest AND source, since a change to either grows a
 # different plant — makes every later run cheap.
 #
-# No setup needed: configure-pages below enables Pages on first run.
+# ONE-TIME SETUP, measured rather than assumed: Settings -> Pages -> Source:
+# "GitHub Actions". configure-pages ships enablement:true, but a workflow
+# token can DEPLOY to a Pages site and cannot CREATE one — run #5 died with
+# "Resource not accessible by integration" on the create call, which needs
+# repo admin. Once the site exists, enablement:true is a harmless no-op get.
 name: demo to pages
 on:
   workflow_dispatch:
