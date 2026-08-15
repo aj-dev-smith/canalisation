@@ -932,7 +932,16 @@ window.__frame = (name, tSec = 300) => {
   // reproducible — the field still shows in them as differential lean. tSec
   // is there so two stills can A/B the wind itself.
   for (const sh of windShaders) sh.uniforms.uWindT.value = tSec * PT_PER_SEC;
+  // a framing is a CUT, and stateful effects must not smear across it: the
+  // first integrated capture drenched every still in motion blur because the
+  // previous view-projection still held the live orbit's camera, and DoF
+  // focused on the orbit's subject. Set this framing's own focus, then draw
+  // TWICE — the first settles every pass's state (prevVP, focus follower) at
+  // the new camera, the second is the still, with ds = 0 so motion blur is
+  // the identity and the grain is frozen.
+  window.__focusDist = _lk.set(f.look[0], f.look[1], f.look[2]).distanceTo(cam.position);
   fxTime = tSec;
+  draw();
   draw();
   return name;
 };

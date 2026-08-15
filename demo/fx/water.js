@@ -39,12 +39,14 @@
 //   instead of breaking it into glints. 0.035 rad puts the glint spread at
 //   about 4 degrees against that 6 — broken, not erased.
 //
-// Nothing here adds light on balance: the pond region comes out at the same
-// mean luminance the flat disc had (102.3 against 102.9 of 255, measured), and
-// what changed is where that light sits. See the deleted second lobe below.
-//
 //   ANISOTROPY is the crests: wind ripples run ACROSS the wind, so the noise
 //   is sampled with a lower frequency perpendicular to the flow than along it.
+//
+// Nothing here adds light on balance, which is the calibration this dark scene
+// asks for: the pond region comes out at the same mean luminance the flat disc
+// had — 102.3 against the control's 102.9 of 255, measured — and the darkest
+// fifth of the frame does not move at all. What changed is where the light
+// sits, not how much of it there is. See the deleted second lobe below.
 //
 // And a LEVEL OF DETAIL law, for the same reason the native piece culls veins:
 // a ripple narrower than a couple of pixels is not a ripple, it is aliasing,
