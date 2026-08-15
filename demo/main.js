@@ -557,9 +557,11 @@ function patchMaterial(m, boost, heightM, amp) {
 }
 
 let tris = 0, meshes = 0, lines = 0;
+const ASSET_H = {};   // grown height per asset, off the bbox its exporter wrote
 for (const k of keys) {
   const bb = scenes[k].userData?.bbox;
   const hM = bb ? (bb.max[1] - bb.min[1]) * (scenes[k].userData.unitM ?? WIND_WORLD.unitM) : 1.2;
+  ASSET_H[k] = hM;
   scenes[k].traverse((o) => {
     if (o.isMesh) {
       patchMaterial(o.material, 2.2, hM, 0.02);
@@ -592,6 +594,7 @@ for (const k of keys) {
 // per-plant. Everything is seeded, so the field reproduces.
 const fieldRnd = mulberry32(7301);
 const claimed = [];
+const sown = [];    // what stands where, WITH its height — the flight needs both
 const inPond = (x, z, m = 0.5) => Math.hypot(x - POND.x, z - POND.z) < POND.r + m;
 // nothing sows inside a camera — a drift once landed exactly on the pond
 // framing and the capture was the inside of a Sun Coral canopy
@@ -608,8 +611,21 @@ function claim(x, z, need) {
 function plant(key, x, z) {
   const inst = scenes[key].clone();
   inst.position.set(x, ground(x, z), z);
-  inst.rotation.y = fieldRnd() * Math.PI * 2;
+  const yaw = fieldRnd() * Math.PI * 2;
+  inst.rotation.y = yaw;
   scene.add(inst);
+  // the sown entry records where the CANOPY is, not where the root went in:
+  // these plants arch, so a specimen's visual mass sits off its origin, and
+  // after the random yaw it sits somewhere different per clone — the flight
+  // orbited one coral clone perfectly and missed its twin until this
+  const bb = scenes[key].userData?.bbox, um = scenes[key].userData?.unitM ?? WIND_WORLD.unitM;
+  let cx = 0, cz = 0;
+  if (bb) {
+    const ox = (bb.min[0] + bb.max[0]) / 2 * um, oz = (bb.min[2] + bb.max[2]) / 2 * um;
+    cx = ox * Math.cos(yaw) + oz * Math.sin(yaw);
+    cz = -ox * Math.sin(yaw) + oz * Math.cos(yaw);
+  }
+  sown.push({ key, x: x + cx, z: z + cz, h: ASSET_H[key] ?? 1.2, kind: ASSETS[key].kind });
 }
 
 claim(HERO.at[0], HERO.at[1], 1.2);
@@ -644,134 +660,166 @@ for (let i = 0; i < Math.round(45 * DENSITY); i++) {
 }
 console.log(`sowed ${planted} plants`);
 
-// --- the flight --------------------------------------------------------------
-// The pollinator's tour: ?cam=flight (and the film tool's default). A
-// Catmull-Rom spline threaded through the SOWN field — waypoints are found
-// off the actual claimed plant positions, so the path adapts to what grew:
-// in low over the far drifts, close past an adult, blade-height through the
-// mid-field, half a loop around the hero, a skim across the pond and its
-// moon streak, then up and out facing the moon. Terrain-aware, plant-aware
-// (a soft push off any stem it strays into), with a flutter bob and a bank
-// into the turns, both small — a camera that moves like an insect and cuts
-// like one are different things, and only the first is wanted.
+// --- the flight: a forager, not a tour -------------------------------------
+// BE THE BEE. A forager works STATIONS: she darts toward a flower in a fast,
+// mostly straight line — facing where she is going, which is what kills the
+// lateral slide a viewer called "sporadic" — brakes into a hover, spends a
+// couple of seconds with her attention ON the flower, then leaves for the
+// next one. The goal is legible because the gaze IS the goal: in transit the
+// camera looks at the next station, on station it looks at the plant. Every
+// dart eases from zero velocity to zero velocity, so the position track is
+// smooth at every join by construction; the gaze is a follower with a hard
+// turn-rate cap, so the view cannot whip no matter what the targets do. The
+// itinerary: three flowers, the hero, a drink at the pond (bees do), and the
+// climb-out with the farewell look the earlier films settled on.
 const FLIGHT_S = 20;
-const flightCurve = (() => {
-  const P = (x, z, h) => new THREE.Vector3(x, ground(x, z) + h, z);
-  // the nearest adult to a spot, so a "flyby" is of a plant that exists
+const BEE = (() => {
+  // a station is a real plant TALL ENOUGH TO FRAME — the first itinerary
+  // aimed at hardcoded heights, and a parasol is 0.78 m tall, so the bee
+  // hovered above the canopy staring over the plant at empty field (the
+  // gaze-error probe read 0.0 during every visit; the target was just wrong)
   const adultNear = (x, z) => {
     let best = null, bd = 1e9;
-    for (const p of claimed) {
-      if (p.r < 0.8) continue;
+    for (const p of sown) {
+      if (p.kind !== 'adult' || p.h < 1.1) continue;
+      if (Math.hypot(p.x - HERO.at[0], p.z - HERO.at[1]) < 1.2) continue;  // not the hero
       const d = Math.hypot(p.x - x, p.z - z);
       if (d < bd) { bd = d; best = p; }
     }
-    return best ?? { x, z };
+    return best ?? { x, z, h: 1.4 };
   };
-  const a1 = adultNear(-4, 2.5), a2 = adultNear(-2, -2.5), a3 = adultNear(3, -2);
-  const raw = new THREE.CatmullRomCurve3([
-    P(-15, 8.5, 2.4),                      // in over the far field
-    P(-8.5, 5, 1.0),                       // descending
-    P(a1.x + 0.8, a1.z + 0.5, 0.7),        // first flyby, shoulder height
-    P((a1.x + a2.x) / 2 - 0.6, (a1.z + a2.z) / 2, 0.5),
-    P(a2.x - 0.8, a2.z - 0.5, 0.6),        // second flyby
-    P(-1.7, 2.1, 1.0),                     // approach the hero
-    P(1.9, 1.5, 1.15),                     // half a loop around it — WIDE:
-    P(2.1, -1.3, 0.9),                     // the tight version whipped the yaw
-    P(a3.x + 0.7, a3.z + 0.7, 0.55),       // out through the coral drift
-    P(4.2, -3.8, 0.45),                    // dropping toward the water
-    new THREE.Vector3(5.2, POND.y + 0.35, -5.0),  // the skim — moon in the water
-    P(7.6, -7.6, 1.2),                     // climbing out
-    P(10.2, -10.6, 2.3),                   // and away, facing the moon
-  ]);
-  // BAKE the avoidance into the curve, then smooth it — the first version
-  // pushed off plants per FRAME, and a force that kicks in and out as the
-  // path brushes each stem is a jerk by construction; a viewer called it
-  // exactly that. Push the samples, clamp them to the ground, then three
-  // box-smooth passes so what remains is one continuous line.
-  const N = 320, pts = [];
-  for (let i = 0; i <= N; i++) {
-    const p = raw.getPointAt(i / N);
-    for (let pass = 0; pass < 2; pass++) {
-      for (const c of claimed) {
-        const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz);
-        if (d < 0.5 && d > 1e-6 && p.y < 1.7) {
-          const push = (0.5 - d) * 0.9;
-          p.x += (dx / d) * push; p.z += (dz / d) * push;
-        }
-      }
-    }
-    p.y = Math.max(p.y, ground(p.x, p.z) + 0.22);
-    pts.push(p);
-  }
-  for (let pass = 0; pass < 3; pass++) {
-    for (let i = 2; i < pts.length - 2; i++) {
-      pts[i].set(
-        (pts[i - 2].x + pts[i - 1].x + pts[i].x + pts[i + 1].x + pts[i + 2].x) / 5,
-        (pts[i - 2].y + pts[i - 1].y + pts[i].y + pts[i + 1].y + pts[i + 2].y) / 5,
-        (pts[i - 2].z + pts[i - 1].z + pts[i].z + pts[i + 1].z + pts[i + 2].z) / 5);
-    }
-  }
-  for (const p of pts) p.y = Math.max(p.y, ground(p.x, p.z) + 0.2);
+  const crownOf = (c) => new THREE.Vector3(
+    c.x, ground(c.x, c.z) + Math.min(1.6, Math.max(0.7, c.h * 0.6)), c.z);
+  const hoverR = (c) => Math.min(1.4, Math.max(0.75, c.h * 0.55));
+  // THE ROUTE IS ONE SWEEP, and that is the fix for "the bee has no goal": the
+  // first itinerary zig-zagged NW-S-NE-SE, demanding ~180-degree head-turns
+  // per leg that no deliberate turn rate can deliver — the flower was still
+  // off-frame halfway through each visit. A forager works a patch in a
+  // progressive line, next target roughly AHEAD; every turn below is under
+  // ~90 degrees and the gaze arrives before the bee does.
+  const A = adultNear(-3.5, 3), B = adultNear(-1.8, -0.8);
+  const plantA = crownOf(A), plantB = crownOf(B);
+  const heroP = crownOf(sown[0]);   // the hero's own sown entry — canopy, not root
+  const pondP = new THREE.Vector3(POND.x, POND.y, POND.z);
+  const moonFar = new THREE.Vector3(MOON.x * 40, MOON.y * 40 - 4, MOON.z * 40);
 
-  // THE GAZE IS BAKED AND RATE-LIMITED, and this is the part that makes the
-  // film provably smooth rather than probably smooth. A runtime lookAt at a
-  // point ahead on the spline flipped the camera 135 degrees in one frame
-  // where the avoidance bake left a cusp near the pond — the ahead point
-  // crossed BEHIND the camera. Measured by the jerk probe, not seen. So:
-  // per-sample forward directions from a wide displacement window, the
-  // farewell blended in here, and then a hard cap on degrees-per-sample —
-  // a whip is now impossible by construction, not unlikely by tuning.
-  const fwd = [];
-  const fare = new THREE.Vector3(MOON.x * 40, MOON.y * 40 - 6, MOON.z * 40).normalize();
-  for (let i = 0; i <= N; i++) {
-    const a = pts[Math.max(i - 2, 0)], b = pts[Math.min(i + 8, N)];
-    const f = new THREE.Vector3().subVectors(b, a);
-    if (f.lengthSq() < 1e-9) f.copy(fwd[i - 1] ?? new THREE.Vector3(0, 0, -1));
-    f.normalize();
-    f.lerp(fare, sm(clamp01((i / N - 0.72) / 0.22))).normalize();
-    fwd.push(f);
+  const segs = [];
+  // a visit hovers beside the plant on a slow arc, with a centimetre bob —
+  // attention on the flower, body never quite still
+  const visit = (t0, t1, plant, r, a0, a1) => {
+    const pos = (t) => {
+      const q = (t - t0) / (t1 - t0), a = a0 + (a1 - a0) * sm(q);
+      return new THREE.Vector3(
+        plant.x + Math.cos(a) * r,
+        plant.y + 0.05 + Math.sin(q * 8.5) * 0.03,
+        plant.z + Math.sin(a) * r);
+    };
+    segs.push({ t0, t1, pos, gaze: () => plant });
+    return pos;
+  };
+  // a dart eases zero-to-zero between two rests, with a small vertical bound;
+  // the gaze rides ahead to wherever the bee is going next
+  const dart = (t0, t1, from, to, gazeTo, hump = 0.22) => {
+    segs.push({
+      t0, t1,
+      pos: (t) => {
+        const q = sm((t - t0) / (t1 - t0));
+        const p = new THREE.Vector3().lerpVectors(from, to, q);
+        p.y += Math.sin(Math.PI * q) * hump;
+        return p;
+      },
+      gaze: () => gazeTo,
+    });
+  };
+
+  const entry = new THREE.Vector3(-13, ground(-13, 7.5) + 2.0, 7.5);
+  const posA = visit(2.8, 4.8, plantA, hoverR(A), 2.7, 3.3);
+  dart(0, 2.8, entry, posA(2.8), plantA, 0.35);
+  const posB = visit(6.6, 8.6, plantB, hoverR(B), 3.6, 4.2);
+  dart(4.8, 6.6, posA(4.8), posB(6.6), plantB);
+  const posH = visit(10.4, 13.2, heroP, 1.6, 0.9, 2.2);
+  dart(8.6, 10.4, posB(8.6), posH(10.4), heroP);
+  // the drink: cross the water ALONG the moon's azimuth, gazing at the
+  // streak on the surface ahead — never straight down, which framed the
+  // pond as a flat void filling two thirds of the picture (watched)
+  const mAz = new THREE.Vector3(MOON.x, 0, MOON.z).normalize();
+  const sipAt = (t) => {
+    const q = (t - 15.0);
+    return new THREE.Vector3(
+      POND.x + mAz.x * (-1.7 + q * 0.8),
+      POND.y + 0.42 + Math.sin(t * 7.7) * 0.02,
+      POND.z + mAz.z * (-1.7 + q * 0.8));
+  };
+  const streak = new THREE.Vector3(POND.x + mAz.x * 3.2, POND.y, POND.z + mAz.z * 3.2);
+  segs.push({ t0: 15.0, t1: 16.8, pos: sipAt,
+    gaze: (t) => new THREE.Vector3().lerpVectors(streak, moonFar, sm((t - 15.0) / 1.8) * 0.6) });
+  dart(13.2, 15.0, posH(13.2), sipAt(15.0), streak);
+  const exit = new THREE.Vector3(9.5, ground(9.5, -9.8) + 2.2, -9.8);
+  dart(16.8, 20.0, sipAt(16.8), exit, moonFar, 0.8);
+  segs.sort((a, b) => a.t0 - b.t0);
+  // THE PRE-TURN, and it is real bee behaviour: a forager fixes her heading
+  // on the next flower BEFORE she leaves this one. Mechanically it is what
+  // lets the rate-capped gaze arrive with the station framed instead of
+  // catching up through half the visit — the turn between stations can be
+  // ~150 degrees, and 50 deg/s inside a 1.8s dart cannot do that alone.
+  for (let i = 0; i < segs.length - 1; i++) {
+    const s0 = segs[i], s1 = segs[i + 1], g0 = s0.gaze, pre = 1.1;
+    s0.gaze = (t) => {
+      const w = sm(clamp01((t - (s0.t1 - pre)) / pre));
+      return w > 0
+        ? new THREE.Vector3().lerpVectors(g0(t), s1.gaze(s1.t0), w)
+        : g0(t);
+    };
   }
-  const CAP = 1.0 * Math.PI / 180;   // 1 deg/sample ≈ 0.67 deg/frame at 24fps
-  const axis = new THREE.Vector3();
-  for (let i = 1; i <= N; i++) {
-    const ang = fwd[i - 1].angleTo(fwd[i]);
-    if (ang > CAP) {
-      axis.crossVectors(fwd[i - 1], fwd[i]);
-      if (axis.lengthSq() < 1e-12) { fwd[i].copy(fwd[i - 1]); continue; }
-      axis.normalize();
-      fwd[i].copy(fwd[i - 1]).applyAxisAngle(axis, CAP).normalize();
-    }
-  }
-  return { pts, fwd, N };
+  return segs;
 })();
+
+// the orientation follower: rotate the WHOLE camera orientation toward the
+// desired one at most CAP per second, via Quaternion.rotateTowards. The
+// first version capped the forward VECTOR instead, and the probe caught it
+// exceeding its own cap by half again — with the camera pitched steeply
+// down at the water, lookAt's world-up constraint twists the orientation
+// faster than the forward turns (gimbal amplification). Cap the quantity
+// the probe measures, not a proxy for it; the roll is folded into the
+// target so the one cap bounds everything the viewer can feel.
+const GAZE_CAP = 55 * Math.PI / 180;   // rad/s — deliberate head-turns
+const _gw = new THREE.Vector3(), _fp = new THREE.Vector3(), _lk = new THREE.Vector3();
+const _m4 = new THREE.Matrix4(), _tq = new THREE.Quaternion(), _rq = new THREE.Quaternion();
+const _fwd = new THREE.Vector3(), _upY = new THREE.Vector3(0, 1, 0), _zA = new THREE.Vector3(0, 0, 1);
+let camInit = false, rollEMA = 0, lastS = -1;
 const CAM_MODE = Q.get('cam') ?? 'drift';
-// runtime is just interpolation of the baked arrays — position, forward —
-// plus the flutter bob (which translates the camera and its look target
-// together, so it cannot turn the view) and a followed bank.
-const _fp = new THREE.Vector3(), _ff = new THREE.Vector3(), _lk = new THREE.Vector3();
-let rollEMA = 0, lastU = -1;
 function flightCam(s) {
-  // ease both ends so the flight leaves and arrives instead of starting
-  const u = (1 - Math.cos(Math.PI * Math.min(Math.max(s / FLIGHT_S, 0), 1))) / 2;
-  if (lastU < 0 || u < lastU) rollEMA = 0;
-  lastU = u;
-  const { pts, fwd, N } = flightCurve;
-  const x = u * N, i0 = Math.min(Math.floor(x), N - 1), ft = x - i0;
-  _fp.lerpVectors(pts[i0], pts[i0 + 1], ft);
-  _ff.lerpVectors(fwd[i0], fwd[i0 + 1], ft).normalize();
-  // flutter: two incommensurate bobs, centimetres — an insect, not a drone
-  _fp.y += Math.sin(s * 2.1) * 0.035 + Math.sin(s * 3.7) * 0.02;
+  const t = Math.min(Math.max(s, 0), FLIGHT_S - 1e-4);
+  if (lastS < 0 || t < lastS) { camInit = false; rollEMA = 0; }
+  const ds = lastS < 0 || t < lastS ? 1 / 60 : Math.min(t - lastS, 0.1);
+  lastS = t;
+  let seg = BEE[0];
+  for (const g of BEE) if (t >= g.t0) seg = g;
+  _fp.copy(seg.pos(t));
+  // flutter, small — the visits carry their own bob
+  _fp.y += Math.sin(s * 3.1) * 0.012;
+  _gw.copy(seg.gaze(t)).sub(_fp).normalize();
+  // a hint of bank off how far the head still has to turn, followed not snapped
+  cam.getWorldDirection(_fwd);
+  const yawRate = (_fwd.x * _gw.z - _fwd.z * _gw.x);
+  rollEMA += (Math.max(-0.05, Math.min(0.05, yawRate * 2)) - rollEMA) * 0.06;
+  _m4.lookAt(_fp, _lk.copy(_fp).add(_gw), _upY);
+  _tq.setFromRotationMatrix(_m4);
+  _tq.multiply(_rq.setFromAxisAngle(_zA, rollEMA));
   cam.position.copy(_fp);
-  cam.up.set(0, 1, 0);
-  cam.lookAt(_lk.copy(_fp).addScaledVector(_ff, 3));
-  // bank into the turn: roll off the horizontal turn rate, followed not snapped
-  const f2 = fwd[Math.min(i0 + 4, N)];
-  const roll = Math.max(-0.06, Math.min(0.06, (_ff.x * f2.z - _ff.z * f2.x) * 4));
-  rollEMA += (roll - rollEMA) * 0.08;
-  cam.rotateZ(rollEMA);
+  if (!camInit) { cam.quaternion.copy(_tq); camInit = true; }
+  else cam.quaternion.rotateTowards(_tq, GAZE_CAP * ds);
+  window.__gazeErr = cam.getWorldDirection(_fwd).angleTo(_gw) * 180 / Math.PI;
 }
 window.__camQ = () => cam.quaternion.toArray();   // for the jerk probe
-
+window.__gd = () => cam.getWorldDirection(new THREE.Vector3()).toArray();
+window.__whereami = () => ({
+  cam: [cam.position.x, cam.position.y, cam.position.z],
+  near: sown
+    .map((p) => ({ ...p, d: Math.hypot(p.x - cam.position.x, p.z - cam.position.z) }))
+    .sort((a2, b2) => a2.d - b2.d).slice(0, 3)
+    .map((p) => `${p.key}(h${p.h.toFixed(2)}) d${p.d.toFixed(2)} at ${p.x.toFixed(1)},${p.z.toFixed(1)}`),
+});
 // --- framings ----------------------------------------------------------------
 const FRAMES = {
   // wide faces the moon — an overview with the light source in frame; field

@@ -75,7 +75,18 @@ if (have > 0) {
 console.log(`rendering ${n - have} of ${n} frames, ${seconds}s at ${fps}fps, ${W}x${H}…`);
 const t0 = Date.now();
 for (let i = have; i < n; i++) {
-  await page.evaluate((ms) => window.__stepMs(ms), i * 1000 / fps);
+  // SUB-STEP AT 24Hz WHATEVER THE CAPTURE RATE: the camera's gaze follower
+  // and the drifters integrate per step with a clamped dt, so a 1fps scout
+  // that stepped once per frame advanced them at a tenth of the film's rate
+  // — three rounds of framing "fixes" were art-directed against that lie
+  // before the probe and the scout were reconciled. A scout must BE the
+  // film, sampled less often; never a different dynamical system.
+  await page.evaluate(({ from, to }) => {
+    window.__skipDraw = true;
+    for (let m = from; m < to; m += 1000 / 24) window.__stepMs(m);
+    window.__skipDraw = false;
+    window.__stepMs(to);
+  }, { from: Math.max(0, (i - 1)) * 1000 / fps, to: i * 1000 / fps });
   await page.screenshot({ path: join(frames, `f_${String(i).padStart(4, '0')}.png`) });
   if ((i + 1) % fps === 0) {
     const el = (Date.now() - t0) / 1000, rate = (i + 1) / el;
