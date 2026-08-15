@@ -78,6 +78,7 @@ node test/tree.mjs                                 # ROADMAP 13: the crown — s
 node test/crown.mjs '{"maxGen":2}'                 # HOW MUCH OF ANYTHING IS THERE — crown fill, at five rasters (~40s)
 node test/pathogen.mjs                             # AN AGENT IN THE TISSUE: invasion front against a closed form
 node test/infected.mjs                             # that agent on real tissue, measured and DRAWN
+node test/gltf.mjs                                 # the GLB converter against its own format, mutation-tested (0.4s)
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -153,11 +154,11 @@ when a stand that heavy could not exist. Read its **median and p99** instead (21
 raise its threshold to make it pass** — that deletes the only signal anyone has about
 the thing 10b exists to fix.
 
-**Twelve of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+**Thirteen of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
 `petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`, `plagio.mjs`, `taper.mjs`,
-`tree.mjs`, `pathogen.mjs`, `infected.mjs`.** Only
-**two of the twelve are wired into CI** and therefore gate a merge — `smoke.mjs` and
-`views.mjs`. The other ten assert locally and *nothing runs them for you*, which is worth
+`tree.mjs`, `pathogen.mjs`, `infected.mjs`, `gltf.mjs`.** Only
+**two of the thirteen are wired into CI** and therefore gate a merge — `smoke.mjs` and
+`views.mjs`. The other eleven assert locally and *nothing runs them for you*, which is worth
 knowing before treating a green PR as evidence about the stem or the air. The rest print
 and never fail.
 

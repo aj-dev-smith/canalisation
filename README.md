@@ -76,6 +76,24 @@ Where a plant is standing is scene composition rather than chemistry, and it is
 listed here rather than under "what emerges" for that reason. It says where a seed
 landed, not what grows out of it.
 
+## The field, in three.js
+
+![a wild field of grown plants under a moon, in three.js](demo/preview.jpg)
+
+The grown plants also leave the building: an exporter takes any specimen out as a
+standard **GLB** (real metres, vein networks as geometry, the species palette in
+the file), and [`demo/`](demo/) is a wild field of 132 of them standing in an
+ordinary procedural three.js night — terrain, grass, rocks, a pond, a moon, all
+modelled and labelled as such. The plants are the part nobody drew, the air moving
+them is the engine's own wind field imported straight from `src/37_wind.js`, and a
+camera that behaves like a foraging bee films it. See
+[demo/README.md](demo/README.md) for how it is built, verified and deployed.
+
+```bash
+node demo/build_assets.mjs   # grow the stand (deterministic, ~10 min cold)
+node demo/serve.mjs          # http://localhost:8460
+```
+
 ## Four ways of looking at it
 
 The renderer is decoupled from the simulation, and a **view** decides which channels

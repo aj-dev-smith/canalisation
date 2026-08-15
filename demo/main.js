@@ -1,0 +1,1031 @@
+// THE STAND, IN SOMEONE ELSE'S RENDERER — grown specimens in the middle of
+// the standard procedural-landscape kit the three.js ecosystem trades in:
+// fbm terrain with ridged far hills, instanced grass, displaced-icosahedron
+// rocks, a pond, a starred sky. All of that is MODELLED ENVIRONMENT and the
+// HUD says so plainly. The plants are the part that was grown, and the line
+// between the two categories is this project's one rule, unchanged by
+// leaving the browser: environment may be authored, organisms may not.
+//
+// The look still comes out of the GLBs: every specimen carries its species
+// palette in scene extras, and the sky, fog, lights, terrain tint, rock tint
+// and water all read the hero's palette rather than colours anyone picked.
+//
+// The emissive channel: the exporter bakes each vertex's emissive weight into
+// COLOR_0's alpha. Three.js reads VEC4 COLOR_0 as colour + alpha, so one
+// onBeforeCompile line turns that alpha back into glow — the veins light up
+// the way they do at home.
+//
+// The conifer is deliberately absent. It has never read as well as the herbs
+// (its one dominant vein strand is correct Picea and the reticulate network
+// is the only channel this engine is visible through — the ROADMAP 13 needle
+// verdict, applying to the export too), so the stand is herbs at several
+// seeds and two life stages.
+
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+// THE SHIPPED AIR, not a copy of it. windField() bakes the mode table once,
+// windGLSL() emits the same numbers as shader source, windAt() sums them in
+// JS for the CPU-side drifters — one field, three readers, same file the
+// simulation runs. Everything it needs is pure math (00_math.js), so the
+// browser can import it exactly as Node does.
+import { windField, windAt, windGLSL, WORLD as WIND_WORLD } from './src/37_wind.js';
+
+// --- the field ---------------------------------------------------------------
+// A WILD FIELD, NOT AN ARRANGEMENT. Three things make a stand read as wild,
+// and all three are ecology rather than art: NUMBERS (~150 individuals, not a
+// dozen), AGE STRUCTURE (juveniles outnumber adults — the juvenile assets are
+// the same species grown fewer steps, which is honest size variation; nothing
+// is scaled), and CLUSTERED DISPERSAL (plants grow in drifts where seeds
+// fell, so each species gets patch centres and members scatter around them —
+// uniform-random placement is the diorama look wearing a different hat).
+// Where each drift sits is still staging, same honesty note as ever; what is
+// NOT staging is every plant in it.
+const ASSETS = {
+  fern5: { url: './export/demo_cathedral_fern_5.glb', kind: 'adult' },
+  fern21s: { url: './export/demo_cathedral_fern_21_sen.glb', kind: 'adult' },
+  fern3j: { url: './export/demo_cathedral_fern_3_juv.glb', kind: 'juv' },
+  creep7: { url: './export/demo_ember_creeper_7.glb', kind: 'adult' },
+  creep12: { url: './export/demo_ember_creeper_12.glb', kind: 'adult' },
+  creep21j: { url: './export/demo_ember_creeper_21_juv.glb', kind: 'juv' },
+  creep33j: { url: './export/demo_ember_creeper_33_juv.glb', kind: 'juv' },
+  para3: { url: './export/demo_nightglass_parasol_3.glb', kind: 'adult' },
+  para9: { url: './export/demo_nightglass_parasol_9.glb', kind: 'adult' },
+  para5j: { url: './export/demo_nightglass_parasol_5_juv.glb', kind: 'juv' },
+  para17j: { url: './export/demo_nightglass_parasol_17_juv.glb', kind: 'juv' },
+  coral5: { url: './export/demo_sun_coral_5.glb', kind: 'adult' },
+  coral2: { url: './export/demo_sun_coral_2.glb', kind: 'adult' },
+  coral9j: { url: './export/demo_sun_coral_9_juv.glb', kind: 'juv' },
+};
+// per species: which assets, how many drifts, drift population, patch tightness
+const GROUPS = [
+  { assets: ['fern5', 'fern21s', 'fern3j'], adultShare: 0.45, drifts: 3, per: [3, 6], sigma: 1.6 },
+  { assets: ['creep7', 'creep12', 'creep21j', 'creep33j'], adultShare: 0.3, drifts: 5, per: [6, 12], sigma: 2.1 },
+  { assets: ['para3', 'para9', 'para5j', 'para17j'], adultShare: 0.3, drifts: 5, per: [6, 13], sigma: 1.9 },
+  { assets: ['coral5', 'coral2', 'coral9j'], adultShare: 0.35, drifts: 5, per: [6, 12], sigma: 2.0 },
+];
+const HERO = { key: 'fern5', at: [0, 0.3] };
+
+// --- seeded noise, so the whole environment reproduces -----------------------
+function mulberry32(a) {
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const lat = (() => {
+  const r = mulberry32(2527);
+  const g = new Float32Array(256 * 256);
+  for (let i = 0; i < g.length; i++) g[i] = r();
+  return (ix, iz) => g[((iz & 255) << 8) | (ix & 255)];
+})();
+const sm = (t) => t * t * (3 - 2 * t);
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+function vnoise(x, z) {
+  const ix = Math.floor(x), iz = Math.floor(z), fx = sm(x - ix), fz = sm(z - iz);
+  const a = lat(ix, iz), b = lat(ix + 1, iz), c = lat(ix, iz + 1), d = lat(ix + 1, iz + 1);
+  return a + (b - a) * fx + (c - a) * fz + (a - b - c + d) * fx * fz;
+}
+function fbm(x, z) {
+  let v = 0, amp = 0.5, f = 1;
+  for (let o = 0; o < 5; o++) { v += amp * vnoise(x * f, z * f); amp *= 0.5; f *= 2.03; }
+  return v;
+}
+// ridged fbm — the far hills. |2n-1| folded and inverted is the standard trick
+function ridged(x, z) {
+  let v = 0, amp = 0.5, f = 1;
+  for (let o = 0; o < 4; o++) {
+    const n = 1 - Math.abs(2 * vnoise(x * f + 31.7, z * f + 11.3) - 1);
+    v += amp * n * n; amp *= 0.5; f *= 2.11;
+  }
+  return v;
+}
+
+// the pond: a carved basin, and the water level that fills it
+const POND = { x: 5.2, z: -5.0, r: 2.9, y: -0.16 };
+
+// height in metres. A gentle meadow in the middle, ridged hills far out, and
+// the basin carved last so the water has somewhere to sit.
+function ground(x, z) {
+  const r = Math.hypot(x, z);
+  let h = ((fbm(x * 0.09 + 7.3, z * 0.09 + 2.1) - 0.5) * 2.6
+    + (fbm(x * 0.55, z * 0.55) - 0.5) * 0.22)
+    * sm(clamp01((r - 1.5) / 6));
+  h += sm(clamp01((r - 20) / 22)) * ridged(x * 0.045, z * 0.045) * 7.5;
+  const dp = Math.hypot(x - POND.x, z - POND.z);
+  h -= 0.55 * Math.exp(-(dp * dp) / (2.0 * 2.0));
+  return h;
+}
+
+// --- release knobs -----------------------------------------------------------
+// All URL parameters, cinematic defaults: ?post=none kills the composer,
+// ?dpr=1 caps resolution, ?grass=16000 thins the meadow, ?plants=0.5 sows
+// half the field. The fps meter is always on — a demo that hides its own
+// frame rate is asking to be trusted instead of measured.
+const Q = new URLSearchParams(location.search);
+const POST = Q.get('post') ?? 'bloom';
+// which effect modules load: 'all' (default), 'none', or a csv ('dof,rays').
+// Every effect is a served module in demo/fx/ — absent files skip silently,
+// so the pipeline runs identically with zero, some, or all of them present.
+const FX = Q.get('fx') ?? 'all';
+const fxOn = (n) => FX === 'all' ? true : FX.split(',').includes(n);
+const DPR = +(Q.get('dpr') || Math.min(devicePixelRatio, 2));
+const GRASS_N = Math.max(0, +(Q.get('grass') || 64000) | 0);
+const DENSITY = Math.min(2, Math.max(0.1, +(Q.get('plants') || 1)));
+
+// --- renderer ----------------------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(DPR);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 320);
+
+const C = (a, mul = 1) => new THREE.Color().setRGB(a[0] * mul, a[1] * mul, a[2] * mul);
+
+// --- bloom: the native look, finally — and HAND-ROLLED, with a reason -------
+// The engine's browser renderer draws veins as additive LIGHT and grades the
+// frame; without a bloom pass the emissive channel this exporter ships is a
+// whisper. UnrealBloomPass renders BLACK in this container's headless GL on
+// every backend (default, angle, swiftshader — all bisected to 0.0000 mean
+// while a plain RenderPass+OutputPass composer drew fine, so it is the pass
+// and not the float targets). Owning ~60 lines beats shipping a dependency
+// that hands some viewers the documented black frame: threshold at quarter
+// res, one separable 9-tap gaussian, additive composite with a vignette.
+// ?post=none skips everything (the bisect switch that found this; kept).
+const dbs = new THREE.Vector2();
+renderer.getDrawingBufferSize(dbs);
+const rtScene = new THREE.WebGLRenderTarget(dbs.x, dbs.y, {
+  type: THREE.HalfFloatType,
+  depthTexture: new THREE.DepthTexture(dbs.x, dbs.y, THREE.UnsignedIntType),
+});
+const rtA = new THREE.WebGLRenderTarget(dbs.x >> 2, dbs.y >> 2, { type: THREE.HalfFloatType, depthBuffer: false });
+const rtB = new THREE.WebGLRenderTarget(dbs.x >> 2, dbs.y >> 2, { type: THREE.HalfFloatType, depthBuffer: false });
+
+const fsScene = new THREE.Scene();
+const fsCam = new THREE.Camera();
+const fsGeo = new THREE.BufferGeometry();   // one big triangle, no matrices
+fsGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 3, -1, -1, 3], 2));
+const fsMesh = new THREE.Mesh(fsGeo, null);
+fsMesh.frustumCulled = false;
+fsScene.add(fsMesh);
+const FSV = `varying vec2 vUv; void main(){ vUv = position.xy * 0.5 + 0.5;
+  gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+const thresholdMat = new THREE.ShaderMaterial({
+  uniforms: { tex: { value: null }, thr: { value: 0.55 }, knee: { value: 0.25 } },
+  vertexShader: FSV,
+  fragmentShader: `varying vec2 vUv; uniform sampler2D tex; uniform float thr, knee;
+    void main(){
+      // additive emissive lines can stack to Inf in a half-float target, and
+      // Inf through the ACES rational is NaN, which the blur then smears into
+      // black rectangles — watched. Clamp at the door.
+      vec3 c = min(max(texture2D(tex, vUv).rgb, 0.0), 64.0);
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      gl_FragColor = vec4(c * smoothstep(thr, thr + knee, l), 1.0); }`,
+});
+const blurMat = new THREE.ShaderMaterial({
+  uniforms: { tex: { value: null }, dir: { value: new THREE.Vector2() } },
+  vertexShader: FSV,
+  fragmentShader: `varying vec2 vUv; uniform sampler2D tex; uniform vec2 dir;
+    void main(){
+      vec3 c = texture2D(tex, vUv).rgb * 0.227;
+      c += (texture2D(tex, vUv + dir * 1.385).rgb + texture2D(tex, vUv - dir * 1.385).rgb) * 0.316;
+      c += (texture2D(tex, vUv + dir * 3.231).rgb + texture2D(tex, vUv - dir * 3.231).rgb) * 0.070;
+      gl_FragColor = vec4(c, 1.0); }`,
+});
+// THE COMPOSITE IS ASSEMBLED FROM SLOTS so effect modules can extend it
+// without nine agents editing one shader. Slots, in execution order, with
+// the variables they may read and write:
+//   uv     — vec2 uv, before base is sampled (distortion; CA via setSampler)
+//   light  — vec3 c in LINEAR HDR, after bloom (god rays add light here)
+//   grade  — vec3 c after ACES + vignette, before gamma (split-tone, grain)
+//   final  — gl_FragColor after gamma (dither lives here)
+// A module may also replace how the base is fetched with setSampler(fnName):
+// the named head function vec3 f(sampler2D, vec2) fetches instead of the
+// default — that is how chromatic aberration samples three times.
+const fxSlots = { head: [], uv: [], light: [], grade: [], final: [] };
+const fxUniforms = {};
+let fxSampler = null;
+let compMat = null;
+function buildComposite() {
+  compMat = new THREE.ShaderMaterial({
+    uniforms: Object.assign({
+      base: { value: null }, glowTex: { value: null }, strength: { value: 0.9 },
+    }, fxUniforms),
+    vertexShader: FSV,
+    fragmentShader: `varying vec2 vUv; uniform sampler2D base, glowTex; uniform float strength;
+    ${fxSlots.head.join('\n')}
+    vec3 fetchBaseDefault(sampler2D t, vec2 uv){ return texture2D(t, uv).rgb; }
+    void main(){
+      vec2 uv = vUv;
+      ${fxSlots.uv.join('\n')}
+      vec3 c = min(max(${fxSampler ?? 'fetchBaseDefault'}(base, uv), 0.0), 64.0)
+             + min(max(texture2D(glowTex, uv).rgb, 0.0), 64.0) * strength;
+      ${fxSlots.light.join('\n')}
+      // three only tone maps when rendering to SCREEN, so the target holds
+      // linear HDR — the grade happens here or it silently vanishes:
+      // ACES (Narkowicz fit), a gentle vignette, then the screen's sRGB
+      c *= 1.15;
+      c = (c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14);
+      float d = length(uv - 0.5);
+      c *= 1.0 - 0.34 * smoothstep(0.35, 0.78, d);
+      ${fxSlots.grade.join('\n')}
+      gl_FragColor = vec4(pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0);
+      ${fxSlots.final.join('\n')}
+    }`,
+  });
+}
+
+function fsPass(mat, target) {
+  fsMesh.material = mat;
+  renderer.setRenderTarget(target);
+  renderer.render(fsScene, fsCam);
+}
+// renderer.info resets per render() call, so after the bloom passes it holds
+// the composite quad — 1 call, 1 triangle — which a perf probe faithfully
+// reported as the whole scene. Snapshot the SCENE pass's numbers.
+const lastInfo = { calls: 0, triangles: 0 };
+// effect hooks, populated by demo/fx/ modules at install time
+const fxPrePasses = [];   // { priority, render(inputTex) -> outputTex } — dof, motion blur
+const fxPerFrame = [];    // fns(tSec, ds) run before every draw
+let fxTime = 0, fxLast = -1;
+function draw() {
+  const ds = fxLast < 0 ? 1 / 60 : Math.max(0, fxTime - fxLast);
+  fxLast = fxTime;
+  for (const f of fxPerFrame) f(fxTime, ds);
+  if (POST === 'none') {
+    renderer.setRenderTarget(null); renderer.render(scene, cam);
+    lastInfo.calls = renderer.info.render.calls; lastInfo.triangles = renderer.info.render.triangles;
+    return;
+  }
+  renderer.setRenderTarget(rtScene);
+  renderer.render(scene, cam);
+  lastInfo.calls = renderer.info.render.calls; lastInfo.triangles = renderer.info.render.triangles;
+  let baseTex = rtScene.texture;
+  for (const p of fxPrePasses) baseTex = p.render(baseTex);
+  thresholdMat.uniforms.tex.value = baseTex;
+  fsPass(thresholdMat, rtA);
+  for (let i = 0; i < 2; i++) {
+    blurMat.uniforms.tex.value = rtA.texture;
+    blurMat.uniforms.dir.value.set((1 + i) / rtA.width, 0);
+    fsPass(blurMat, rtB);
+    blurMat.uniforms.tex.value = rtB.texture;
+    blurMat.uniforms.dir.value.set(0, (1 + i) / rtA.height);
+    fsPass(blurMat, rtA);
+  }
+  compMat.uniforms.base.value = baseTex;
+  compMat.uniforms.glowTex.value = rtA.texture;
+  fsPass(compMat, null);
+}
+
+// the moon's place in the sky is shared by the dome, the key light and the
+// water's streak — one direction, three readers, or the picture disagrees
+// with itself about where its own light comes from
+const MOON = new THREE.Vector3(-0.55, 0.28, 0.72).normalize();
+
+// --- the wind ----------------------------------------------------------------
+// The field is the engine's own: log-law profile, Kolmogorov octave ladder,
+// Taylor advection, divergence-free, at the shipped force-2 weather. What is
+// approximated here is the RESPONSE — a plant leans along the field with a
+// first-mode cantilever weight (y/H)^1.5, quasi-statically, because the bend
+// solver (39a_stem.js) is a simulation and this page is a scene. The field's
+// slowest octaves are 0.13-0.5 Hz, well under any stem's own mode, so the
+// quasi-static read is honest for what dominates; what it forgoes is ringing.
+// t is PLANT TIME (125 units per second), exactly as the module warns.
+const WF = windField({ seed: 2527 });
+const WIND_SRC = windGLSL(WF, 'canWind');
+const M2UNIT = (1 / WIND_WORLD.unitM).toFixed(4);            // metres -> world units
+const VEL2MS = (WIND_WORLD.unitM * WIND_WORLD.ptPerSec).toFixed(4); // field -> m/s
+const PT_PER_SEC = WIND_WORLD.ptPerSec;
+const windShaders = [];
+let windT = 300 * PT_PER_SEC;   // where stills sample the gust ladder; drifts live
+
+// --- load the stand ----------------------------------------------------------
+const loader = new GLTFLoader();
+const keys = Object.keys(ASSETS);
+const loadedList = await Promise.all(keys.map((k) => loader.loadAsync(ASSETS[k].url)));
+const scenes = {};
+keys.forEach((k, i) => { scenes[k] = loadedList[i].scene; });
+const pal = scenes[HERO.key].userData?.palette
+  ?? loadedList[0].scene.userData?.palette ?? null;
+const P = {
+  bgTop: pal?.bgTop ?? [0.012, 0.02, 0.028], bgBot: pal?.bgBot ?? [0.004, 0.007, 0.01],
+  bgGlow: pal?.bgGlow ?? [0.02, 0.03, 0.03], fog: pal?.fog ?? [0.01, 0.016, 0.02],
+  key: pal?.keyCol ?? [1.0, 0.92, 0.8], ambTop: pal?.ambTop ?? [0.25, 0.3, 0.33],
+  ambBot: pal?.ambBot ?? [0.1, 0.09, 0.08], stem: pal?.stem0 ?? [0.1, 0.12, 0.1],
+  blade: pal?.blade1 ?? [0.1, 0.2, 0.15],
+};
+
+// --- sky: the species' backdrop as a dome, with a modelled star field --------
+let skyMat = null, pondMat = null, grassMesh = null, terrainMesh = null;
+{
+  const geo = new THREE.SphereGeometry(280, 24, 16);
+  const mat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: {
+      // the dome's floor is the FOG colour: the far terrain resolves to fog,
+      // and if the sky resolves to anything else the horizon is a stripe
+      top: { value: C(P.bgTop) }, bot: { value: C(P.fog) }, glow: { value: C(P.bgGlow) },
+      moonDir: { value: MOON }, moonCol: { value: C(P.bgGlow, 6).lerp(new THREE.Color(0.9, 0.95, 1.0), 0.55) },
+    },
+    vertexShader: `varying vec3 vp; void main(){ vp = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `varying vec3 vp; uniform vec3 top, bot, glow, moonDir, moonCol;
+      float hash(vec3 c){ return fract(sin(dot(c, vec3(12.9898, 78.233, 45.164))) * 43758.5453); }
+      void main(){
+        vec3 d = normalize(vp);
+        float t = clamp(d.y * 0.5 + 0.5, 0.0, 1.0);
+        // hold the fog colour through the horizon and only then climb
+        vec3 c = mix(bot, top, smoothstep(0.52, 0.95, t));
+        // the glow band sits a few degrees ABOVE the horizon, never on it
+        c += glow * exp(-abs(d.y) * 6.0) * smoothstep(0.004, 0.05, d.y);
+        // the moon: a disc, a limb, and a wide halo the fog would give it
+        float md = dot(d, moonDir);
+        c += moonCol * smoothstep(0.9989, 0.99955, md);            // disc, ~2.7 deg
+        c += moonCol * 0.35 * pow(max(md, 0.0), 220.0);            // halo
+        c += moonCol * 0.06 * pow(max(md, 0.0), 24.0);             // sky wash
+        // stars: hashed cells with a round falloff INSIDE the cell — lighting
+        // the whole cell draws squares, a cell at this resolution being ~0.26
+        // degrees, which is several pixels. Watched, not guessed.
+        vec3 cell = floor(d * 220.0);
+        float s = step(0.9985, hash(cell)) * (0.35 + 0.65 * hash(cell + 7.0));
+        float core = smoothstep(0.22, 0.03, length(fract(d * 220.0) - 0.5));
+        c += vec3(0.85, 0.92, 1.0) * s * core * 0.8 * smoothstep(0.06, 0.35, d.y);
+        gl_FragColor = vec4(c, 1.0); }`,
+  });
+  skyMat = mat;
+  scene.add(new THREE.Mesh(geo, mat));
+}
+scene.fog = new THREE.FogExp2(C(P.fog), 0.044);
+
+// --- terrain -----------------------------------------------------------------
+const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
+{
+  const N = 260, SIZE = 130;
+  const geo = new THREE.PlaneGeometry(SIZE, SIZE, N, N);
+  geo.rotateX(-Math.PI / 2);
+  const p = geo.attributes.position;
+  const col = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), z = p.getZ(i), y = ground(x, z);
+    p.setY(i, y);
+    const s = Math.min(1, Math.hypot(ground(x + 0.4, z) - y, ground(x, z + 0.4) - y) * 3.2);
+    const m = (fbm(x * 0.7 + 40, z * 0.7 + 9) - 0.3) * 1.6;
+    const c = soil.clone().lerp(moss, clamp01(m) * (1 - s)).lerp(rockC, s * 0.55);
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  terrainMesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 1, metalness: 0,
+  }));
+  scene.add(terrainMesh);
+}
+
+// --- water: a fresnel disc in the basin --------------------------------------
+{
+  const geo = new THREE.CircleGeometry(POND.r, 48);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, fog: false,
+    // the reflected colour is the FOG's, not the zenith's: at the grazing
+    // angles a ground camera sees, water mirrors the horizon, and in this
+    // world the horizon is the fog — the zenith is near-black, and mixing
+    // toward it left the pond reading as a hole a second time
+    uniforms: {
+      deep: { value: C(P.bgBot, 1.6) }, skyc: { value: C(P.fog, 2.4) }, glow: { value: C(P.bgGlow, 1.2) },
+      moonDir: { value: MOON }, moonCol: { value: C(P.bgGlow, 6).lerp(new THREE.Color(0.9, 0.95, 1.0), 0.55) },
+    },
+    vertexShader: `varying vec3 vw; varying vec3 vn;
+      void main(){ vec4 w = modelMatrix * vec4(position,1.0); vw = w.xyz; vn = vec3(0.,1.,0.);
+      gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `varying vec3 vw; varying vec3 vn; uniform vec3 deep, skyc, glow, moonDir, moonCol;
+      void main(){
+        vec3 V = normalize(cameraPosition - vw);
+        // a floor under the fresnel: real water reflects ~2% at normal
+        // incidence but a pond with nothing to refract renders as a hole —
+        // the sky share needs to start above zero to read as a surface
+        float fr = 0.18 + 0.82 * pow(1.0 - max(dot(V, vn), 0.0), 2.5);
+        vec3 c = mix(deep, skyc, fr) + glow * fr * 0.5;
+        // the moon's streak — same direction the dome draws the disc in
+        vec3 R = reflect(-V, vn);
+        c += moonCol * pow(max(dot(R, moonDir), 0.0), 180.0) * 1.6;
+        gl_FragColor = vec4(c, 0.92); }`,
+  });
+  const m = new THREE.Mesh(geo, mat);
+  pondMat = mat;
+  m.position.set(POND.x, POND.y, POND.z);
+  scene.add(m);
+}
+
+// --- rocks: displaced icosahedra ---------------------------------------------
+{
+  const rnd = mulberry32(4111);
+  for (let i = 0; i < 12; i++) {
+    const rad = 0.12 + rnd() * rnd() * 0.7;
+    const geo = new THREE.IcosahedronGeometry(rad, 2);
+    const p = geo.attributes.position, off = rnd() * 90;
+    for (let v = 0; v < p.count; v++) {
+      const nx = p.getX(v) / rad, ny = p.getY(v) / rad, nz = p.getZ(v) / rad;
+      const d = 1 + (fbm(nx * 1.6 + off, nz * 1.6 + ny) - 0.5) * 0.7;
+      p.setXYZ(v, p.getX(v) * d, p.getY(v) * d * 0.85, p.getZ(v) * d);
+    }
+    geo.computeVertexNormals();
+    const a = rnd() * Math.PI * 2, r = 2.2 + rnd() * 12;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (Math.hypot(x - POND.x, z - POND.z) < POND.r + 0.4) continue;  // not in the pond
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      color: rockC.clone().lerp(soil, rnd() * 0.5), roughness: 1,
+    }));
+    m.position.set(x, ground(x, z) - rad * 0.12, z);
+    m.rotation.y = rnd() * Math.PI * 2;
+    scene.add(m);
+  }
+}
+
+// --- grass: one blade, instanced ---------------------------------------------
+// The ecosystem's signature move (see any of the recent procedural-terrain
+// repos). One bent blade, ~40k instances, per-instance colour off the same
+// moss the terrain wears — so the meadow and the ground read as one material.
+{
+  const H = 0.085, W = 0.011;
+  const blade = new THREE.BufferGeometry();
+  // four triangles up a slight curve; normals lean so both faces light
+  const pts = [], idx = [];
+  const SEGS = 4;
+  for (let s = 0; s <= SEGS; s++) {
+    const t = s / SEGS, y = t * H, lean = t * t * 0.35 * H, w = W * (1 - t * 0.85);
+    pts.push(-w / 2, y, lean, w / 2, y, lean);
+  }
+  for (let s = 0; s < SEGS; s++) {
+    const b = s * 2;
+    idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+  }
+  blade.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  blade.setIndex(idx);
+  blade.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ roughness: 1, side: THREE.DoubleSide });
+  // grass rides the same field at a floppier gain — no emissive, so boost 0
+  // and the #ifdef compiles the glow line out
+  patchMaterial(mat, 0, 0.1, 0.05);
+  const COUNT = GRASS_N;
+  const mesh = new THREE.InstancedMesh(blade, mat, COUNT);
+  const rnd = mulberry32(909);
+  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler(),
+    S = new THREE.Vector3(), T = new THREE.Vector3(), col = new THREE.Color();
+  let placed = 0;
+  while (placed < COUNT) {
+    const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * 21;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r, y = ground(x, z);
+    if (y < POND.y + 0.06) continue;                    // not in the water
+    T.set(x, y - 0.004, z);
+    E.set((rnd() - 0.5) * 0.5, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.5);
+    S.setScalar(0.7 + rnd() * 0.9);
+    M.compose(T, Q.setFromEuler(E), S);
+    mesh.setMatrixAt(placed, M);
+    col.copy(moss).lerp(soil, rnd() * 0.55).multiplyScalar(1.0 + rnd() * 0.6);
+    mesh.setColorAt(placed, col);
+    placed++;
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  grassMesh = mesh;
+  scene.add(mesh);
+}
+
+// --- lights: the palette's key and ambient, not a studio ---------------------
+// more sky fill than a studio would use: the key sits at a moon's low
+// elevation, and at that angle a doubleSided canopy shows black facets
+// wherever a blade turns away — watched as speckle across every drift
+scene.add(new THREE.HemisphereLight(C(P.ambTop, 1.15), C(P.ambBot, 0.9), 1.15));
+// the key IS the moon — same direction the dome draws the disc in,
+// its colour pulled toward the moon's, so shadows and sky agree
+const key = new THREE.DirectionalLight(C(P.key).lerp(new THREE.Color(0.8, 0.88, 1.0), 0.45), 1.5);
+key.position.copy(MOON).multiplyScalar(60);
+scene.add(key);
+const rim = new THREE.DirectionalLight(C(P.bgGlow, 3.0), 0.5);
+rim.position.set(10, 4, -14);
+scene.add(rim);
+
+// --- ground mist: billboard fog cards ----------------------------------------
+// Sprites so they face every framing. A radial-gradient canvas texture, huge,
+// near-transparent, hovering at chest height — the cheap trick every
+// atmospheric three.js scene uses, and it earns its place.
+{
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(128, 128, 10, 128, 128, 128);
+  g.addColorStop(0, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0.6, 'rgba(255,255,255,0.18)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(cv);
+  const rnd = mulberry32(5150);
+  window.__mists = [];
+  for (let i = 0; i < 11; i++) {
+    const m = new THREE.SpriteMaterial({
+      map: tex, color: C(P.fog, 2.0), transparent: true,
+      opacity: 0.05 + rnd() * 0.06, depthWrite: false,
+    });
+    const s = new THREE.Sprite(m);
+    const a = rnd() * Math.PI * 2, r = 4 + rnd() * 14;
+    s.position.set(Math.cos(a) * r, 0.5 + rnd() * 0.9, Math.sin(a) * r);
+    s.scale.set(14 + rnd() * 14, 2.2 + rnd() * 2.2, 1);
+    scene.add(s);
+    window.__mists.push(s);
+  }
+}
+
+// --- spore motes: the air over a field like this would not be empty ----------
+// Faint additive points; the bloom pass is what turns them into fireflies.
+{
+  const rnd = mulberry32(6060);
+  const N = 260;
+  const pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const a = rnd() * Math.PI * 2, r = 1.5 + Math.sqrt(rnd()) * 16;
+    pos[i * 3] = Math.cos(a) * r;
+    pos[i * 3 + 1] = 0.3 + rnd() * rnd() * 2.4;
+    pos[i * 3 + 2] = Math.sin(a) * r;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const m = new THREE.PointsMaterial({
+    color: C(P.bgGlow, 14), size: 0.035, sizeAttenuation: true,
+    blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
+  });
+  scene.add(new THREE.Points(g, m));
+  window.__motes = g.attributes.position;
+}
+
+// --- the material patch: alpha back into glow, and the air into the vertex ---
+// One onBeforeCompile doing both. heightM is the plant's own grown height (off
+// the bbox its exporter wrote), so the bend weight tops out at the actual tip;
+// amp is metres of lean per m/s of wind — the one aesthetic number in the wind
+// path, sized so a gust at the shipped weather leans a herb a few centimetres,
+// which is the band the native piece measures (1.9 deg on the floppiest).
+function patchMaterial(m, boost, heightM, amp) {
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uEmisBoost = { value: boost };
+    sh.uniforms.uWindT = { value: windT };
+    sh.uniforms.uWindAmp = { value: amp };
+    sh.uniforms.uInvH = { value: 1 / Math.max(heightM, 0.01) };
+    windShaders.push(sh);
+    sh.vertexShader = sh.vertexShader
+      .replace('void main() {',
+        `${WIND_SRC}\nuniform float uWindT, uWindAmp, uInvH;\nvoid main() {`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+      {
+        #ifdef USE_INSTANCING
+          vec3 wpw = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+        #else
+          vec3 wpw = (modelMatrix * vec4(transformed, 1.0)).xyz;
+        #endif
+        // evaluate at the VERTEX, not the base: the ladder's big octaves are
+        // far larger than a plant so it still moves as one thing, and the
+        // small ones put per-leaf texture on top for free
+        vec3 uw = canWind(wpw * ${M2UNIT}, uWindT) * ${VEL2MS};
+        float bendw = pow(clamp(transformed.y * uInvH, 0.0, 1.0), 1.5);
+        transformed += vec3(uw.x, uw.y * 0.3, uw.z) * (uWindAmp * bendw);
+      }`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('void main() {', 'uniform float uEmisBoost;\nvoid main() {')
+      .replace('#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        #ifdef USE_COLOR_ALPHA
+          totalEmissiveRadiance += vColor.rgb * vColor.a * uEmisBoost;
+        #endif`);
+  };
+  m.needsUpdate = true;
+}
+
+let tris = 0, meshes = 0, lines = 0;
+const ASSET_H = {};   // grown height per asset, off the bbox its exporter wrote
+for (const k of keys) {
+  const bb = scenes[k].userData?.bbox;
+  const hM = bb ? (bb.max[1] - bb.min[1]) * (scenes[k].userData.unitM ?? WIND_WORLD.unitM) : 1.2;
+  ASSET_H[k] = hM;
+  scenes[k].traverse((o) => {
+    if (o.isMesh) {
+      patchMaterial(o.material, 2.2, hM, 0.02);
+      o.material.transparent = false;   // alpha is emissive weight, not opacity
+      meshes++;
+      const g = o.geometry;
+      tris += g.index ? g.index.count / 3 : g.attributes.position.count / 3;
+    } else if (o.isLine || o.isLineSegments) {
+      // additive glowing lines, depth-read no-write — and OPACITY IS
+      // LOAD-BEARING at line counts like a conifer's (watched blowing out
+      // solid white); the herbs' far-LODs ride the same setting
+      o.material.blending = THREE.AdditiveBlending;
+      o.material.transparent = true;
+      o.material.opacity = 0.16;
+      o.material.depthWrite = false;
+      lines++;
+    } else if (o.isPoints) {
+      o.material.size = 0.01;
+      o.material.blending = THREE.AdditiveBlending;
+      o.material.transparent = true;
+      o.material.depthWrite = false;
+    }
+  });
+}
+
+// --- sow the field -----------------------------------------------------------
+// Clustered dispersal with collision: each species gets drift centres, members
+// scatter around them with a gaussian, adults keep more ground than juveniles.
+// Clones share geometry and materials with their asset; only the transform is
+// per-plant. Everything is seeded, so the field reproduces.
+const fieldRnd = mulberry32(7301);
+const claimed = [];
+const sown = [];    // what stands where, WITH its height — the flight needs both
+const inPond = (x, z, m = 0.5) => Math.hypot(x - POND.x, z - POND.z) < POND.r + m;
+// nothing sows inside a camera — a drift once landed exactly on the pond
+// framing and the capture was the inside of a Sun Coral canopy
+const CAMS = [[13.8, 10.8], [4.6, 0.6], [-5.4, -3.6], [8.9, -8.8], [12.6, -13.2]];
+function claim(x, z, need) {
+  if (Math.hypot(x, z) > 18 || inPond(x, z)) return false;
+  for (const c of CAMS) if (Math.hypot(c[0] - x, c[1] - z) < 1.6) return false;
+  for (const p of claimed) {
+    if (Math.hypot(p.x - x, p.z - z) < Math.max(need, p.r)) return false;
+  }
+  claimed.push({ x, z, r: need });
+  return true;
+}
+function plant(key, x, z) {
+  const inst = scenes[key].clone();
+  inst.position.set(x, ground(x, z), z);
+  const yaw = fieldRnd() * Math.PI * 2;
+  inst.rotation.y = yaw;
+  scene.add(inst);
+  // the sown entry records where the CANOPY is, not where the root went in:
+  // these plants arch, so a specimen's visual mass sits off its origin, and
+  // after the random yaw it sits somewhere different per clone — the flight
+  // orbited one coral clone perfectly and missed its twin until this
+  const bb = scenes[key].userData?.bbox, um = scenes[key].userData?.unitM ?? WIND_WORLD.unitM;
+  let cx = 0, cz = 0;
+  if (bb) {
+    const ox = (bb.min[0] + bb.max[0]) / 2 * um, oz = (bb.min[2] + bb.max[2]) / 2 * um;
+    cx = ox * Math.cos(yaw) + oz * Math.sin(yaw);
+    cz = -ox * Math.sin(yaw) + oz * Math.cos(yaw);
+  }
+  sown.push({ key, x: x + cx, z: z + cz, h: ASSET_H[key] ?? 1.2, kind: ASSETS[key].kind });
+}
+
+claim(HERO.at[0], HERO.at[1], 1.2);
+plant(HERO.key, HERO.at[0], HERO.at[1]);
+let planted = 1;
+
+for (const g of GROUPS) {
+  const adults = g.assets.filter((k) => ASSETS[k].kind === 'adult');
+  const juvs = g.assets.filter((k) => ASSETS[k].kind === 'juv');
+  for (let d = 0; d < g.drifts; d++) {
+    const a = fieldRnd() * Math.PI * 2, rr = 2.2 + Math.sqrt(fieldRnd()) * 12.5;
+    const cx = Math.cos(a) * rr, cz = Math.sin(a) * rr;
+    const n = Math.max(1, Math.round((g.per[0] + Math.floor(fieldRnd() * (g.per[1] - g.per[0] + 1))) * DENSITY));
+    for (let i = 0; i < n; i++) {
+      const u = Math.max(fieldRnd(), 1e-6), v = fieldRnd();
+      const rad = g.sigma * Math.sqrt(-2 * Math.log(u)) * 0.7, th = v * Math.PI * 2;
+      const x = cx + Math.cos(th) * rad, z = cz + Math.sin(th) * rad;
+      const adult = fieldRnd() < g.adultShare;
+      const pool = adult && adults.length ? adults : (juvs.length ? juvs : adults);
+      const key = pool[(fieldRnd() * pool.length) | 0];
+      if (claim(x, z, adult ? 0.85 : 0.38)) { plant(key, x, z); planted++; }
+    }
+  }
+}
+// loners — the stragglers between drifts that keep the patches from reading
+// as islands
+for (let i = 0; i < Math.round(45 * DENSITY); i++) {
+  const a = fieldRnd() * Math.PI * 2, rr = 2 + Math.sqrt(fieldRnd()) * 16;
+  const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+  const key = keys[(fieldRnd() * keys.length) | 0];
+  if (claim(x, z, ASSETS[key].kind === 'adult' ? 0.85 : 0.38)) { plant(key, x, z); planted++; }
+}
+console.log(`sowed ${planted} plants`);
+
+// --- the flight: a forager, not a tour -------------------------------------
+// BE THE BEE. A forager works STATIONS: she darts toward a flower in a fast,
+// mostly straight line — facing where she is going, which is what kills the
+// lateral slide a viewer called "sporadic" — brakes into a hover, spends a
+// couple of seconds with her attention ON the flower, then leaves for the
+// next one. The goal is legible because the gaze IS the goal: in transit the
+// camera looks at the next station, on station it looks at the plant. Every
+// dart eases from zero velocity to zero velocity, so the position track is
+// smooth at every join by construction; the gaze is a follower with a hard
+// turn-rate cap, so the view cannot whip no matter what the targets do. The
+// itinerary: three flowers, the hero, a drink at the pond (bees do), and the
+// climb-out with the farewell look the earlier films settled on.
+const FLIGHT_S = 20;
+const BEE = (() => {
+  // a station is a real plant TALL ENOUGH TO FRAME — the first itinerary
+  // aimed at hardcoded heights, and a parasol is 0.78 m tall, so the bee
+  // hovered above the canopy staring over the plant at empty field (the
+  // gaze-error probe read 0.0 during every visit; the target was just wrong)
+  const adultNear = (x, z) => {
+    let best = null, bd = 1e9;
+    for (const p of sown) {
+      if (p.kind !== 'adult' || p.h < 1.1) continue;
+      if (Math.hypot(p.x - HERO.at[0], p.z - HERO.at[1]) < 1.2) continue;  // not the hero
+      const d = Math.hypot(p.x - x, p.z - z);
+      if (d < bd) { bd = d; best = p; }
+    }
+    return best ?? { x, z, h: 1.4 };
+  };
+  const crownOf = (c) => new THREE.Vector3(
+    c.x, ground(c.x, c.z) + Math.min(1.6, Math.max(0.7, c.h * 0.6)), c.z);
+  const hoverR = (c) => Math.min(1.4, Math.max(0.75, c.h * 0.55));
+  // THE ROUTE IS ONE SWEEP, and that is the fix for "the bee has no goal": the
+  // first itinerary zig-zagged NW-S-NE-SE, demanding ~180-degree head-turns
+  // per leg that no deliberate turn rate can deliver — the flower was still
+  // off-frame halfway through each visit. A forager works a patch in a
+  // progressive line, next target roughly AHEAD; every turn below is under
+  // ~90 degrees and the gaze arrives before the bee does.
+  const A = adultNear(-3.5, 3), B = adultNear(-1.8, -0.8);
+  const plantA = crownOf(A), plantB = crownOf(B);
+  const heroP = crownOf(sown[0]);   // the hero's own sown entry — canopy, not root
+  const pondP = new THREE.Vector3(POND.x, POND.y, POND.z);
+  const moonFar = new THREE.Vector3(MOON.x * 40, MOON.y * 40 - 4, MOON.z * 40);
+
+  const segs = [];
+  // a visit hovers beside the plant on a slow arc, with a centimetre bob —
+  // attention on the flower, body never quite still
+  const visit = (t0, t1, plant, r, a0, a1) => {
+    const pos = (t) => {
+      const q = (t - t0) / (t1 - t0), a = a0 + (a1 - a0) * sm(q);
+      return new THREE.Vector3(
+        plant.x + Math.cos(a) * r,
+        plant.y + 0.05 + Math.sin(q * 8.5) * 0.03,
+        plant.z + Math.sin(a) * r);
+    };
+    segs.push({ t0, t1, pos, gaze: () => plant });
+    return pos;
+  };
+  // a dart eases zero-to-zero between two rests, with a small vertical bound;
+  // the gaze rides ahead to wherever the bee is going next
+  const dart = (t0, t1, from, to, gazeTo, hump = 0.22) => {
+    segs.push({
+      t0, t1,
+      pos: (t) => {
+        const q = sm((t - t0) / (t1 - t0));
+        const p = new THREE.Vector3().lerpVectors(from, to, q);
+        p.y += Math.sin(Math.PI * q) * hump;
+        return p;
+      },
+      gaze: () => gazeTo,
+    });
+  };
+
+  const entry = new THREE.Vector3(-13, ground(-13, 7.5) + 2.0, 7.5);
+  const posA = visit(2.8, 4.8, plantA, hoverR(A), 2.7, 3.3);
+  dart(0, 2.8, entry, posA(2.8), plantA, 0.35);
+  const posB = visit(6.6, 8.6, plantB, hoverR(B), 3.6, 4.2);
+  dart(4.8, 6.6, posA(4.8), posB(6.6), plantB);
+  const posH = visit(10.4, 13.2, heroP, 1.6, 0.9, 2.2);
+  dart(8.6, 10.4, posB(8.6), posH(10.4), heroP);
+  // the drink: cross the water ALONG the moon's azimuth, gazing at the
+  // streak on the surface ahead — never straight down, which framed the
+  // pond as a flat void filling two thirds of the picture (watched)
+  const mAz = new THREE.Vector3(MOON.x, 0, MOON.z).normalize();
+  const sipAt = (t) => {
+    const q = (t - 15.0);
+    return new THREE.Vector3(
+      POND.x + mAz.x * (-1.7 + q * 0.8),
+      POND.y + 0.42 + Math.sin(t * 7.7) * 0.02,
+      POND.z + mAz.z * (-1.7 + q * 0.8));
+  };
+  const streak = new THREE.Vector3(POND.x + mAz.x * 3.2, POND.y, POND.z + mAz.z * 3.2);
+  segs.push({ t0: 15.0, t1: 16.8, pos: sipAt,
+    gaze: (t) => new THREE.Vector3().lerpVectors(streak, moonFar, sm((t - 15.0) / 1.8) * 0.6) });
+  dart(13.2, 15.0, posH(13.2), sipAt(15.0), streak);
+  const exit = new THREE.Vector3(9.5, ground(9.5, -9.8) + 2.2, -9.8);
+  dart(16.8, 20.0, sipAt(16.8), exit, moonFar, 0.8);
+  segs.sort((a, b) => a.t0 - b.t0);
+  // THE PRE-TURN, and it is real bee behaviour: a forager fixes her heading
+  // on the next flower BEFORE she leaves this one. Mechanically it is what
+  // lets the rate-capped gaze arrive with the station framed instead of
+  // catching up through half the visit — the turn between stations can be
+  // ~150 degrees, and 50 deg/s inside a 1.8s dart cannot do that alone.
+  for (let i = 0; i < segs.length - 1; i++) {
+    const s0 = segs[i], s1 = segs[i + 1], g0 = s0.gaze, pre = 1.1;
+    s0.gaze = (t) => {
+      const w = sm(clamp01((t - (s0.t1 - pre)) / pre));
+      return w > 0
+        ? new THREE.Vector3().lerpVectors(g0(t), s1.gaze(s1.t0), w)
+        : g0(t);
+    };
+  }
+  return segs;
+})();
+
+// the orientation follower: rotate the WHOLE camera orientation toward the
+// desired one at most CAP per second, via Quaternion.rotateTowards. The
+// first version capped the forward VECTOR instead, and the probe caught it
+// exceeding its own cap by half again — with the camera pitched steeply
+// down at the water, lookAt's world-up constraint twists the orientation
+// faster than the forward turns (gimbal amplification). Cap the quantity
+// the probe measures, not a proxy for it; the roll is folded into the
+// target so the one cap bounds everything the viewer can feel.
+const GAZE_CAP = 55 * Math.PI / 180;   // rad/s — deliberate head-turns
+const _gw = new THREE.Vector3(), _fp = new THREE.Vector3(), _lk = new THREE.Vector3();
+const _m4 = new THREE.Matrix4(), _tq = new THREE.Quaternion(), _rq = new THREE.Quaternion();
+const _fwd = new THREE.Vector3(), _upY = new THREE.Vector3(0, 1, 0), _zA = new THREE.Vector3(0, 0, 1);
+let camInit = false, rollEMA = 0, lastS = -1;
+const CAM_MODE = Q.get('cam') ?? 'drift';
+function flightCam(s) {
+  const t = Math.min(Math.max(s, 0), FLIGHT_S - 1e-4);
+  if (lastS < 0 || t < lastS) { camInit = false; rollEMA = 0; }
+  const ds = lastS < 0 || t < lastS ? 1 / 60 : Math.min(t - lastS, 0.1);
+  lastS = t;
+  let seg = BEE[0];
+  for (const g of BEE) if (t >= g.t0) seg = g;
+  _fp.copy(seg.pos(t));
+  // flutter, small — the visits carry their own bob
+  _fp.y += Math.sin(s * 3.1) * 0.012;
+  _gw.copy(seg.gaze(t)).sub(_fp);
+  window.__focusDist = _gw.length();   // the bee focuses on what she attends to
+  _gw.normalize();
+  // a hint of bank off how far the head still has to turn, followed not snapped
+  cam.getWorldDirection(_fwd);
+  const yawRate = (_fwd.x * _gw.z - _fwd.z * _gw.x);
+  rollEMA += (Math.max(-0.05, Math.min(0.05, yawRate * 2)) - rollEMA) * 0.06;
+  _m4.lookAt(_fp, _lk.copy(_fp).add(_gw), _upY);
+  _tq.setFromRotationMatrix(_m4);
+  _tq.multiply(_rq.setFromAxisAngle(_zA, rollEMA));
+  cam.position.copy(_fp);
+  if (!camInit) { cam.quaternion.copy(_tq); camInit = true; }
+  else cam.quaternion.rotateTowards(_tq, GAZE_CAP * ds);
+  window.__gazeErr = cam.getWorldDirection(_fwd).angleTo(_gw) * 180 / Math.PI;
+}
+window.__camQ = () => cam.quaternion.toArray();   // for the jerk probe
+
+// --- the effects: served modules, loaded tolerant ----------------------------
+// Each entry is demo/fx/<name>.js exporting default async (ctx) => {}. An
+// absent file skips silently — the pipeline is identical with zero, some, or
+// all present — so effects can be developed and shipped independently.
+// ?fx=none disables all, ?fx=dof,rays loads a subset. Order is load order:
+// scene-side installs first, pre-passes in priority order, grade last.
+const FX_REGISTRY = ['shadows', 'water', 'dof', 'mblur', 'rays', 'grade'];
+const fxCtx = {
+  THREE, scene, cam, renderer, Q, dbs, DPR,
+  rtScene,                                   // color + depthTexture
+  pal: P, C, moonDir: MOON,
+  skyMat: () => skyMat, pondMat: () => pondMat,
+  grassMesh: () => grassMesh, terrainMesh: () => terrainMesh,
+  keyLight: key, rimLight: rim,
+  ground, POND, sm, clamp01, mulberry32,
+  wind: { field: WF, at: windAt, glsl: WIND_SRC, ptPerSec: PT_PER_SEC, toMs: 7.8125, toUnits: 16 },
+  focusDist: () => window.__focusDist ?? 6,  // what the bee attends to
+  addHead: (g) => fxSlots.head.push(g),
+  addSlot: (slot, g) => fxSlots[slot].push(g),
+  setSampler: (name) => { fxSampler = name; },
+  addUniform: (n, v) => { fxUniforms[n] = { value: v }; return fxUniforms[n]; },
+  addPrePass: (p) => { fxPrePasses.push(p); fxPrePasses.sort((x, y) => (x.priority ?? 0) - (y.priority ?? 0)); },
+  onFrame: (f) => fxPerFrame.push(f),
+  fsPass, FSV,
+};
+const fxLoaded = [];
+for (const name of FX_REGISTRY) {
+  if (FX === 'none' || !fxOn(name)) continue;
+  try {
+    const m = await import(`./fx/${name}.js`);
+    await m.default?.(fxCtx);
+    fxLoaded.push(name);
+  } catch (e) {
+    const msg = String(e?.message ?? e);
+    if (!/Failed to fetch dynamically imported module|error loading dynamically imported/i.test(msg)) {
+      console.warn(`fx/${name} failed:`, e);
+    }
+  }
+}
+buildComposite();
+console.log('fx loaded:', fxLoaded.join(', ') || '(none)');
+window.__fx = () => fxLoaded.slice();
+window.__gd = () => cam.getWorldDirection(new THREE.Vector3()).toArray();
+window.__whereami = () => ({
+  cam: [cam.position.x, cam.position.y, cam.position.z],
+  near: sown
+    .map((p) => ({ ...p, d: Math.hypot(p.x - cam.position.x, p.z - cam.position.z) }))
+    .sort((a2, b2) => a2.d - b2.d).slice(0, 3)
+    .map((p) => `${p.key}(h${p.h.toFixed(2)}) d${p.d.toFixed(2)} at ${p.x.toFixed(1)},${p.z.toFixed(1)}`),
+});
+// --- framings ----------------------------------------------------------------
+const FRAMES = {
+  // wide faces the moon — an overview with the light source in frame; field
+  // is the old moonless overview kept for the drift-density view
+  wide: { eye: [12.6, 3.6, -13.2], look: [-1.2, 2.3, 1.8], fov: 42 },
+  field: { eye: [13.8, 3.4, 10.8], look: [0, 0.9, 0], fov: 40 },
+  hero: { eye: [4.6, 1.35, 0.6], look: [0, 1.3, 0.3], fov: 42 },
+  grove: { eye: [-5.4, 0.9, -3.6], look: [1.4, 1.1, 1.1], fov: 55 },
+  pond: { eye: [8.9, 0.8, -8.8], look: [0, 1.25, 0.4], fov: 44 },
+};
+window.__frame = (name, tSec = 300) => {
+  const f = FRAMES[name]; if (!f) return Object.keys(FRAMES);
+  cam.position.fromArray(f.eye);
+  cam.fov = f.fov; cam.updateProjectionMatrix();
+  cam.lookAt(new THREE.Vector3().fromArray(f.look));
+  // stills sample the gust ladder at one fixed plant time, so a capture is
+  // reproducible — the field still shows in them as differential lean. tSec
+  // is there so two stills can A/B the wind itself.
+  for (const sh of windShaders) sh.uniforms.uWindT.value = tSec * PT_PER_SEC;
+  // a framing is a CUT, and stateful effects must not smear across it: the
+  // first integrated capture drenched every still in motion blur because the
+  // previous view-projection still held the live orbit's camera, and DoF
+  // focused on the orbit's subject. Set this framing's own focus, then draw
+  // TWICE — the first settles every pass's state (prevVP, focus follower) at
+  // the new camera, the second is the still, with ds = 0 so motion blur is
+  // the identity and the grain is frozen.
+  window.__focusDist = _lk.set(f.look[0], f.look[1], f.look[2]).distanceTo(cam.position);
+  fxTime = tSec;
+  draw();
+  draw();
+  return name;
+};
+
+// --- run ---------------------------------------------------------------------
+addEventListener('resize', () => {
+  cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.getDrawingBufferSize(dbs);
+  rtScene.setSize(dbs.x, dbs.y);
+  rtA.setSize(dbs.x >> 2, dbs.y >> 2);
+  rtB.setSize(dbs.x >> 2, dbs.y >> 2);
+  for (const p of fxPrePasses) p.setSize?.(dbs.x, dbs.y);
+});
+
+let t0 = performance.now(), tLast = performance.now();
+const _w = new Float32Array(3);
+// one drifter step: sample the shipped field AT the drifter, in world units
+// and plant time, and carry it downwind. Mist is heavy air (slow), a spore is
+// nearly the air itself.
+function advect(p, dt, gain) {
+  windAt(_w, WF, p.x * 16, p.y * 16, p.z * 16, windT);
+  p.x += _w[0] * 7.8125 * gain * dt;
+  p.y += _w[1] * 7.8125 * gain * 0.4 * dt;
+  p.z += _w[2] * 7.8125 * gain * dt;
+  if (Math.hypot(p.x, p.z) > 19) { p.x *= -0.94; p.z *= -0.94; }  // re-enter upwind
+}
+const drift = (t) => {
+  const s = (t - t0) / 1000, dt = Math.min((t - tLast) / 1000, 0.1);
+  meter(t - tLast);
+  tLast = t;
+  windT = (300 + s) * PT_PER_SEC;
+  for (const sh of windShaders) sh.uniforms.uWindT.value = windT;
+  for (const sp of window.__mists) advect(sp.position, dt, 0.12);
+  const mp = window.__motes;
+  for (let i = 0; i < mp.count; i++) {
+    _p.set(mp.getX(i), mp.getY(i), mp.getZ(i));
+    advect(_p, dt, 0.5);
+    if (_p.y < 0.15 || _p.y > 3.2) _p.y = 0.3 + (i % 7) * 0.3;
+    mp.setXYZ(i, _p.x, _p.y, _p.z);
+  }
+  mp.needsUpdate = true;
+  fxTime = s;
+  if (CAM_MODE === 'flight') {
+    flightCam(s % (FLIGHT_S + 2));   // live viewing loops with a beat of rest
+  } else {
+    window.__focusDist = Math.hypot(cam.position.x, cam.position.y - 1.15, cam.position.z);
+    const a = 0.72 + s * 0.021, r = 11.4 - Math.sin(s * 0.05) * 1.3;
+    cam.position.set(Math.sin(a) * r, 2.1 + Math.sin(s * 0.11) * 0.4, Math.cos(a) * r);
+    cam.lookAt(0, 1.15, 0);
+  }
+  // __skipDraw lets a resumed film replay the INTEGRATED state — the mist and
+  // motes accumulate position, unlike the camera and the sway, which are pure
+  // functions of time — without paying for 400 renders it already has on disk
+  if (!window.__skipDraw) draw();
+};
+const _p = new THREE.Vector3();
+window.__hold = false;
+renderer.setAnimationLoop((t) => { if (!window.__hold) drift(t); });
+// deterministic time for offline filming: demo/film.mjs holds the RAF loop
+// and drives this instead, one fabricated timestamp per frame — wall-clock
+// recording under software GL is a slideshow, but a stepped render is smooth
+// at any renderer speed because the clock is ours, not the machine's
+window.__stepMs = (ms) => drift(t0 + ms);
+
+// the fps meter — always on, top right, because a demo that hides its own
+// frame rate is asking to be trusted instead of measured. EMA over frame
+// times; software GL will honestly say 1, real GPUs say what they say.
+const fpsEl = document.createElement('div');
+fpsEl.id = 'fps';   // so the film tool can hide it — a meter in a film frame is a boom mic in shot
+fpsEl.style.cssText = 'position:fixed;top:10px;right:12px;color:#9fb4ad;opacity:.8;'
+  + 'font:12px ui-monospace,monospace;text-shadow:0 1px 2px #000;pointer-events:none;text-align:right';
+document.body.appendChild(fpsEl);
+let emaMs = 0, fpsTick = 0;
+function meter(dtMs) {
+  emaMs = emaMs ? emaMs * 0.92 + dtMs * 0.08 : dtMs;
+  if (++fpsTick % 12 === 0) {
+    fpsEl.textContent = `${(1000 / emaMs).toFixed(0)} fps · ${emaMs.toFixed(1)} ms · `
+      + `${lastInfo.calls} calls · ${(lastInfo.triangles / 1e6).toFixed(2)}M tris`;
+  }
+}
+
+window.__stats = () => ({
+  triangles: lastInfo.triangles, calls: lastInfo.calls,
+  meshes, lines, tris: Math.round(tris), plants: planted,
+});
+window.__ready = true;

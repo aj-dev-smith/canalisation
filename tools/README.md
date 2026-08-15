@@ -852,3 +852,49 @@ producing it.
 one edit this rig forbids on measured grounds — see the aliasing note above.
 Under ~3.6 Hz of sampling the wind judders, and it judders *hardest* on the tall
 grown specimen that senescence happens to.
+
+---
+
+## The three.js bridge — the Blender pair, out to the rest of the web
+
+The Blender bridge's `.json + .bin` pair is a documented format, and these two
+consume it downstream — nothing here grows or draws a plant. The bridge stays
+the single grower and capturer; this is pure format code, which is why it can
+be validated by `test/gltf.mjs` in 0.4s with no plant in sight.
+
+```bash
+node tools/blender_export.mjs 'Cathedral Fern' 21 4000     # the pair, as ever
+node tools/gltf_export.mjs export/cathedral_fern_21_natural       # -> .glb
+node tools/gltf_shot.mjs export/cathedral_fern_21_natural.glb shots
+node test/gltf.mjs                                         # 109 checks, asserts
+```
+
+- `gltf_export.mjs <pair> [out.glb]` — a self-contained binary glTF 2.0, no
+  dependencies. The lamina crosses as a triangle soup, veins chain into strands
+  and sweep as **indexed tubes** (the ribbon problem was already solved in the
+  Blender exporter — radius is the half-width the chemistry grew), points carry
+  a `_SIZE` attribute, and the palette and provenance ride in scene extras.
+  **Everything is baked to metres via `unitM`**, radii included, so a specimen
+  drops into any three.js scene at its true size — a Cathedral Fern is 2.36 m.
+  `RADIAL=` sets tube sides (default 5), `VEIN_MIN_W=` is the LOD lever
+  (`0.008` drops 78.6% of a fern's segments, 43.6 → 34.4 MB), `LINES=1` adds a
+  mode-1 centreline primitive as a cheap far LOD.
+- `gltf_shot.mjs <glb> <dir>` — proof it renders in **stock three.js**, which
+  is a different claim from "it parses". Vendors pinned three.js 0.161 into
+  `tools/.cache/` via curl (Node's `fetch` ignores `HTTPS_PROXY`; curl reads
+  it), serves it locally, loads the GLB with the real `GLTFLoader` under
+  Playwright, frames the bbox corners exactly (a bounding-sphere fit leaves a
+  tall plant in a third of the frame — the `tree_shot.mjs` lesson), and gates
+  on three watched-failing checks: loader error, `triangles > 0`, and a centre
+  crop that is neither near-black nor **flat** — a valid GLB with two mm
+  triangles a km apart renders a perfect picture of the background and passes
+  every other test, which is the black-PNG pitfall wearing a new coat.
+
+⚠ **Strand chaining recovers almost nothing on leaf veins, and the reason is
+upstream.** `50_geom.js` emits the vein network sorted by traffic so the LOD
+cull can keep a prefix — so consecutive segments are strangers, and a fern's
+23,756 segments chain into 23,620 "strands" (0.6%). Axis and needle ribbons
+chain fine. Every leaf vein currently ships as its own 10-vertex tube stub;
+proper chaining would roughly halve the tube geometry (shared rings). The fix
+is strand-order metadata in the bridge format, not a spatial weld in the
+converter — a weld would guess adjacency the simulation actually knows.
