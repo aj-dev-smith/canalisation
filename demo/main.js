@@ -125,6 +125,11 @@ function ground(x, z) {
 // frame rate is asking to be trusted instead of measured.
 const Q = new URLSearchParams(location.search);
 const POST = Q.get('post') ?? 'bloom';
+// which effect modules load: 'all' (default), 'none', or a csv ('dof,rays').
+// Every effect is a served module in demo/fx/ — absent files skip silently,
+// so the pipeline runs identically with zero, some, or all of them present.
+const FX = Q.get('fx') ?? 'all';
+const fxOn = (n) => FX === 'all' ? true : FX.split(',').includes(n);
 const DPR = +(Q.get('dpr') || Math.min(devicePixelRatio, 2));
 const GRASS_N = Math.max(0, +(Q.get('grass') || 64000) | 0);
 const DENSITY = Math.min(2, Math.max(0.1, +(Q.get('plants') || 1)));
@@ -154,7 +159,10 @@ const C = (a, mul = 1) => new THREE.Color().setRGB(a[0] * mul, a[1] * mul, a[2] 
 // ?post=none skips everything (the bisect switch that found this; kept).
 const dbs = new THREE.Vector2();
 renderer.getDrawingBufferSize(dbs);
-const rtScene = new THREE.WebGLRenderTarget(dbs.x, dbs.y, { type: THREE.HalfFloatType });
+const rtScene = new THREE.WebGLRenderTarget(dbs.x, dbs.y, {
+  type: THREE.HalfFloatType,
+  depthTexture: new THREE.DepthTexture(dbs.x, dbs.y, THREE.UnsignedIntType),
+});
 const rtA = new THREE.WebGLRenderTarget(dbs.x >> 2, dbs.y >> 2, { type: THREE.HalfFloatType, depthBuffer: false });
 const rtB = new THREE.WebGLRenderTarget(dbs.x >> 2, dbs.y >> 2, { type: THREE.HalfFloatType, depthBuffer: false });
 
@@ -190,22 +198,48 @@ const blurMat = new THREE.ShaderMaterial({
       c += (texture2D(tex, vUv + dir * 3.231).rgb + texture2D(tex, vUv - dir * 3.231).rgb) * 0.070;
       gl_FragColor = vec4(c, 1.0); }`,
 });
-const compMat = new THREE.ShaderMaterial({
-  uniforms: { base: { value: null }, glowTex: { value: null }, strength: { value: 0.9 } },
-  vertexShader: FSV,
-  fragmentShader: `varying vec2 vUv; uniform sampler2D base, glowTex; uniform float strength;
+// THE COMPOSITE IS ASSEMBLED FROM SLOTS so effect modules can extend it
+// without nine agents editing one shader. Slots, in execution order, with
+// the variables they may read and write:
+//   uv     — vec2 uv, before base is sampled (distortion; CA via setSampler)
+//   light  — vec3 c in LINEAR HDR, after bloom (god rays add light here)
+//   grade  — vec3 c after ACES + vignette, before gamma (split-tone, grain)
+//   final  — gl_FragColor after gamma (dither lives here)
+// A module may also replace how the base is fetched with setSampler(fnName):
+// the named head function vec3 f(sampler2D, vec2) fetches instead of the
+// default — that is how chromatic aberration samples three times.
+const fxSlots = { head: [], uv: [], light: [], grade: [], final: [] };
+const fxUniforms = {};
+let fxSampler = null;
+let compMat = null;
+function buildComposite() {
+  compMat = new THREE.ShaderMaterial({
+    uniforms: Object.assign({
+      base: { value: null }, glowTex: { value: null }, strength: { value: 0.9 },
+    }, fxUniforms),
+    vertexShader: FSV,
+    fragmentShader: `varying vec2 vUv; uniform sampler2D base, glowTex; uniform float strength;
+    ${fxSlots.head.join('\n')}
+    vec3 fetchBaseDefault(sampler2D t, vec2 uv){ return texture2D(t, uv).rgb; }
     void main(){
-      vec3 c = min(max(texture2D(base, vUv).rgb, 0.0), 64.0)
-             + min(max(texture2D(glowTex, vUv).rgb, 0.0), 64.0) * strength;
+      vec2 uv = vUv;
+      ${fxSlots.uv.join('\n')}
+      vec3 c = min(max(${fxSampler ?? 'fetchBaseDefault'}(base, uv), 0.0), 64.0)
+             + min(max(texture2D(glowTex, uv).rgb, 0.0), 64.0) * strength;
+      ${fxSlots.light.join('\n')}
       // three only tone maps when rendering to SCREEN, so the target holds
-      // linear HDR — the grade has to happen here or it silently vanishes:
-      // ACES (Narkowicz fit), a gentle vignette, then the sRGB the screen expects
+      // linear HDR — the grade happens here or it silently vanishes:
+      // ACES (Narkowicz fit), a gentle vignette, then the screen's sRGB
       c *= 1.15;
       c = (c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14);
-      float d = length(vUv - 0.5);
+      float d = length(uv - 0.5);
       c *= 1.0 - 0.34 * smoothstep(0.35, 0.78, d);
-      gl_FragColor = vec4(pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0); }`,
-});
+      ${fxSlots.grade.join('\n')}
+      gl_FragColor = vec4(pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0);
+      ${fxSlots.final.join('\n')}
+    }`,
+  });
+}
 
 function fsPass(mat, target) {
   fsMesh.material = mat;
@@ -216,7 +250,14 @@ function fsPass(mat, target) {
 // the composite quad — 1 call, 1 triangle — which a perf probe faithfully
 // reported as the whole scene. Snapshot the SCENE pass's numbers.
 const lastInfo = { calls: 0, triangles: 0 };
+// effect hooks, populated by demo/fx/ modules at install time
+const fxPrePasses = [];   // { priority, render(inputTex) -> outputTex } — dof, motion blur
+const fxPerFrame = [];    // fns(tSec, ds) run before every draw
+let fxTime = 0, fxLast = -1;
 function draw() {
+  const ds = fxLast < 0 ? 1 / 60 : Math.max(0, fxTime - fxLast);
+  fxLast = fxTime;
+  for (const f of fxPerFrame) f(fxTime, ds);
   if (POST === 'none') {
     renderer.setRenderTarget(null); renderer.render(scene, cam);
     lastInfo.calls = renderer.info.render.calls; lastInfo.triangles = renderer.info.render.triangles;
@@ -225,7 +266,9 @@ function draw() {
   renderer.setRenderTarget(rtScene);
   renderer.render(scene, cam);
   lastInfo.calls = renderer.info.render.calls; lastInfo.triangles = renderer.info.render.triangles;
-  thresholdMat.uniforms.tex.value = rtScene.texture;
+  let baseTex = rtScene.texture;
+  for (const p of fxPrePasses) baseTex = p.render(baseTex);
+  thresholdMat.uniforms.tex.value = baseTex;
   fsPass(thresholdMat, rtA);
   for (let i = 0; i < 2; i++) {
     blurMat.uniforms.tex.value = rtA.texture;
@@ -235,7 +278,7 @@ function draw() {
     blurMat.uniforms.dir.value.set(0, (1 + i) / rtA.height);
     fsPass(blurMat, rtA);
   }
-  compMat.uniforms.base.value = rtScene.texture;
+  compMat.uniforms.base.value = baseTex;
   compMat.uniforms.glowTex.value = rtA.texture;
   fsPass(compMat, null);
 }
@@ -279,6 +322,7 @@ const P = {
 };
 
 // --- sky: the species' backdrop as a dome, with a modelled star field --------
+let skyMat = null, pondMat = null, grassMesh = null, terrainMesh = null;
 {
   const geo = new THREE.SphereGeometry(280, 24, 16);
   const mat = new THREE.ShaderMaterial({
@@ -314,6 +358,7 @@ const P = {
         c += vec3(0.85, 0.92, 1.0) * s * core * 0.8 * smoothstep(0.06, 0.35, d.y);
         gl_FragColor = vec4(c, 1.0); }`,
   });
+  skyMat = mat;
   scene.add(new THREE.Mesh(geo, mat));
 }
 scene.fog = new THREE.FogExp2(C(P.fog), 0.044);
@@ -336,9 +381,10 @@ const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.computeVertexNormals();
-  scene.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+  terrainMesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
     vertexColors: true, roughness: 1, metalness: 0,
-  })));
+  }));
+  scene.add(terrainMesh);
 }
 
 // --- water: a fresnel disc in the basin --------------------------------------
@@ -372,6 +418,7 @@ const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
         gl_FragColor = vec4(c, 0.92); }`,
   });
   const m = new THREE.Mesh(geo, mat);
+  pondMat = mat;
   m.position.set(POND.x, POND.y, POND.z);
   scene.add(m);
 }
@@ -447,6 +494,7 @@ const soil = C(P.bgBot, 2.2), moss = C(P.blade, 0.32), rockC = C(P.stem, 0.6);
   }
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  grassMesh = mesh;
   scene.add(mesh);
 }
 
@@ -798,7 +846,9 @@ function flightCam(s) {
   _fp.copy(seg.pos(t));
   // flutter, small — the visits carry their own bob
   _fp.y += Math.sin(s * 3.1) * 0.012;
-  _gw.copy(seg.gaze(t)).sub(_fp).normalize();
+  _gw.copy(seg.gaze(t)).sub(_fp);
+  window.__focusDist = _gw.length();   // the bee focuses on what she attends to
+  _gw.normalize();
   // a hint of bank off how far the head still has to turn, followed not snapped
   cam.getWorldDirection(_fwd);
   const yawRate = (_fwd.x * _gw.z - _fwd.z * _gw.x);
@@ -812,6 +862,49 @@ function flightCam(s) {
   window.__gazeErr = cam.getWorldDirection(_fwd).angleTo(_gw) * 180 / Math.PI;
 }
 window.__camQ = () => cam.quaternion.toArray();   // for the jerk probe
+
+// --- the effects: served modules, loaded tolerant ----------------------------
+// Each entry is demo/fx/<name>.js exporting default async (ctx) => {}. An
+// absent file skips silently — the pipeline is identical with zero, some, or
+// all present — so effects can be developed and shipped independently.
+// ?fx=none disables all, ?fx=dof,rays loads a subset. Order is load order:
+// scene-side installs first, pre-passes in priority order, grade last.
+const FX_REGISTRY = ['shadows', 'water', 'dof', 'mblur', 'rays', 'grade'];
+const fxCtx = {
+  THREE, scene, cam, renderer, Q, dbs, DPR,
+  rtScene,                                   // color + depthTexture
+  pal: P, C, moonDir: MOON,
+  skyMat: () => skyMat, pondMat: () => pondMat,
+  grassMesh: () => grassMesh, terrainMesh: () => terrainMesh,
+  keyLight: key, rimLight: rim,
+  ground, POND, sm, clamp01, mulberry32,
+  wind: { field: WF, at: windAt, glsl: WIND_SRC, ptPerSec: PT_PER_SEC, toMs: 7.8125, toUnits: 16 },
+  focusDist: () => window.__focusDist ?? 6,  // what the bee attends to
+  addHead: (g) => fxSlots.head.push(g),
+  addSlot: (slot, g) => fxSlots[slot].push(g),
+  setSampler: (name) => { fxSampler = name; },
+  addUniform: (n, v) => { fxUniforms[n] = { value: v }; return fxUniforms[n]; },
+  addPrePass: (p) => { fxPrePasses.push(p); fxPrePasses.sort((x, y) => (x.priority ?? 0) - (y.priority ?? 0)); },
+  onFrame: (f) => fxPerFrame.push(f),
+  fsPass, FSV,
+};
+const fxLoaded = [];
+for (const name of FX_REGISTRY) {
+  if (FX === 'none' || !fxOn(name)) continue;
+  try {
+    const m = await import(`./fx/${name}.js`);
+    await m.default?.(fxCtx);
+    fxLoaded.push(name);
+  } catch (e) {
+    const msg = String(e?.message ?? e);
+    if (!/Failed to fetch dynamically imported module|error loading dynamically imported/i.test(msg)) {
+      console.warn(`fx/${name} failed:`, e);
+    }
+  }
+}
+buildComposite();
+console.log('fx loaded:', fxLoaded.join(', ') || '(none)');
+window.__fx = () => fxLoaded.slice();
 window.__gd = () => cam.getWorldDirection(new THREE.Vector3()).toArray();
 window.__whereami = () => ({
   cam: [cam.position.x, cam.position.y, cam.position.z],
@@ -839,6 +932,7 @@ window.__frame = (name, tSec = 300) => {
   // reproducible — the field still shows in them as differential lean. tSec
   // is there so two stills can A/B the wind itself.
   for (const sh of windShaders) sh.uniforms.uWindT.value = tSec * PT_PER_SEC;
+  fxTime = tSec;
   draw();
   return name;
 };
@@ -851,6 +945,7 @@ addEventListener('resize', () => {
   rtScene.setSize(dbs.x, dbs.y);
   rtA.setSize(dbs.x >> 2, dbs.y >> 2);
   rtB.setSize(dbs.x >> 2, dbs.y >> 2);
+  for (const p of fxPrePasses) p.setSize?.(dbs.x, dbs.y);
 });
 
 let t0 = performance.now(), tLast = performance.now();
@@ -880,9 +975,11 @@ const drift = (t) => {
     mp.setXYZ(i, _p.x, _p.y, _p.z);
   }
   mp.needsUpdate = true;
+  fxTime = s;
   if (CAM_MODE === 'flight') {
     flightCam(s % (FLIGHT_S + 2));   // live viewing loops with a beat of rest
   } else {
+    window.__focusDist = Math.hypot(cam.position.x, cam.position.y - 1.15, cam.position.z);
     const a = 0.72 + s * 0.021, r = 11.4 - Math.sin(s * 0.05) * 1.3;
     cam.position.set(Math.sin(a) * r, 2.1 + Math.sin(s * 0.11) * 0.4, Math.cos(a) * r);
     cam.lookAt(0, 1.15, 0);
