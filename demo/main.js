@@ -668,57 +668,109 @@ const flightCurve = (() => {
     return best ?? { x, z };
   };
   const a1 = adultNear(-4, 2.5), a2 = adultNear(-2, -2.5), a3 = adultNear(3, -2);
-  return new THREE.CatmullRomCurve3([
+  const raw = new THREE.CatmullRomCurve3([
     P(-15, 8.5, 2.4),                      // in over the far field
     P(-8.5, 5, 1.0),                       // descending
     P(a1.x + 0.8, a1.z + 0.5, 0.7),        // first flyby, shoulder height
     P((a1.x + a2.x) / 2 - 0.6, (a1.z + a2.z) / 2, 0.5),
-    P(a2.x - 0.7, a2.z - 0.4, 0.6),        // second flyby
-    P(-1.3, 1.6, 0.9),                     // approach the hero
-    P(1.4, 1.2, 1.1),                      // half a loop around it
-    P(1.6, -0.9, 0.8),
-    P(a3.x + 0.6, a3.z + 0.6, 0.55),       // out through the coral drift
+    P(a2.x - 0.8, a2.z - 0.5, 0.6),        // second flyby
+    P(-1.7, 2.1, 1.0),                     // approach the hero
+    P(1.9, 1.5, 1.15),                     // half a loop around it — WIDE:
+    P(2.1, -1.3, 0.9),                     // the tight version whipped the yaw
+    P(a3.x + 0.7, a3.z + 0.7, 0.55),       // out through the coral drift
     P(4.2, -3.8, 0.45),                    // dropping toward the water
     new THREE.Vector3(5.2, POND.y + 0.35, -5.0),  // the skim — moon in the water
     P(7.6, -7.6, 1.2),                     // climbing out
     P(10.2, -10.6, 2.3),                   // and away, facing the moon
   ]);
+  // BAKE the avoidance into the curve, then smooth it — the first version
+  // pushed off plants per FRAME, and a force that kicks in and out as the
+  // path brushes each stem is a jerk by construction; a viewer called it
+  // exactly that. Push the samples, clamp them to the ground, then three
+  // box-smooth passes so what remains is one continuous line.
+  const N = 320, pts = [];
+  for (let i = 0; i <= N; i++) {
+    const p = raw.getPointAt(i / N);
+    for (let pass = 0; pass < 2; pass++) {
+      for (const c of claimed) {
+        const dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz);
+        if (d < 0.5 && d > 1e-6 && p.y < 1.7) {
+          const push = (0.5 - d) * 0.9;
+          p.x += (dx / d) * push; p.z += (dz / d) * push;
+        }
+      }
+    }
+    p.y = Math.max(p.y, ground(p.x, p.z) + 0.22);
+    pts.push(p);
+  }
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = 2; i < pts.length - 2; i++) {
+      pts[i].set(
+        (pts[i - 2].x + pts[i - 1].x + pts[i].x + pts[i + 1].x + pts[i + 2].x) / 5,
+        (pts[i - 2].y + pts[i - 1].y + pts[i].y + pts[i + 1].y + pts[i + 2].y) / 5,
+        (pts[i - 2].z + pts[i - 1].z + pts[i].z + pts[i + 1].z + pts[i + 2].z) / 5);
+    }
+  }
+  for (const p of pts) p.y = Math.max(p.y, ground(p.x, p.z) + 0.2);
+
+  // THE GAZE IS BAKED AND RATE-LIMITED, and this is the part that makes the
+  // film provably smooth rather than probably smooth. A runtime lookAt at a
+  // point ahead on the spline flipped the camera 135 degrees in one frame
+  // where the avoidance bake left a cusp near the pond — the ahead point
+  // crossed BEHIND the camera. Measured by the jerk probe, not seen. So:
+  // per-sample forward directions from a wide displacement window, the
+  // farewell blended in here, and then a hard cap on degrees-per-sample —
+  // a whip is now impossible by construction, not unlikely by tuning.
+  const fwd = [];
+  const fare = new THREE.Vector3(MOON.x * 40, MOON.y * 40 - 6, MOON.z * 40).normalize();
+  for (let i = 0; i <= N; i++) {
+    const a = pts[Math.max(i - 2, 0)], b = pts[Math.min(i + 8, N)];
+    const f = new THREE.Vector3().subVectors(b, a);
+    if (f.lengthSq() < 1e-9) f.copy(fwd[i - 1] ?? new THREE.Vector3(0, 0, -1));
+    f.normalize();
+    f.lerp(fare, sm(clamp01((i / N - 0.72) / 0.22))).normalize();
+    fwd.push(f);
+  }
+  const CAP = 1.0 * Math.PI / 180;   // 1 deg/sample ≈ 0.67 deg/frame at 24fps
+  const axis = new THREE.Vector3();
+  for (let i = 1; i <= N; i++) {
+    const ang = fwd[i - 1].angleTo(fwd[i]);
+    if (ang > CAP) {
+      axis.crossVectors(fwd[i - 1], fwd[i]);
+      if (axis.lengthSq() < 1e-12) { fwd[i].copy(fwd[i - 1]); continue; }
+      axis.normalize();
+      fwd[i].copy(fwd[i - 1]).applyAxisAngle(axis, CAP).normalize();
+    }
+  }
+  return { pts, fwd, N };
 })();
 const CAM_MODE = Q.get('cam') ?? 'drift';
+// runtime is just interpolation of the baked arrays — position, forward —
+// plus the flutter bob (which translates the camera and its look target
+// together, so it cannot turn the view) and a followed bank.
+const _fp = new THREE.Vector3(), _ff = new THREE.Vector3(), _lk = new THREE.Vector3();
+let rollEMA = 0, lastU = -1;
 function flightCam(s) {
   // ease both ends so the flight leaves and arrives instead of starting
   const u = (1 - Math.cos(Math.PI * Math.min(Math.max(s / FLIGHT_S, 0), 1))) / 2;
-  const pos = flightCurve.getPointAt(u);
+  if (lastU < 0 || u < lastU) rollEMA = 0;
+  lastU = u;
+  const { pts, fwd, N } = flightCurve;
+  const x = u * N, i0 = Math.min(Math.floor(x), N - 1), ft = x - i0;
+  _fp.lerpVectors(pts[i0], pts[i0 + 1], ft);
+  _ff.lerpVectors(fwd[i0], fwd[i0 + 1], ft).normalize();
   // flutter: two incommensurate bobs, centimetres — an insect, not a drone
-  pos.y += Math.sin(s * 2.1) * 0.035 + Math.sin(s * 3.7) * 0.02;
-  // soft push off any plant the spline strays through
-  for (const p of claimed) {
-    const dx = pos.x - p.x, dz = pos.z - p.z, d = Math.hypot(dx, dz);
-    if (d < 0.45 && d > 1e-6 && pos.y < 1.7) {
-      const push = (0.45 - d) * 0.8;
-      pos.x += (dx / d) * push; pos.z += (dz / d) * push;
-    }
-  }
-  pos.y = Math.max(pos.y, ground(pos.x, pos.z) + 0.22);
-  // look where you are going, a beat ahead — until the exit, where the gaze
-  // swings back over the shoulder toward the moon: the climb-out flies AWAY
-  // from the moon's azimuth, and the scout pass showed the old look-ahead
-  // ending the film on featureless sky. The farewell starts during the pond
-  // skim, so the streak and the moonlit field are what the water reflects.
-  const look = flightCurve.getPointAt(Math.min(u + 0.045, 1));
-  const farewell = sm(clamp01((u - 0.72) / 0.22));
-  if (farewell > 0) {
-    look.lerp(new THREE.Vector3(
-      pos.x + MOON.x * 40, pos.y + MOON.y * 40 - 6, pos.z + MOON.z * 40), farewell);
-  }
-  cam.position.copy(pos);
+  _fp.y += Math.sin(s * 2.1) * 0.035 + Math.sin(s * 3.7) * 0.02;
+  cam.position.copy(_fp);
   cam.up.set(0, 1, 0);
-  cam.lookAt(look);
-  // bank into the turn: roll off the horizontal turn rate, capped gentle
-  const t1 = flightCurve.getTangentAt(u), t2 = flightCurve.getTangentAt(Math.min(u + 0.02, 1));
-  const roll = Math.max(-0.10, Math.min(0.10, (t1.x * t2.z - t1.z * t2.x) * 6));
-  cam.rotateZ(roll);
+  cam.lookAt(_lk.copy(_fp).addScaledVector(_ff, 3));
+  // bank into the turn: roll off the horizontal turn rate, followed not snapped
+  const f2 = fwd[Math.min(i0 + 4, N)];
+  const roll = Math.max(-0.06, Math.min(0.06, (_ff.x * f2.z - _ff.z * f2.x) * 4));
+  rollEMA += (roll - rollEMA) * 0.08;
+  cam.rotateZ(rollEMA);
 }
+window.__camQ = () => cam.quaternion.toArray();   // for the jerk probe
 
 // --- framings ----------------------------------------------------------------
 const FRAMES = {
