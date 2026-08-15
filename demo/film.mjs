@@ -40,9 +40,14 @@ if (!existsSync(FF)) {
 }
 
 // --- render the frames -------------------------------------------------------
+// RESUME=1 keeps frames a crashed run already paid for (a 16-minute render
+// lost its browser to the OOM killer at frame 465 of 480) and replays only
+// the drifters' integrated state before rendering the remainder.
 const frames = join(outDir, '.film_frames');
-rmSync(frames, { recursive: true, force: true });
+const resume = process.env.RESUME === '1';
+if (!resume) rmSync(frames, { recursive: true, force: true });
 mkdirSync(frames, { recursive: true });
+const have = resume ? readdirSync(frames).filter((f) => /^f_\d+\.png$/.test(f)).length : 0;
 
 const { chromium } = await import('playwright');
 const { srv, port } = await serve(0);
@@ -59,9 +64,17 @@ await page.addStyleTag({ content: '#hud, #fps { display: none; }' });
 await page.evaluate('window.__hold = true');
 
 const n = Math.round(seconds * fps);
-console.log(`rendering ${n} frames of ${seconds}s at ${fps}fps, ${W}x${H}…`);
+if (have > 0) {
+  console.log(`resuming: ${have} frames on disk; replaying drifter state…`);
+  await page.evaluate(({ have, fps }) => {
+    window.__skipDraw = true;
+    for (let i = 0; i < have; i++) window.__stepMs(i * 1000 / fps);
+    window.__skipDraw = false;
+  }, { have, fps });
+}
+console.log(`rendering ${n - have} of ${n} frames, ${seconds}s at ${fps}fps, ${W}x${H}…`);
 const t0 = Date.now();
-for (let i = 0; i < n; i++) {
+for (let i = have; i < n; i++) {
   await page.evaluate((ms) => window.__stepMs(ms), i * 1000 / fps);
   await page.screenshot({ path: join(frames, `f_${String(i).padStart(4, '0')}.png`) });
   if ((i + 1) % fps === 0) {

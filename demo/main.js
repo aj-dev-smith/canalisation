@@ -787,7 +787,10 @@ const drift = (t) => {
     cam.position.set(Math.sin(a) * r, 2.1 + Math.sin(s * 0.11) * 0.4, Math.cos(a) * r);
     cam.lookAt(0, 1.15, 0);
   }
-  draw();
+  // __skipDraw lets a resumed film replay the INTEGRATED state — the mist and
+  // motes accumulate position, unlike the camera and the sway, which are pure
+  // functions of time — without paying for 400 renders it already has on disk
+  if (!window.__skipDraw) draw();
 };
 const _p = new THREE.Vector3();
 window.__hold = false;
