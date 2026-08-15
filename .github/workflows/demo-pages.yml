@@ -8,7 +8,7 @@
 # makes every later run cheap — its key is the manifest AND the source, since
 # a change to either grows a different plant.
 #
-# One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
+# No setup needed: configure-pages below enables Pages on first run.
 name: demo to pages
 on:
   workflow_dispatch:
@@ -31,6 +31,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: enable Pages if it is not already (build_type: workflow)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: cache the grown stand
         uses: actions/cache@v4
         with:
