@@ -3,15 +3,24 @@
 # place its performance means anything (headless fps in CI is explicitly not
 # worth reading; the repo's docs say so and this pipeline agrees).
 #
-# Manual trigger only, deliberately: growing 14 specimens is ~25 min on a
-# laptop and this runner is ~4.5x slower, so the cold run is long. The cache
-# makes every later run cheap — its key is the manifest AND the source, since
-# a change to either grows a different plant.
+# Fires on demo-affecting merges to main (and by hand, where permissions
+# allow — the GitHub App integration cannot dispatch, which is how the push
+# trigger earned its place). The cold asset grow is long on this runner; the
+# cache — keyed on manifest AND source, since a change to either grows a
+# different plant — makes every later run cheap.
 #
 # No setup needed: configure-pages below enables Pages on first run.
 name: demo to pages
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'demo/**'
+      - 'src/*.js'
+      - 'tools/blender_export.mjs'
+      - 'tools/gltf_export.mjs'
+      - '.github/workflows/demo-pages.yml'
 
 permissions:
   contents: read
