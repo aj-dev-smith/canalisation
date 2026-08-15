@@ -1,0 +1,74 @@
+# THE DEMO, TO AWS — the same site the Pages workflow assembles, synced to an
+# S3 bucket behind CloudFront instead. Both exist because both are one command
+# from the same build; pick whichever the repo's hosting already lives on.
+#
+# Inert until wired: set repository variables DEMO_BUCKET (bucket name) and
+# AWS_REGION, secret AWS_DEPLOY_ROLE_ARN (an OIDC role trusting this repo —
+# the standard aws-actions/configure-aws-credentials pattern, no long-lived
+# keys), and optionally DEMO_DISTRIBUTION_ID for a CloudFront invalidation.
+# Manual trigger only, same as Pages, for the same reason: the cold asset
+# grow is hours on this runner and cached afterwards.
+name: demo to aws
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: refuse to run unwired
+        run: |
+          if [ -z "${{ vars.DEMO_BUCKET }}" ]; then
+            echo "::error::DEMO_BUCKET repository variable is not set — see the header of this workflow"
+            exit 1
+          fi
+      - name: cache the grown stand
+        uses: actions/cache@v4
+        with:
+          path: export
+          key: demo-assets-${{ hashFiles('demo/build_assets.mjs', 'src/*.js', 'tools/blender_export.mjs', 'tools/gltf_export.mjs') }}
+      - name: grow the stand (cache hit = seconds; cold = hours)
+        run: node demo/build_assets.mjs
+      - name: assemble the site
+        run: |
+          mkdir -p site/export site/src
+          cp demo/index.html demo/main.js site/
+          cp export/demo_*.glb site/export/
+          cp src/37_wind.js src/00_math.js site/src/
+          node --input-type=module -e "
+            const { vendorThree } = await import('./demo/serve.mjs');
+            const { cpSync } = await import('node:fs');
+            cpSync(vendorThree(), 'site/vendor', { recursive: true });
+          "
+          du -sh site
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - name: sync — assets long-cached, entry points short
+        run: |
+          # the heavy immutable things first (GLBs, vendored three): a day of
+          # browser cache; they only change when the manifest regrows them
+          aws s3 sync site s3://${{ vars.DEMO_BUCKET }} --delete \
+            --exclude 'index.html' --exclude 'main.js' \
+            --cache-control 'public,max-age=86400'
+          # the entry points last and short-lived, so a deploy is visible in
+          # minutes and never serves a new main.js against old assets
+          aws s3 sync site s3://${{ vars.DEMO_BUCKET }} \
+            --exclude '*' --include 'index.html' --include 'main.js' \
+            --cache-control 'public,max-age=300'
+      - name: invalidate CloudFront (only if a distribution is wired)
+        if: vars.DEMO_DISTRIBUTION_ID != ''
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ vars.DEMO_DISTRIBUTION_ID }} \
+            --paths '/index.html' '/main.js'
