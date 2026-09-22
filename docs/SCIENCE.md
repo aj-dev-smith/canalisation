@@ -218,6 +218,55 @@ is that **an organ is finite** — the front stops where it has got to when the
 blade stops developing. That is still not a drawn boundary, but it is geometry
 doing the work, not the mechanism, and the difference is worth being honest about.
 
+**A GARDENER IS NOT ON THE NUMBERED LIST EITHER, AND `tend.html` IS WHERE ONE
+STANDS.** A cut, auxin put back on the cut, and a lamp are events in the plant's
+environment — the category of the wind and the agent — and none of them says what
+the plant becomes. A cut says where a blade went in; the paste says where auxin was
+applied and when it was taken away; the lamp says where light comes from. What
+grows back, from where, which bud wins, and which way the new shoot leans are the
+engine's. The one rule reads exactly as before, including for the person holding
+the tools: *nothing about the plant's shape is drawn — not by the page, and not by
+the gardener.*
+
+What it computes, all in `src/40_plant.js`, all off by default (`budField: 'apex'`,
+`plant.light = null`), so every shipped specimen is bit-identical to the engine
+before it:
+
+- **The auxin stream.** `Axis.streamAt(s, t)` sums every source whose rootward path
+  passes `s` — the axis's apex, every apex attached above `s`, a bud that has come
+  free and begun to export, auxin on a stump — each attenuated over `dominance`
+  along its path and each subject to a front at polar-transport speed. A cut drains
+  it; a new shoot's stream arrives; neither is instantaneous.
+- **Held, free, committed.** A bud is held while the stream past it is above
+  `branching`, free once it falls below — free buds make and export their own auxin
+  on a ramp — and committed if it stays free for `tauCommit`. A free bud the stream
+  rises over again goes back to sleep and can be freed again. The bud nearest a cut
+  is freed first, and its rising stream puts the ones below it back to sleep before
+  they commit: which bud takes over is not stated anywhere.
+- **Phototropism.** A living tip steers toward `normalize(up + k·toward_lamp)` — the
+  exact equilibrium of additive sine laws for gravity and light — with
+  `k = photoGain · I^photoExp`.
+
+**What each constant is, and the accounting is the point:**
+
+| | status | value | from |
+|---|---|---|---|
+| `patRatio` | **lookup** | 6.6 | Kramer, Rutschow & Mabie 2011: polar-transport speed over organ growth rate, 227 speeds, range ≈4-16 |
+| `commitReach` | **lookup, converted** | 6 units (≈37 cm) | commitment 24-72 h after decapitation (Morris 2005; Balla 2016) × a ~1 cm/h front |
+| `photoExp` | **lookup** | 0.4 | Bastien, Douady & Moulia 2015 on Galland 2002: 0.36-0.44 |
+| `photoGain` | **a genuine parameter** | 1.0 | the photo-to-gravi ratio 1/M; M spans ~0.1-2 across systems and depends on phytochrome and cryptochrome history this engine does not compute |
+| `dominance`, `branching` | **dials** | — | no measured law of inhibition against distance exists, and the one measurement there is (Snow 1931) has the opposite sign near the apex. The bench states them as a reach (18 units) chosen so a cut is legible — the same category as `uRef` |
+| `BUD_BAND` | numerical | 15% | hysteresis on a free bud being put back to sleep, so a stream hovering at the threshold does not flip it every step. Not biology |
+| paste dose | ≈ physiological | 1 apex | Thimann & Skoog needed ~10× through agar, attributed to losses in application |
+
+**Flagged, because the literature is precise about it** (`docs/research_9_22_26_tend.md`):
+the first flush of bud growth after decapitation is sugar and cytokinin, not auxin,
+and is **not modelled** — nothing here grows before auxin decides it may; the sine
+law for *light* has never been measured; tropisms here are tip steering at the
+shipped rate rather than curvature of a growth zone with proprioception (the AC
+model), which is also true of the engine's gravitropism; a lower branch cannot
+inhibit an upper one (Ongaro 2008); and light does not turn gravitropism down.
+
 **Stem thickness is emergent; its taper is mostly one tuned constant, and the
 emergent list should not be read as claiming otherwise.** Radius answers traffic —
 that part is real and it is Murray's law. But two things measured on 2026-07-30

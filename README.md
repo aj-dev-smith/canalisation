@@ -94,6 +94,31 @@ node demo/build_assets.mjs   # grow the stand (deterministic, ~10 min cold)
 node demo/serve.mjs          # http://localhost:8460
 ```
 
+## Tend: the plant you can only tend
+
+`tend.html` is the one page here where you *do* something. You cannot draw the plant —
+but you can do what a plant physiologist does, with the three instruments auxin was
+discovered through:
+
+- **a lamp** — carry it around the plant and the growing tips turn toward it (the
+  Darwins, 1880);
+- **shears** — cut a stem, and watch the auxin that was flowing down past the cut
+  drain away. The buds it was holding asleep come free, race, and the first to grow
+  out puts the rest back to sleep (Thimann & Skoog, 1933);
+- **the tip's hormone, put back on the cut** — and the buds stay asleep until you take
+  it away. It was the auxin holding them, not the tip.
+
+The auxin is drawn as it moves: light running down every stem at the speed polar
+transport really goes, measured relative to growth. Every sentence the page says
+about what happened is measured off the plant, and **share** copies a link that
+regrows your plant from its seed, cut for cut. It also fixed a shipped bug: the main
+page's "cut the apex" button had always frozen the plant it cut. See
+[tend/README.md](tend/README.md).
+
+```bash
+node tend/build.js && open tend.html
+```
+
 ## Four ways of looking at it
 
 The renderer is decoupled from the simulation, and a **view** decides which channels

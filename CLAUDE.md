@@ -22,6 +22,7 @@ Adding to it is a real cost and should be argued for, not slipped in.
 | [docs/JOURNAL.md](docs/JOURNAL.md) | Negative results, design forks and why they went the way they did |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is unfinished, ranked, with my recommendation |
 | [docs/research_8_02_26_pathogen.md](docs/research_8_02_26_pathogen.md) | **Literature sweep on auxin-manipulating pathogens.** Same `[D]`/`[I]`/`[OURS]`/`⚠` flags as the sweep below. Read before touching `15_pathogen.js`. It corrected the design in three places — advection along `J` has **no** evidence under it, a pure `rho` bump over-predicts by 2-3 orders because the host clamps it, and phyllody is **not** auxin — and one of its own `[OURS]` claims was then falsified by `test/pathogen.mjs` section 6 |
+| [docs/research_9_22_26_tend.md](docs/research_9_22_26_tend.md) | **Literature sweep on decapitation, bud release and phototropism**, for `tend.html`. Same flags. Read before touching `Axis.streamAt`, `releaseBuds`, `Plant.cut` or the lamp. It corrected the design in five places — Thimann & Skoog used agar not lanolin; the depletion front does not start release (sugar does), it decides commitment; instant commitment forces exactly one winner; transport speed is a lookup (Kramer 2011, 6.6× growth); light's gain goes as I^0.4 — and it found Snow 1931 measuring inhibition *rising* with distance, so `dominance` is a dial with the only data against it |
 | [docs/research_7_30_26.md](docs/research_7_30_26.md) | **Literature sweep on branch vigour and branch angle.** Answers, with citations, what sets a lateral's growth rate and its angle. Read before touching branching, `updateRadii`, or anything gravitropic — it corrects two of our own results and names one live bug |
 
 `research_7_30_26.md` is a different kind of document from the rest: it is **outside
@@ -79,6 +80,7 @@ node test/crown.mjs '{"maxGen":2}'                 # HOW MUCH OF ANYTHING IS THE
 node test/pathogen.mjs                             # AN AGENT IN THE TISSUE: invasion front against a closed form
 node test/infected.mjs                             # that agent on real tissue, measured and DRAWN
 node test/gltf.mjs                                 # the GLB converter against its own format, mutation-tested (0.4s)
+node test/tend.mjs                                 # THE BENCH: a cut frees buds, auxin on the cut holds them, two closed forms (~90s)
 ```
 
 Five browser tools are about the scene rather than the simulation, and one of them
@@ -154,11 +156,11 @@ when a stand that heavy could not exist. Read its **median and p99** instead (21
 raise its threshold to make it pass** — that deletes the only signal anyone has about
 the thing 10b exists to fix.
 
-**Thirteen of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
+**Fourteen of those assert and exit non-zero: `smoke.mjs`, `wind.mjs`, `stem.mjs`,
 `petiole.mjs`, `veinlod.mjs`, `views.mjs`, `conifer.mjs`, `plagio.mjs`, `taper.mjs`,
-`tree.mjs`, `pathogen.mjs`, `infected.mjs`, `gltf.mjs`.** Only
-**two of the thirteen are wired into CI** and therefore gate a merge — `smoke.mjs` and
-`views.mjs`. The other eleven assert locally and *nothing runs them for you*, which is worth
+`tree.mjs`, `pathogen.mjs`, `infected.mjs`, `gltf.mjs`, `tend.mjs`.** Only
+**two of the fourteen are wired into CI** and therefore gate a merge — `smoke.mjs` and
+`views.mjs`. The other twelve assert locally and *nothing runs them for you*, which is worth
 knowing before treating a green PR as evidence about the stem or the air. The rest print
 and never fail.
 
@@ -346,6 +348,11 @@ while every gust mode sat between 3.9 and 19.3 Hz — internally consistent, and
 person would call wind. `tools/clip.mjs` records a webm, which is the only artifact here
 that shows the piece *moving*.
 
+`tools/tend_shot.mjs` photographs the bench's three experiments at the moments worth
+seeing, and `tools/tend_replay.mjs` is the only tool here that checks the page's
+*record* rather than its picture: it tends a plant live, shares it, regrows the link
+in a second page and compares every stem point at the same step.
+
 When you *do* need pixels, `tools/` drives a real browser with Playwright and
 [tools/README.md](tools/README.md) lists each capture script. Read that file first —
 it documents which tools ask for the wrong GL backend and hand you a **black PNG
@@ -445,7 +452,9 @@ src/39_fall.js      A BLADE IN AIR, attached or shed. Quasi-steady plate
 src/40_plant.js     the organism: axes, elongation, branching, florigen, fruit set,
                     senescence. THE GRAVITROPIC SET POINT is here — the statocyte
                     balance that decides which way an axis points — and so is
-                    APICAL CONTROL, which decides how fast it grows
+                    APICAL CONTROL, which decides how fast it grows. And THE AUXIN
+                    STREAM (streamAt): cuts, bud release, auxin on a stump, and
+                    the lamp's pull — off unless a page asks for it (tend.html)
 src/39a_stem.js     THE STEM BENDS. Axes as coupled damped cantilevers off EI on the
                     radii Murray's law grew, loaded by the canopy. Lettered, not
                     numbered, because it must load after the air and before the organism
@@ -499,6 +508,40 @@ of its bugs were found, and none would have been visible on screen.
 - **Never fake it to make it look better.** The piece's entire claim is that nothing is drawn. A single hardcoded curve would make the whole thing a lie.
 
 ## The honest state of it
+
+**THERE IS A THIRD PAGE, `tend.html`, AND IT IS THE FIRST ONE YOU DO SOMETHING TO
+(2026-09-22).** A bench: a person carries a lamp, cuts stems, and puts the tip's
+auxin back on a cut — the three experiments auxin was found with — and the engine
+answers. `tend/README.md` is the argument; `node tend/build.js` builds it. Things to
+know before touching any of it:
+
+- **The shipped `prune()` had never pruned.** It set the tallest axis to not-alive,
+  and a not-alive axis returned before its buds were looked at, so the main page's
+  "cut the apex" froze the plant it cut. `test/tend.mjs` section 2 is the regression
+  test; the button makes a real cut now (`Plant.cut`).
+- **One new field, read three ways.** `Axis.streamAt` sums every auxin source whose
+  rootward path passes a point, with drain and arrival fronts at polar-transport
+  speed. It decides bud release on a cut axis, and everywhere under
+  `budField: 'stream'` (the bench's program). **Nothing on the shipped path calls it**:
+  uncut specimens are bit-identical to before, 4 species × 2 seeds hashed every 400
+  steps through senescence.
+- **Held, free, committed.** A freed bud exports on a ramp and commits only if it stays
+  free for `tauCommit`; the first freed puts the ones below it back to sleep. That
+  replaced a draft that committed instantly and could only ever produce one winner —
+  the literature sweep (`docs/research_9_22_26_tend.md`) named it. The stream path has
+  **no `budTake` coin**; retiring a bud forever on a failed flip has no support.
+- **`patRatio` and `photoExp` are lookups, `photoGain` is a genuine parameter, and the
+  reach of dominance is a dial.** SCIENCE.md has the table. Do not "tune" `patRatio`
+  to make the drain look nicer — it is Kramer 2011's median, and the page's clock
+  (one step ≈ one plant hour) is calibrated from it.
+- **The first flush after a cut is sugar, not auxin, and is not modelled**, and the
+  lamp steers the tip rather than bending the growth zone. Both are written on the
+  page, not just here.
+- **Share links are replays.** A seed and a list of actions at plant steps, applied
+  before the same step on replay; the lamp is read through a committed copy so the
+  pointer's timing cannot leak into the plant. `node tools/tend_replay.mjs` checks a
+  live session against its own link, every stem point, and exits non-zero on any
+  difference. Run it after touching anything the plant reads during a step.
 
 **THERE IS AN AGENT NOW, AND IT IS A CATEGORY THE ENGINE DID NOT HAVE.** Every knob in
 this project was global to a specimen and constant for that specimen's life. A species
