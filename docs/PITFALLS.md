@@ -1001,3 +1001,43 @@ wiring-up. It is a *meristem* mechanism. `20_meristem.js` runs `'grad'`, where
 
 `test/infected.mjs` section 4 asserts this rather than commenting it, so the
 byte-identical rows are a confirmed derivation rather than a suspicious null.
+
+## A gardener's bench: cuts, drains and buds (2026-09-22)
+
+**A not-alive axis returns from `Axis.step` before its buds are looked at.** That
+early return is why the shipped `prune()` froze the plant it cut: a decapitated
+axis never evaluated a bud again, and the shipped dominance rule measures from the
+axis's own tip, which a decapitated axis does not have. Anything that stops an axis
+and still expects its buds to respond has to go through the `!alive` branch —
+`releaseBuds` is called there now for cut axes and under the stream field.
+
+**Check whether a bud is HELD before checking whether it is OLD ENOUGH.** An age
+gate placed first skipped the arming as well, so a bud still forming when the drain
+passed it was never freed once it had formed. The symptom is a cut close to a fast
+tip that never regrows — a Sun Coral pruned at step 500 — and it looks exactly like
+the dominance being too strong. Held is a statement about the stream.
+
+**Two fronts at the same speed tie in continuous time and miss each other in a
+stepped one.** The old apex's drain and a new shoot's arrival both travel at `v`,
+so they reach every bud below the new shoot at the same instant — and a step apart
+in the solver, which opened a one-step window at every lower bud and woke all of
+them. Date a new source to the start of the step it was created in. More generally:
+when two things that should coincide are computed on either side of a step
+boundary, the gap is the integrator's, and it will look like biology.
+
+**`plant.events` is bounded at 64 — count through `Plant.onNote`, not the list.**
+A cut on a leafy stem produces more than 64 free and back-to-sleep events in a few
+hundred steps. A harness reading the list reported more buds put back to sleep than
+had ever come free, which is arithmetic, not a result.
+
+**A camera that leans in to a cut must read the cut from the stump.** The pick's
+`p` is whatever the caller filled in — a script and the replay both pass the old
+tip — and the first lean-in dove at empty space where the tip had been. The stump's
+last point is the cut, by construction.
+
+**A shared link replays only if the simulation reads what the record wrote.** The
+lamp moves with the pointer, between frames, at the browser's event rate; if the
+plant read that live position, a replay would apply the same moves at different
+steps and diverge. The plant reads `simLamp`, which moves only inside `step`, in
+logged quantised jumps. `tools/tend_replay.mjs` checks a live session against its
+own link, every stem point at the same step.

@@ -3,335 +3,212 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>Canalisation — a xenobotany engine</title>
-<meta name="description" content="A plant grown from its own chemistry. Leaf arrangement, vein networks, silhouettes, petal number and fruit all fall out of auxin transport. Nothing about the shape is drawn.">
-<link rel="canonical" href="https://ajsmithhq.com/canalisation/">
-<meta name="theme-color" content="#03070a">
-
+<title>Tend — a plant you can only tend</title>
+<meta name="description" content="A plant grown from its own chemistry that you cannot draw, only tend. Move the light, cut a stem, dress the cut with auxin — the experiments that discovered the hormone, on a living simulation.">
+<meta name="theme-color" content="#04080a">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Canalisation — a xenobotany engine">
-<meta property="og:description" content="A plant grown from its own chemistry. Nothing about its shape is drawn — the form is what the auxin does.">
-<meta property="og:url" content="https://ajsmithhq.com/canalisation/">
-<meta property="og:image" content="https://ajsmithhq.com/canalisation/og.jpg">
-<meta property="og:image:type" content="image/jpeg">
-<meta property="og:image:width" content="2400">
-<meta property="og:image:height" content="1260">
-<meta property="og:image:alt" content="A luminous pale-blue specimen grown by the simulation, beside its readout: 96 leaves, 1 flower, divergence 162 degrees plus or minus 87.">
+<meta property="og:title" content="Tend — a plant you can only tend">
+<meta property="og:description" content="You can't draw this plant. Move the light, cut a stem, dress the cut: the three experiments that found auxin, on a plant grown from auxin.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:creator" content="@aj_dev_smith">
 <style>
+  /* TWO KINDS OF LIGHT AND NOTHING ELSE COLOURED.
+     --accent is the specimen's own vein colour, set by the page from the same
+     palette the renderer reads, so the interface is lit by the plant. --lamp is
+     the one light a person carries, and only the lamp's own controls use it. */
   :root{
-    --ink:#e8f2f0; --dim:#7f9a99; --line:rgba(150,220,215,.16);
-    --panel:rgba(6,14,17,.72); --accent:#6ff0dc;
-    /* height of the bottom bar. The species rail lives inside it now, so every
-       element that floats above the bar is positioned off this, not off 52px. */
-    --bar:88px;
+    --ink:#e6efe9; --dim:#83958f; --faint:rgba(230,239,233,.42);
+    --line:rgba(200,230,220,.13); --panel:rgba(4,9,11,.66);
+    --accent:#7fe9da; --lamp:#ffc27a;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Charter,Georgia,serif;
+    --sans:ui-sans-serif,-apple-system,"SF Pro Text",Inter,system-ui,sans-serif;
+    --dockH:92px;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;height:100%;overflow:hidden;background:#03070a;color:var(--ink);
-    font:13px/1.45 ui-sans-serif,-apple-system,"SF Pro Text",Inter,system-ui,sans-serif}
-  #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
-  .ui{position:fixed;z-index:5}
-  #title{top:max(14px,env(safe-area-inset-top));left:16px;pointer-events:none}
-  #title h1{margin:0;font-size:15px;font-weight:560;letter-spacing:.14em;text-transform:uppercase}
-  #title p{margin:3px 0 0;font-size:11.5px;color:var(--dim);max-width:20em;letter-spacing:.02em}
-  #readout{top:max(14px,env(safe-area-inset-top));right:16px;text-align:right;pointer-events:none}
-  #divVal{font-size:30px;font-weight:300;letter-spacing:-.01em;display:block;
-    font-variant-numeric:tabular-nums;color:var(--accent);line-height:1}
-  #divLbl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
-  #divSd{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
-  #divBar{--p:38%;--sd:6%;position:relative;height:3px;width:132px;margin:8px 0 0 auto;
-    background:rgba(255,255,255,.09);border-radius:2px;overflow:hidden}
-  #divBar::before{content:"";position:absolute;left:calc(var(--p) - var(--sd)/2);width:var(--sd);
-    top:0;bottom:0;background:rgba(111,240,220,.35)}
-  #divBar::after{content:"";position:absolute;left:var(--p);width:2px;top:0;bottom:0;background:var(--accent)}
-  #golden{position:absolute;left:38.19%;top:-3px;bottom:-3px;width:1px;background:rgba(255,255,255,.45)}
-  #goldenLbl{font-size:9.5px;color:rgba(255,255,255,.4);letter-spacing:.08em;margin-top:4px}
-  #stats{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--dim);
+  html,body{margin:0;height:100%;overflow:hidden;background:#04080a;color:var(--ink);font:13px/1.45 var(--sans)}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  body[data-tool="look"] #c:active{cursor:grabbing}
+  body[data-tool="lamp"] #c,body[data-tool="shears"] #c,body[data-tool="paste"] #c{cursor:crosshair}
+  button{font:inherit;color:inherit}
+  :focus-visible{outline:1.5px solid var(--accent);outline-offset:3px;border-radius:6px}
+
+  /* the title is the thesis, set as the piece's one line of display type */
+  #title{position:fixed;top:max(18px,env(safe-area-inset-top));left:22px;z-index:5;pointer-events:none;max-width:22em}
+  #title h1{margin:0;font:400 40px/1 var(--serif);letter-spacing:-.01em}
+  #title p{margin:8px 0 0;font:15px/1.35 var(--serif);color:var(--dim)}
+
+  /* THE BENCH: the experiments, in the order they were done. Years are the only
+     markers because the content is a timeline and nothing else is numbered. */
+  #bench{position:fixed;left:22px;top:calc(max(18px,env(safe-area-inset-top)) + 104px);z-index:5;width:292px;
+    max-height:calc(100% - 104px - var(--dockH) - 90px);overflow:auto;scrollbar-width:none}
+  #bench::-webkit-scrollbar{display:none}
+  #bench ol{list-style:none;margin:0;padding:0}
+  .exp{position:relative;padding:9px 0 10px 54px;border-top:1px solid var(--line);cursor:pointer}
+  .exp:last-child{border-bottom:1px solid var(--line)}
+  .exp .yr{position:absolute;left:0;top:11px;font:12px/1 var(--sans);color:var(--faint);font-variant-numeric:tabular-nums}
+  .exp h2{margin:0;font:400 17px/1.25 var(--serif);color:var(--ink);transition:color .2s}
+  .exp .story{display:none;margin:5px 0 0;font:13.5px/1.45 var(--serif);color:var(--dim)}
+  .exp .res{display:none;margin:7px 0 0;font:12px/1.4 var(--sans);color:var(--accent)}
+  .exp.open .story{display:block}
+  .exp .res:not(:empty){display:block}
+  .exp:hover h2{color:#fff}
+  .exp.on .yr{color:var(--accent)}
+  .exp[data-key="light"].on .yr{color:var(--lamp)}
+  .exp .sw{margin-top:7px;display:none}
+  .exp.open .sw{display:inline-flex}
+
+  /* the specimen, as measured */
+  #card{position:fixed;top:max(18px,env(safe-area-inset-top));right:22px;z-index:5;text-align:right;pointer-events:none;
     font-variant-numeric:tabular-nums}
-  #stats b{color:var(--ink);font-weight:520}
-  .btn{font:inherit;font-size:11.5px;letter-spacing:.03em;color:var(--ink);
-    background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:999px;
-    padding:6px 12px;cursor:pointer;transition:.15s}
-  .btn:hover{background:rgba(111,240,220,.14)}
-  .btn.off{opacity:.45}
-  #species{display:flex;gap:6px;align-items:center;overflow-x:auto;max-width:100%;
-    padding:1px 2px;scrollbar-width:none;-ms-overflow-style:none;scroll-behavior:smooth}
+  #cardName{font:400 16px/1.2 var(--serif)}
+  #cardSeed{font-size:11.5px;color:var(--faint);margin-top:2px}
+  #card table{border-collapse:collapse;margin:9px 0 0 auto;font-size:12px}
+  #card td{padding:1.5px 0 1.5px 16px;color:var(--dim);white-space:nowrap}
+  #card td.v{color:var(--ink)}
+  #card td.a{color:var(--accent)}
+
+  /* THE DOCK: four instruments. The lamp is the one place the page is warm. */
+  #hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--dockH) + 58px + env(safe-area-inset-bottom));
+    z-index:6;width:min(460px,calc(100% - 32px));text-align:center;font-size:12.5px;color:var(--dim);pointer-events:none;transition:opacity .3s}
+  #say{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--dockH) + 82px + env(safe-area-inset-bottom));
+    z-index:6;width:min(460px,calc(100% - 32px));text-align:center;font:15px/1.4 var(--serif);color:var(--ink);
+    pointer-events:none;opacity:0;transition:opacity .45s}
+  #say.on{opacity:1}
+  #dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(50px + env(safe-area-inset-bottom));z-index:7;
+    display:flex;gap:6px;padding:6px;border-radius:22px;background:var(--panel);border:1px solid var(--line);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .tool{width:70px;height:62px;border:0;border-radius:16px;background:transparent;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--dim);transition:background .15s,color .15s}
+  .tool svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .tool span{font-size:11.5px}
+  .tool:hover{color:var(--ink);background:rgba(255,255,255,.04)}
+  .tool.on{color:var(--ink);background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 1px var(--accent)}
+  .tool[data-tool="lamp"].on{box-shadow:inset 0 0 0 1px var(--lamp);color:var(--lamp)}
+  .tool[data-tool="lamp"].lit svg{fill:rgba(255,194,122,.25)}
+
+  /* the bar: which plant, how fast, and whether the hormone is shown */
+  #bar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;align-items:center;justify-content:center;gap:10px;
+    padding:8px 14px calc(10px + env(safe-area-inset-bottom));flex-wrap:nowrap}
+  #species{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;max-width:min(640px,58vw);
+    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%);
+    mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%);padding:0 10px}
+  body.saying #hint{opacity:0}
+  body.film *{transition:none!important}
   #species::-webkit-scrollbar{display:none}
-  /* once the rail is wider than the window it has to look scrollable, so the
-     ends fade out. Above that width every chip fits and the fade would just be
-     dimming two of them for no reason. */
-  @media(max-width:1130px){
-    #species{-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 16px,#000 calc(100% - 16px),transparent 100%);
-      mask-image:linear-gradient(90deg,transparent 0,#000 16px,#000 calc(100% - 16px),transparent 100%)}
-  }
-  .chip{font:inherit;font-size:11px;padding:5px 10px 5px 8px;border-radius:999px;cursor:pointer;
-    background:rgba(3,7,10,.5);border:1px solid var(--line);color:var(--dim);transition:.15s;
-    flex:0 0 auto;white-space:nowrap;display:flex;align-items:center;gap:6px}
+  .chip{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:4px 10px 4px 8px;border-radius:999px;cursor:pointer;
+    background:transparent;border:1px solid var(--line);color:var(--dim);font-size:11.5px;white-space:nowrap}
+  .chip i{width:7px;height:7px;border-radius:50%;opacity:.7}
   .chip:hover{color:var(--ink)}
-  /* the dot is the species' own vein colour, taken straight off its palette */
-  .chip i{width:7px;height:7px;border-radius:50%;flex:0 0 auto;opacity:.65;transition:.15s}
-  .chip.on{background:rgba(111,240,220,.16);color:var(--ink);border-color:rgba(111,240,220,.45)}
-  .chip.on i{opacity:1;box-shadow:0 0 7px currentColor}
-  /* THE VIEW RAIL LIVES IN THE BAR, NOT IN THE SHEET.
-     It started in the controls sheet, which was wrong for one reason that only
-     shows up when you use it: the sheet is 560px wide and up to 70vh tall, so
-     opening it to change view covers the thing you are changing the view OF.
-     A segmented control rather than four separate chips, because the bar is
-     already carrying eight species and four buttons and 180px is the whole
-     budget. Sharing one pill also says what is true: these are four ways of
-     looking at one plant, not four independent toggles. */
-  #views{display:flex;align-items:center;border:1px solid var(--line);
-    border-radius:999px;background:rgba(3,7,10,.5);overflow:hidden;flex:0 0 auto}
-  #views button{font:inherit;font-size:11px;padding:5px 9px;border:0;cursor:pointer;
-    background:transparent;color:var(--dim);transition:.15s;white-space:nowrap}
-  #views button+button{border-left:1px solid var(--line)}
-  #views button:hover{color:var(--ink)}
-  #views button.on{background:rgba(111,240,220,.16);color:var(--ink)}
-  /* a hairline between the views and the actions, so the bar reads as two groups */
-  #barActions .sep{width:1px;height:18px;background:var(--line);flex:0 0 auto}
-  #sliders{margin-top:8px;display:grid;grid-template-columns:1fr;gap:7px}
-  @media(min-width:520px){#sliders{grid-template-columns:1fr 1fr;gap:7px 16px}}
-  .row label{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);
-    letter-spacing:.05em;text-transform:uppercase;margin-bottom:2px}
-  .row label span{color:var(--ink);font-variant-numeric:tabular-nums;text-transform:none;letter-spacing:0}
-  input[type=range]{width:100%;height:16px;-webkit-appearance:none;background:transparent;margin:0}
-  input[type=range]::-webkit-slider-runnable-track{height:2px;background:rgba(255,255,255,.16);border-radius:2px}
-  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;margin-top:-5.5px;
-    border-radius:50%;background:var(--accent);border:none;cursor:pointer}
-  input[type=range]::-moz-range-track{height:2px;background:rgba(255,255,255,.16)}
-  input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--accent);border:none}
-  #actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;align-items:center}
-  /* the agent picker reads as ONE control with its button, because choosing an
-     agent and not injecting it does nothing at all */
-  .inject{display:flex;align-items:center;gap:0;flex:0 0 auto}
-  .inject select{font:inherit;font-size:11px;padding:5px 8px;cursor:pointer;
-    color:var(--dim);background:rgba(3,7,10,.5);border:1px solid var(--line);
-    border-right:0;border-radius:999px 0 0 999px;outline:none;transition:.15s}
-  .inject select:hover{color:var(--ink)}
-  .inject #infectBtn{border-radius:0}
-  .inject #infectNewBtn{border-radius:0 999px 999px 0;border-left:0}
-  #stats{font-size:10.5px;color:var(--dim);margin-left:auto;font-variant-numeric:tabular-nums}
-  #stats b{color:var(--ink)}
-  .btn.urge{border-color:rgba(111,240,220,.6);background:rgba(111,240,220,.16)}
-  @media(max-width:560px){#card{right:10px}#card table{font-size:10px}
-    /* the views group pushes #barActions onto two rows here, and everything
-       positioned off --bar has to come up with it */
-    :root{--bar:124px}
-    #bar{gap:6px;padding-left:8px;padding-right:8px}
-    #barActions{gap:6px}
-    #views button{padding:5px 7px}
-    #barActions .sep{display:none}
-    .btn{padding:6px 10px;font-size:11px}}
-  #about{position:fixed;inset:0;z-index:20;background:rgba(3,7,10,.93);
-    backdrop-filter:blur(12px);padding:28px 22px;overflow:auto;display:none}
-  #about.show{display:block}
-  #about .inner{max-width:640px;margin:0 auto}
-  #about h2{font-size:13px;letter-spacing:.16em;text-transform:uppercase;margin:0 0 14px;color:var(--accent)}
-  #about p{color:#b9cecd;font-size:13px;margin:0 0 12px}
-  #about code{color:var(--accent);font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-  #about .eq{background:rgba(255,255,255,.04);border-left:2px solid rgba(111,240,220,.35);
-    padding:10px 12px;margin:14px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-    font-size:11.5px;color:#cfe6e4;white-space:pre-wrap;overflow-x:auto;border-radius:0 6px 6px 0}
-  #aboutClose{position:sticky;top:0;float:right}
-  #fatal{display:none;position:fixed;inset:0;z-index:99;background:#03070a;color:#f88;
-    padding:30px;font-family:ui-monospace,monospace;font-size:13px;white-space:pre-wrap}
-  @media(max-width:560px){
-    #title p{display:none}
-    #title h1{font-size:12.5px}
-    #divVal{font-size:23px}
-    #readout{top:calc(max(14px,env(safe-area-inset-top)) + 22px)}
-    #divBar{width:104px}
-    #stats{gap:10px;font-size:10.5px}
+  .chip.on{color:var(--ink);border-color:var(--accent)}
+  .chip.on i{opacity:1;box-shadow:0 0 6px currentColor}
+  .seg{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;flex:0 0 auto}
+  .seg button{border:0;background:transparent;color:var(--dim);font-size:11.5px;padding:4px 9px;cursor:pointer;font-variant-numeric:tabular-nums}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button.on{color:var(--ink);background:rgba(255,255,255,.07)}
+  .btn{flex:0 0 auto;border:1px solid var(--line);background:transparent;color:var(--dim);border-radius:999px;padding:4px 11px;
+    font-size:11.5px;cursor:pointer;white-space:nowrap}
+  .btn:hover{color:var(--ink)}
+  .btn.on{color:var(--ink);border-color:var(--accent)}
+
+  #benchBtn{display:none}
+  /* ?clean: the plant and nothing else, for recording. ?clean&caption keeps the
+     line that says what is happening and the sentence that says what was measured */
+  body.clean #bench,body.clean #card,body.clean #dock,body.clean #bar,body.clean #hint,body.clean #say,
+  body.clean #caption{display:none}
+  body.clean #title p{display:none}
+  body.clean.caption #say{display:block;bottom:calc(64px + env(safe-area-inset-bottom));font-size:19px;width:min(760px,calc(100% - 48px))}
+  body.clean.caption #caption{display:block}
+  #caption{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom));z-index:6;
+    width:min(760px,calc(100% - 48px));text-align:center;font:14px/1.4 var(--sans);color:var(--accent);pointer-events:none}
+  #fatal{display:none;position:fixed;inset:0;z-index:99;background:#04080a;color:#f99;padding:30px;font:13px/1.5 ui-monospace,monospace;white-space:pre-wrap}
+
+  @media (max-width:760px){
+    /* a phone: the bar takes two rows — the species on their own, then the clock
+       and the buttons — and everything that floats above it moves up with it */
+    :root{--dockH:66px;--barH:86px}
+    #title h1{font-size:30px}
+    #title p{font-size:13.5px}
+    #card{display:none}
+    #bar{flex-wrap:wrap;gap:6px;padding:6px 8px calc(8px + env(safe-area-inset-bottom))}
+    #species{order:-1;flex:1 1 100%;max-width:100%}
+    #dock{bottom:calc(var(--barH) + env(safe-area-inset-bottom))}
+    #hint{bottom:calc(var(--barH) + var(--dockH) + 22px + env(safe-area-inset-bottom))}
+    #say{bottom:calc(var(--barH) + var(--dockH) + 22px + env(safe-area-inset-bottom));font-size:14px}
+    #bench{display:none;left:12px;right:12px;width:auto;top:auto;
+      bottom:calc(var(--barH) + var(--dockH) + 20px + env(safe-area-inset-bottom));max-height:46vh;
+      background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);
+      border-radius:16px;padding:6px 14px}
+    body.benchOpen #bench{display:block}
+    body.benchOpen #say,body.benchOpen #hint{opacity:0}
+    #benchBtn{display:inline-block}
+    .tool{width:60px;height:52px}
+    /* two rows exactly: the auxin switch lives in the experiments sheet (1928)
+       and the half-speed step is the one a phone can spare */
+    #streamBtn,#speed button[data-v="0.5"]{display:none}
+    .btn{padding:4px 9px;font-size:11px}
+    .seg button{padding:4px 8px;font-size:11px}
   }
-  body.cinema .ui{opacity:0;pointer-events:none;transition:opacity .6s}
-  #exitCine{position:fixed;right:14px;bottom:14px;z-index:9;width:34px;height:34px;border-radius:50%;
-    border:1px solid var(--line);background:rgba(6,14,17,.5);display:none;cursor:pointer;
-    align-items:center;justify-content:center;color:var(--dim);font-size:15px;line-height:1}
-  body.cinema #exitCine{display:flex}
-  /* specimen label */
-  #card{position:fixed;top:max(14px,env(safe-area-inset-top));right:16px;z-index:5;
-    text-align:right;pointer-events:none;font-variant-numeric:tabular-nums}
-  #cardHead{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);
-    border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:6px}
-  #card table{border-collapse:collapse;margin-left:auto;font-size:11px}
-  #card td{padding:1.5px 0 1.5px 14px;color:var(--dim);white-space:nowrap}
-  #card td.v{color:var(--ink);font-weight:520}
-  #card .em{color:var(--accent)}
-  /* stage bar */
-  #stage{position:fixed;left:0;right:0;bottom:calc(max(10px,env(safe-area-inset-bottom)) + var(--bar));
-    z-index:5;display:flex;justify-content:center;gap:0;pointer-events:none}
-  #stage span{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:rgba(160,190,188,.30);
-    padding:0 9px;transition:color .6s}
-  #stage span.on{color:var(--accent)}
-  #stage span+span::before{content:"";display:inline-block;width:3px;height:3px;border-radius:50%;
-    background:rgba(160,190,188,.22);margin-right:11px;vertical-align:middle}
-  /* slim bar + sheet */
-  #bar{position:fixed;left:0;right:0;bottom:0;z-index:8;
-    background:linear-gradient(to top,rgba(3,7,10,.82) 55%,transparent);
-    display:flex;flex-direction:column;align-items:center;gap:8px;
-    padding:8px 12px calc(10px + env(safe-area-inset-bottom))}
-  #barActions{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}
-  #sheet{position:fixed;left:50%;transform:translateX(-50%) translateY(110%);
-    bottom:calc(var(--bar) + env(safe-area-inset-bottom));z-index:7;width:min(560px,calc(100% - 20px));
-    background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
-    border:1px solid var(--line);border-radius:16px;padding:14px 16px 16px;
-    transition:transform .32s cubic-bezier(.3,.8,.3,1);max-height:70vh;overflow:auto}
-  #sheet{transform:translateX(-50%) translateY(calc(100% + 90px))}
-  body.sheet #sheet{transform:translateX(-50%) translateY(0)}
-  #handover{position:fixed;left:50%;transform:translateX(-50%);z-index:6;
-    bottom:calc(max(10px,env(safe-area-inset-bottom)) + var(--bar) + 40px);display:none;
-    font-size:11px;letter-spacing:.04em}
-  body.driving #handover{display:block;animation:pulse 2.6s ease-in-out infinite}
-  @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
-  #tip{position:fixed;left:50%;transform:translateX(-50%);z-index:8;
-    bottom:calc(var(--bar) + env(safe-area-inset-bottom) + 12px);width:min(430px,calc(100% - 28px));
-    background:rgba(6,14,17,.86);border:1px solid var(--line);border-radius:10px;
-    padding:9px 12px;font-size:11.5px;color:#b9cecd;line-height:1.4;
-    opacity:0;transition:opacity .3s;pointer-events:none}
-  #tip.on{opacity:1}
-  body.cinema #card,body.cinema #stage,body.cinema #bar,body.cinema #handover{opacity:0;pointer-events:none;transition:opacity .6s}
-  #hint{position:fixed;left:0;right:0;top:calc(max(14px,env(safe-area-inset-top)) + 96px);
-    text-align:center;font-size:10.5px;color:var(--dim);letter-spacing:.1em;
-    text-transform:uppercase;pointer-events:none;opacity:.75;transition:opacity 1s}
+  @media (prefers-reduced-motion:reduce){ #say,#hint{transition:none} }
 </style>
 </head>
-<body>
+<body data-tool="look">
 <canvas id="c"></canvas>
 
-<div class="ui" id="title">
-  <h1>Canalisation</h1>
-  <p>A plant grown from its own chemistry. Nothing here is drawn — the shape is what the auxin does.</p>
-</div>
+<header id="title">
+  <h1>Tend</h1>
+  <p>You can’t draw this plant. You can only tend it.</p>
+</header>
 
-<!-- The styling and the 8s fade-out for this already existed; the element itself
-     was missing, so the camera had no discoverable controls at all. -->
-<div id="hint">drag to orbit &middot; scroll to zoom &middot; shift-drag to pan</div>
+<aside id="bench" aria-label="The experiments"><ol id="exps"></ol></aside>
 
-<div id="card">
-  <div id="cardHead"><span id="cardName">specimen</span></div>
+<section id="card" aria-live="off">
+  <div id="cardName">specimen</div>
+  <div id="cardSeed"></div>
   <table>
+    <tr><td>height</td><td class="v" id="cHeight">—</td></tr>
     <tr><td>leaves</td><td class="v" id="cLeaves">—</td></tr>
-    <tr><td>teeth, last leaf</td><td class="v" id="cTeeth">—</td></tr>
-    <tr><td>flowers</td><td class="v" id="cFlowers">—</td></tr>
-    <tr><td>petals</td><td class="v" id="cPetals">—</td></tr>
-    <tr><td>seeds</td><td class="v" id="cSeeds">—</td></tr>
-    <tr><td>flowered after</td><td class="v" id="cFlowered">—</td></tr>
-    <tr><td>divergence</td><td class="v em" id="cDiv">—</td></tr>
-    <!-- Only present once something has been injected. An agent is an event in
-         the environment, so a healthy plant should say nothing about one — the
-         row appearing IS the notification. -->
-    <tr id="cAgentRow" style="display:none"><td>agent</td><td class="v" id="cAgent">—</td></tr>
-    <tr id="cBurdenRow" style="display:none"><td>burden</td><td class="v em" id="cBurden">—</td></tr>
+    <tr><td>growing tips</td><td class="v" id="cTips">—</td></tr>
+    <tr><td>buds held asleep</td><td class="a" id="cHeld">—</td></tr>
+    <tr><td>buds racing</td><td class="a" id="cFree">—</td></tr>
+    <tr><td>buds dormant</td><td class="v" id="cDorm">—</td></tr>
+    <tr><td>stage</td><td class="v" id="cStage">—</td></tr>
   </table>
-</div>
+</section>
 
-<div id="stage">
-  <span data-s="seedling">seedling</span><span data-s="leafing">leafing</span><span data-s="flowering">flowering</span><span data-s="fruiting">fruiting</span><span data-s="ripe">ripe</span><span data-s="senescing">senescing</span><span data-s="dead">spent</span>
-</div>
+<div id="say" role="status"></div>
+<div id="caption"></div>
+<div id="hint"></div>
 
-<div id="tip"></div>
-<button class="btn" id="handover">you have the camera · <b>resume</b></button>
+<nav id="dock" aria-label="Instruments">
+  <button class="tool on" data-tool="look" title="Look (1)" aria-pressed="true">
+    <svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="4.2"/><path d="M12 7.8V4.4"/><path d="M18.6 9.3l2.2-1.1"/><circle cx="12" cy="12" r="1.3"/></svg>
+    <span>Look</span></button>
+  <button class="tool" data-tool="lamp" title="Lamp (2)" aria-pressed="false">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></svg>
+    <span>Lamp</span></button>
+  <button class="tool" data-tool="shears" title="Shears (3)" aria-pressed="false">
+    <svg viewBox="0 0 24 24"><circle cx="6.5" cy="17.5" r="2.8"/><circle cx="17.5" cy="17.5" r="2.8"/><path d="M8.6 15.6L18.5 3.8M15.4 15.6L5.5 3.8"/></svg>
+    <span>Shears</span></button>
+  <button class="tool" data-tool="paste" title="Auxin on the cut (4)" aria-pressed="false">
+    <svg viewBox="0 0 24 24"><path d="M12 3.5c3.4 4.2 5.4 7.4 5.4 10a5.4 5.4 0 01-10.8 0c0-2.6 2-5.8 5.4-10z"/><path d="M9.6 14.4a2.6 2.6 0 002.4 2.4"/></svg>
+    <span>Auxin</span></button>
+</nav>
 
-<div id="bar">
-  <div id="species"></div>
-  <div id="barActions">
-    <div id="views"></div>
-    <span class="sep"></span>
-    <button class="btn" id="sheetBtn">controls</button>
-    <button class="btn" id="cellsBtn">into the cells</button>
-    <button class="btn" id="newBtn">new specimen</button>
-    <button class="btn" id="aboutBtn">what is this?</button>
+<footer id="bar">
+  <div id="species" role="group" aria-label="Species"></div>
+  <div class="seg" id="speed" role="group" aria-label="Speed">
+    <button data-v="0" title="Pause (space)">&#10074;&#10074;</button><button data-v="0.5">½×</button><button data-v="1" class="on">1×</button><button data-v="2">2×</button>
   </div>
-</div>
+  <button class="btn on" id="streamBtn" title="Show the auxin stream (A)">auxin</button>
+  <button class="btn" id="newBtn" title="Grow a new seed of this species (N)">new seed</button>
+  <button class="btn" id="shareBtn" title="Copy a link that regrows this plant, cut for cut">share</button>
+  <button class="btn" id="benchBtn">experiments</button>
+</footer>
 
-<div id="sheet">
-  <div id="sliders"></div>
-  <div id="actions">
-    <button class="btn" id="regrowBtn">regrow with these</button>
-    <button class="btn" id="pruneBtn">cut the apex</button>
-    <!-- INJECT SOMETHING. Sits beside "cut the apex" because it is the same
-         kind of control: a one-shot perturbation of a standing plant, not a
-         parameter. Both want the sheet closed again immediately afterwards,
-         which is why neither is in the bar. -->
-    <span class="inject"><select id="agentSel" title="which agent"></select><button class="btn" id="infectBtn" title="inject into this specimen as it stands">inject</button><button class="btn" id="infectNewBtn" title="a new specimen, grown to the middle of its susceptible window, then injected">fresh + inject</button></span>
-    <!-- A FLORAL FORM. Beside the agent picker because it is the other kind of
-         change a person can make to what a plant IS rather than how it runs:
-         a homeotic program, applied by growing a specimen under it — identity
-         is read at founding, so there is no meaningful mid-life switch. -->
-    <span class="inject"><select id="formSel" title="which floral program"></select><button class="btn" id="formBtn" title="a new specimen, grown under this floral program">grow with form</button></span>
-    <button class="btn" id="cineBtn">cinema</button>
-    <span id="stats"><span>fps <b id="fps">60</b></span><span id="sat"></span></span>
-  </div>
-</div>
-
-<div id="about"><div class="inner">
-  <button class="btn" id="aboutClose">close</button>
-  <h2>What this actually is</h2>
-  <p>Every plant in this window is grown by simulating one molecule: <b>auxin</b>, the
-  hormone that tells plant cells where to become things. Cells pump it at each other
-  through PIN proteins sitting in their walls. That is the entire mechanism.</p>
-  <div class="eq">da_i/dt = ρ − μ·a_i + Σ_j [ T (P_ji φ(a_j) − P_ij φ(a_i)) + D w_ij (a_j − a_i) ]
-
-φ(a) = a / (Km + a)          saturating carrier kinetics
-P_ij = p_i · q_ij / Σ_k q_ik   PIN split across a cell's walls</div>
-  <p>The trick is that a cell has two ways to decide which wall to put its pumps on,
-  and it chooses between them based on how much auxin it is holding:</p>
-  <div class="eq">q_ij = (1−s_i)·<b>a_j^b</b> / Σ  +  s_i·<b>π_ij</b> / Σ
-s_i  = a_i^h / (ath^h + a_i^h)
-
-low auxin  → point at your richest neighbour   (up-the-gradient)
-high auxin → point where flux already goes     (with-the-flux)
-dπ_ij/dt = α·J_ij² − β·π_ij</div>
-  <p>Up-the-gradient polarisation makes auxin pile into isolated <b>maxima</b>. On the
-  growing tip, each maximum becomes a leaf — and because each one drains the tissue
-  around it, the next can only appear in the gap left over. That competition, not any
-  rule, is what produces the divergence angle in the top right. It is measured off the
-  plant while you watch, never assigned.</p>
-  <p>With-the-flux polarisation does the opposite: flux begets more flux, so diffuse
-  flow collapses into narrow <b>canals</b>. Run it in a leaf blade with sources near the
-  margin and a sink at the stalk, and it carves a vein network. The bright filaments in
-  every frond were canalised, edge by edge, from a blank sheet of cells.</p>
-  <p>Two shapes, one mechanism, separated by a threshold. That unification is the claim
-  made by Bayer and colleagues (2009) and Cieslak and colleagues (2019); the
-  up-the-gradient half follows Smith and colleagues (2006), the canalisation half goes
-  back to Sachs (1969) and Mitchison (1980).</p>
-  <p>Things worth trying: push <code>meristem growth</code> up and watch the phyllotaxis
-  reorganise; drop <code>transport</code> until the maxima stop forming and the plant
-  runs out of leaves; cut the apex and watch a dormant bud take over, because the auxin
-  that was suppressing it is gone.</p>
-  <h2 style="margin-top:26px">Where it falls short, and what I tried</h2>
-  <p>Real shoot meristems settle onto 137.5° far more tightly than this one does. Here the
-  angle wanders — the readout shows the spread, and it is the number this tissue is actually
-  producing, not one it has been nudged toward. Two experiments went looking for the reason.</p>
-  <p><b>Was the inhibition too short-ranged?</b> An organ's inhibition reaches about
-  <code>√(D/μ)</code> ≈ 4.5 cells, while the pattern's own spacing is ~5.8 — so only about two
-  previous organs get a say, and a Fibonacci spiral needs four or five to carry the phase. I
-  added a second, slower signal made by organ founder cells with its own diffusion and decay,
-  so its reach could be tuned independently, and swept it from 4 to 17 cell diameters. It
-  changed nothing: the spread stayed flat across every range and every strength. The reason is
-  worth keeping — a field with a long enough reach to remember the last five organs is also
-  nearly <i>uniform</i> across a meristem this size, so it has no idea which direction to point.
-  Range and positional information trade against each other.</p>
-  <p><b>Could a new organ be slotting in at a different radius instead of waiting for a gap?</b>
-  The band that can found an organ is several cells deep, so yes, in principle. Narrowing it to a
-  thin generative ring did tighten things — spread fell by about a third and the fraction of
-  organs landing near the mean roughly tripled — but the shoot then made almost no leaves at all.
-  That control is the <code>generative ring</code> slider: turn it down and watch the angle
-  sharpen while the plant starves. The trade-off is the finding.</p>
-  <p style="color:#7f9a99;font-size:11.5px;margin-top:18px">Both results are negative, and both
-  point the same way: in a single reaction–transport field on an idealised disc, the rate at which
-  sites become available and the sharpness with which one is chosen are governed by overlapping
-  constants. You can have a crisp angle or a productive shoot, not both. Which is presumably why
-  the published models spend their effort on the tissue — real meristem geometry, layered
-  epidermis, mechanical feedback — rather than on the chemistry alone.</p>
-</div></div>
-
-<button id="exitCine" title="show controls">&#9678;</button>
 <div id="fatal"></div>
-<script type="module">
+<script>
 
-// ===================== 00_math.js =====================
+// ===================== src/00_math.js =====================
 // ---------------------------------------------------------------------------
 // minimal linear algebra
 // ---------------------------------------------------------------------------
@@ -453,7 +330,7 @@ function angDelta(a, b) {
   return d;
 }
 
-// ===================== 10_auxin.js =====================
+// ===================== src/10_auxin.js =====================
 // ---------------------------------------------------------------------------
 // AUXIN TRANSPORT ENGINE
 //
@@ -780,7 +657,7 @@ function fluxMagnitude(F, i) {
   return m;
 }
 
-// ===================== 15_pathogen.js =====================
+// ===================== src/15_pathogen.js =====================
 // ---------------------------------------------------------------------------
 // AN AGENT IN THE TISSUE
 //
@@ -1158,7 +1035,7 @@ function stepInfected(inf, stepFn, dt) {
   inf.step(dt);
 }
 
-// ===================== 20_meristem.js =====================
+// ===================== src/20_meristem.js =====================
 // ---------------------------------------------------------------------------
 // SHOOT APICAL MERISTEM
 //
@@ -1638,7 +1515,7 @@ class Meristem {
   }
 }
 
-// ===================== 25_margin.js =====================
+// ===================== src/25_margin.js =====================
 // ---------------------------------------------------------------------------
 // THE LEAF MARGIN
 //
@@ -1875,7 +1752,7 @@ class Margin {
   }
 }
 
-// ===================== 30_leaf.js =====================
+// ===================== src/30_leaf.js =====================
 // ---------------------------------------------------------------------------
 // THE BLADE
 //
@@ -2239,7 +2116,7 @@ class Leaf {
   }
 }
 
-// ===================== 35_fruit.js =====================
+// ===================== src/35_fruit.js =====================
 // ---------------------------------------------------------------------------
 // THE FRUIT
 //
@@ -2509,7 +2386,7 @@ class Fruit {
   }
 }
 
-// ===================== 37_wind.js =====================
+// ===================== src/37_wind.js =====================
 // THE AIR
 //
 // One wind velocity field, defined once, evaluated by both the simulation and the
@@ -2871,7 +2748,7 @@ function windGLSLNumbers(src) {
   };
 }
 
-// ===================== 38_shoot.js =====================
+// ===================== src/38_shoot.js =====================
 // ---------------------------------------------------------------------------
 // THE TRANSPORT STREAM
 //
@@ -3099,7 +2976,7 @@ class Vasculature {
   auxinAt(i) { return i === undefined || i < 0 ? 0 : this.F.a[i]; }
 }
 
-// ===================== 39_fall.js =====================
+// ===================== src/39_fall.js =====================
 // A BLADE IN AIR — ATTACHED, AND LET GO
 //
 // Two things live here and they are the same plate model. The bottom of the file is
@@ -4182,7 +4059,7 @@ function flapStep(st, wz, wy, dt) {
   return st;
 }
 
-// ===================== 39a_stem.js =====================
+// ===================== src/39a_stem.js =====================
 // THE STEM BENDS
 //
 // ROADMAP 7 step 3, and the one that makes the air visible. Steps 1 and 2 put a real
@@ -4859,7 +4736,7 @@ class Bend {
   }
 }
 
-// ===================== 40_plant.js =====================
+// ===================== src/40_plant.js =====================
 // ---------------------------------------------------------------------------
 // THE ORGANISM
 //
@@ -7207,7 +7084,7 @@ class Plant {
   }
 }
 
-// ===================== 50_geom.js =====================
+// ===================== src/50_geom.js =====================
 // ---------------------------------------------------------------------------
 // Turning simulation state into triangles, lines and points.
 // Rebuilt every few frames; nothing here is persistent.
@@ -8345,7 +8222,7 @@ function stemRibbon(B, pts, radii, col, glow) {
   }
 }
 
-// ===================== 60_render.js =====================
+// ===================== src/60_render.js =====================
 // ---------------------------------------------------------------------------
 // WebGL2 renderer: forward pass into an HDR target, then bloom and grade.
 // ---------------------------------------------------------------------------
@@ -8828,7 +8705,7 @@ class Renderer {
   }
 }
 
-// ===================== 70_app.js =====================
+// ===================== src/70_app.js =====================
 // ---------------------------------------------------------------------------
 // The exhibit: camera, species, scene assembly, and the loop.
 // ---------------------------------------------------------------------------
@@ -10724,407 +10601,1427 @@ function v3cross3(o, a, b) {
   o[0] = x; o[1] = y; o[2] = z; return o;
 }
 
-// ===================== 80_main.js =====================
+// ===================== tend/10_program.js =====================
 // ---------------------------------------------------------------------------
-// wiring
+// TEND — the gardener's bench.
+//
+// A person cannot draw this plant. What they can do is what a plant physiologist
+// or a gardener does: move the light, cut a stem, and dress the cut. Each of the
+// three is one of the experiments auxin was discovered through, and each acts on
+// the plant's ENVIRONMENT or its CHEMISTRY — never on its shape. The shape that
+// results is still entirely the engine's; the page only decides where the lamp
+// is and where the blade went in.
+//
+// This file is the program a specimen is grown under here, and the words the
+// page uses about what it is doing. The bench itself is 20_bench.js.
 // ---------------------------------------------------------------------------
 
-const canvas = document.getElementById('c');
-const $ = (id) => document.getElementById(id);
+// THE PROGRAM. Every key is an engine option that already exists with a shipped
+// default (`budField`, `dominance`, `budTake`...), so this adds no mechanism; it
+// is a different setting of the same machinery, the way a floral form is.
+//
+//   budField 'stream'  bud release is decided by the auxin actually flowing past
+//                      each bud from every source above it, so that cutting,
+//                      pasting and the laterals' own streams all mean something.
+//                      See `Axis.streamAt` in src/40_plant.js.
+//   reach              how many world units of stem one living apex holds asleep.
+//                      A plant held along most of its length is a plant a cut
+//                      can release — the shipped reach is ~3.6 units, so most of
+//                      a shipped specimen's buds were let go long before anyone
+//                      could cut above them. Stated as a reach rather than as a
+//                      decay length because a species' own `branching` threshold
+//                      is part of its character, and the reach is what a
+//                      gardener sees: dominance = reach / ln(1/branching).
+//   budTake            more buds take when released than in the wild presets,
+//                      because a bud that wakes and aborts is invisible and a
+//                      bench where the experiment fails two times in three
+//                      teaches the coin, not the hormone.
+//   florigenThresh     x3: the plant stays vegetative long enough to be shaped
+//                      before it flowers — a long-day plant kept in short days,
+//                      which is what a nursery does with a mother plant.
+//   senesceHold        a tended plant does not dismantle itself while you are
+//                      tending it; the page lets it go when asked.
+const TEND_REACH = 18;
+function tendProgram(name, sp) {
+  // A species that ships with `branching: 0` — Sulphur Rosette, which is a rosette
+  // and never branches — has no threshold at all, and the stream path returns
+  // before it looks at a bud: cut one and nothing ever grows. A rosette's axils do
+  // hold buds, and decapitating one releases them, so the bench gives it the
+  // engine's default threshold. Every other species keeps its own.
+  const br = sp.branching > 0 && sp.branching < 1 ? sp.branching : 0.55;
+  return {
+    budField: 'stream',
+    branching: br,
+    dominance: TEND_REACH / Math.log(1 / br),
+    budTake: 0.62,
+    budRelease: 150,
+    maxAxes: 40,
+    maxGen: 4,
+    organBudget: Math.max(sp.organBudget || 0, 300),
+    maxOrgans: Math.max(sp.maxOrgans || 0, 70),
+    florigenThresh: (sp.florigenThresh || 12) * 3,
+    maxFlowers: Math.max(sp.maxFlowers || 0, 10),
+    senesceHold: true,
+  };
+}
 
-let app;
+// The species this bench offers. The conifer is left out on purpose: it is a
+// 240-axis crown whose buds are released by a different architecture, and its
+// one-strand needles do not show the vein network this page lights up.
+const TEND_SPECIES = ['Ember Creeper', 'Cathedral Fern', 'Abyssal Frond', 'Sun Coral',
+  'Hoarfrost Thicket', 'Spiral Ossuary', 'Sulphur Rosette', 'Nightglass Parasol'];
+
+// THE THREE EXPERIMENTS, as the page tells them. Dates, organisms and claims are
+// checked against docs/research_9_22_26_tend.md; every measured sentence the page
+// adds after a person does one of them is computed from the simulation, never
+// written here.
+const TEND_EXPERIMENTS = [
+  {
+    key: 'light', year: '1880', tool: 'lamp',
+    title: 'Move the light',
+    story: 'Charles and Francis Darwin shade the tip of a grass seedling and it '
+      + 'stops turning toward a window. The tip sees the light; something it '
+      + 'makes travels down and bends the stem below.',
+  },
+  {
+    key: 'stream', year: '1928', tool: null,
+    title: 'See what travels',
+    story: 'Frits Went catches that something in a block of agar, and the block '
+      + 'alone bends a seedling. It is auxin. Here it is the light running down '
+      + 'each stem from every growing tip, at the speed it really moves.',
+  },
+  {
+    key: 'cut', year: '1933', tool: 'shears',
+    title: 'Cut the tip',
+    story: 'Kenneth Thimann and Folke Skoog cut the growing tip off broad beans. '
+      + 'The buds below it, held asleep until then, begin to grow — and the first '
+      + 'to get going puts its neighbours back to sleep.',
+  },
+  {
+    key: 'paste', year: '1933', tool: 'paste',
+    title: 'Put it back',
+    story: 'Then they put the tip\'s hormone back on the cut, in blocks of agar '
+      + 'renewed every six hours, and the buds stay asleep until they stop. It was '
+      + 'the auxin holding them, not the tip. (Later versions use auxin in lanolin.)',
+  },
+];
+
+const TEND_TOOLS = {
+  look: { label: 'Look', hint: 'Drag to turn around the plant. Scroll or pinch to come closer.' },
+  lamp: { label: 'Lamp', hint: 'Drag to carry the lamp. Growing tips turn toward it.' },
+  shears: { label: 'Shears', hint: 'Click a stem to cut it. Everything above the cut falls.' },
+  paste: { label: 'Auxin', hint: 'Click a stem to cut it and put auxin back on the cut at once. Click the dressed stump to take it away.' },
+};
+
+// ===================== tend/20_bench.js =====================
+// ---------------------------------------------------------------------------
+// THE BENCH: the shipped App with a person's hands in place of the director.
+//
+// Everything that draws a plant is the shipped code — `makeSpecimen`, the
+// renderer, the one `drawSpecimen` every view reads — so the plant on this page
+// is the plant on the main page, grown under a different program. What is added
+// here is the three instruments and what they need: picking a stem out of the
+// frame, a cut branch that falls, a lamp that is somewhere, and the auxin
+// stream drawn so a person can watch it drain.
+// ---------------------------------------------------------------------------
+
+const _tbA = v3(), _tbB = v3(), _tbC = v3(), _tbD = v3(), _tbE = v3();
+const _tbP = m4(), _tbV = m4(), _tbVP = m4();
+const TB_UP = v3(0, 1, 0);
+// Gravity in world units per plant-time step squared: the same two exchange
+// rates the falling blade uses, so a cut branch falls through the same world a
+// shed leaf does. (9.81 m/s^2, 0.0625 m/unit, 125 steps/s.)
+const TB_G = WORLD.gEarth / WORLD.unitM / (WORLD.ptPerSec * WORLD.ptPerSec);
+const TB_LAMP = [1.0, 0.76, 0.48];     // the lamp's colour, #ffc27a-ish in linear
+
+// A palette with every colour scaled — how a cutting that has lain on the
+// ground for a while fades without anything being drawn differently.
+function tbFadePal(p, v) {
+  const o = { ...p };
+  for (const k of ['blade0', 'blade1', 'vein', 'veinTint', 'stem0', 'stem1', 'petal0',
+    'petal1', 'petalVein', 'fruit0', 'fruit1', 'spark', 'pin', 'cell0', 'cell1']) {
+    if (Array.isArray(p[k])) o[k] = p[k].map(x => x * v);
+  }
+  o.glow = (p.glow || 1) * v;
+  return o;
+}
+
+class TendApp extends App {
+  constructor(canvas) {
+    super(canvas, null);
+    this.tool = 'look';
+    // THE LAMP. Environment, in the category of the wind: it says where light
+    // comes from and never what grows toward it. `power` is in world units
+    // squared — the distance at which its irradiance is 1 is sqrt(power).
+    this.lamp = { pos: v3(7, 8, 6), power: 90, on: false };
+    // The simulation reads a COMMITTED copy of the lamp, not the one under the
+    // pointer. The pointer moves between steps at whatever rate the browser
+    // delivers events; the copy only moves inside `step`, in quantised jumps that
+    // are written to the record — so a shared link replays the exact light the
+    // plant grew toward, step for step. See `_commitLamp`.
+    this.simLamp = { pos: v3(7, 8, 6), power: 90, on: false };
+    this.plant.light = this.simLamp;
+    this.cuttings = [];
+    this.hover = null;
+    this.hoverStump = null;
+    this.flashes = [];
+    this.trials = { light: null, cut: null, paste: null };
+    this.results = { light: '', stream: '', cut: '', paste: '' };
+    this.showStream = true;
+    this.glowGain = 0.10;
+    this.stemGlow = (ax, t) => this._glowAt(ax, t);
+    this.userDriving = true;
+    this.zoom = 1;
+    this.speedMul = 1;
+    this.cam.el = 0.16; this.cam.az = 0.55;
+    this.onEvent = null;     // the page's hook for anything worth saying
+  }
+
+  program(name, sp) { return tendProgram(name, sp); }
+
+  newSpecimen(name = this.speciesName, seed = (Math.random() * 1e6) | 0) {
+    if (TEND_SPECIES.indexOf(name) < 0) name = TEND_SPECIES[0];
+    super.newSpecimen(name, seed);
+    this.seed = seed;
+    if (this.simLamp) this.plant.light = this.simLamp;
+    this.cuttings = [];
+    this.flashes = [];
+    this.hover = null; this.hoverStump = null;
+    this.bbS = null;
+    if (this.trials) {
+      this.trials = { light: null, cut: null, paste: null };
+      this.results = { light: '', stream: '', cut: '', paste: '' };
+      if (this.lamp && this.lamp.on) this._startLightTrial();
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  step(dtms) {
+    // step count follows real time, 125 steps a second at 1x, the same clock
+    // the main page and the falling blade run on. For a moment after a cut the
+    // clock is slowed, because at 1x the drain crosses a whole plant in about a
+    // second; the page says so when it does it, and nothing in the simulation
+    // knows — it is the same steps, fewer per frame.
+    let speed = this.speedMul;
+    if (this.slowUntil && this.t < this.slowUntil) {
+      const u = clamp((this.slowUntil - this.t) / 700, 0, 1);
+      speed = Math.min(speed, lerp(speed, 0.28, u));
+    }
+    if (this._replayQ) speed = Math.max(speed, 12);
+    this._acc += speed * dtms / 8;
+    const cap = this._replayQ ? 28 : 8;
+    const steps = clamp(Math.floor(this._acc), 0, cap);
+    this._acc = Math.min(this._acc - steps, cap);
+    for (let i = 0; i < steps; i++) {
+      if (this._replayQ) this._replayActions();
+      else this._commitLamp();
+      this.plant.step(1);
+      this._stepCuttings(1);
+      // for tools/tend_replay.mjs, which checks a shared link regrows the same
+      // plant by fingerprinting both at the same step
+      if (this.onStep) this.onStep(this.plant);
+    }
+    this.age += steps;
+    this.t += dtms;
+    this._readEvents();
+    this._measure();
+    for (const f of this.flashes) f.t += dtms;
+    this.flashes = this.flashes.filter(f => f.t < 1600);
+    this._frame(dtms);
+    for (const s of this.spores) {
+      s.p[1] += s.sp * 0.004 * dtms * 0.06;
+      s.p[0] += Math.sin(this.t * 0.0004 + s.ph) * 0.004;
+      if (s.p[1] > 26) s.p[1] = -2;
+    }
+  }
+
+  // The camera frames what the plant has become, and the person turns it. No
+  // director: a bench is looked at, not filmed.
+  _frame(dtms) {
+    const c = this.cam;
+    const raw = this.plant.bounds();
+    const bs = this.bbS || (this.bbS = { ...raw });
+    // held still through a cut: the plant shrinking under the blade is exactly
+    // what the camera must not chase while the drain is running
+    const hold = this.holdUntil && this.t < this.holdUntil;
+    const k = hold ? 0 : 1 - Math.exp(-0.05 * dtms / 16.67);
+    // LEANING IN TO A CUT. The drain and the race it starts are a few centimetres
+    // of stem, invisible at the distance a whole plant is framed from, and they
+    // are over in a few seconds even slowed. So for that window the camera eases
+    // toward the cut and back out again; touching the camera cancels it.
+    const fc = this.focusCut;
+    let lean = 0;
+    if (fc) {
+      const u = this.t - fc.t0;
+      lean = smoothstep(0, 650, u) * (1 - smoothstep(fc.dur - 900, fc.dur, u));
+      if (u > fc.dur) this.focusCut = null;
+    }
+    bs.cx = lerp(bs.cx, raw.cx, k); bs.cy = lerp(bs.cy, raw.cy, k); bs.cz = lerp(bs.cz, raw.cz, k);
+    bs.w = lerp(bs.w, raw.w, k); bs.h = lerp(bs.h, raw.h, k);
+    const W = this.renderer.W, H = this.renderer.H;
+    const aspect = Math.max(0.45, W / Math.max(1, H));
+    const halfV = c.fov / 2, halfH = Math.atan(Math.tan(halfV) * aspect);
+    const distV = (Math.max(1.2, bs.h) / 2 / 0.70) / Math.tan(halfV);
+    const distH = (Math.max(1.2, bs.w) / 2 / 0.74) / Math.tan(halfH);
+    const want = clamp(Math.max(distV, distH) + bs.w * 0.3 + 1.0, 4, 160) * this.zoom;
+    // the fitted distance lives apart from `dist`, which is what the renderer
+    // focuses at and the vein width floor is measured from — so a lean-in moves
+    // the lens's focus with the camera rather than leaving it on the whole plant
+    c.fitDist = lerp(c.fitDist === undefined ? c.dist : c.fitDist, want, k);
+    if (c.cx === undefined) { c.cx = bs.cx; c.cz = bs.cz; }
+    c.cx = lerp(c.cx, bs.cx, k); c.cz = lerp(c.cz, bs.cz, k);
+    c.tgtY = lerp(c.tgtY, bs.cy - bs.h * 0.04, k);
+    v3set(c.target, c.cx, c.tgtY, c.cz);
+    let dist = c.fitDist;
+    if (lean > 0) {
+      // toward a point a little below the cut, where the buds it frees are
+      const p = fc.p;
+      c.target[0] = lerp(c.target[0], p[0], lean);
+      c.target[1] = lerp(c.target[1], p[1] - fc.drop, lean);
+      c.target[2] = lerp(c.target[2], p[2], lean);
+      dist = lerp(c.fitDist, Math.max(3.5, c.fitDist * 0.6), lean);
+    }
+    c.fogNear = Math.max(0, c.fitDist - Math.max(bs.h, bs.w) * 0.55);
+    c.dofRange = Math.max(2.5, Math.max(bs.h, bs.w) * 0.75);
+    c.dist = dist;
+    const ce = Math.cos(c.el), se = Math.sin(c.el);
+    v3set(c.eye, c.target[0] + Math.sin(c.az) * ce * dist, c.target[1] + se * dist,
+      c.target[2] + Math.cos(c.az) * ce * dist);
+  }
+
+  // --------------------------------------------------------------------------
+  // PICKING. The same matrices the renderer builds, so a stem is picked where it
+  // is drawn. Returns the axis, the material arc position `s` a cut would use,
+  // and the world point.
+  _vp() {
+    const c = this.cam, cv = this.canvas;
+    m4perspective(_tbP, c.fov, cv.clientWidth / Math.max(1, cv.clientHeight), 0.05, 400);
+    m4lookAt(_tbV, c.eye, c.target, TB_UP);
+    return m4mul(_tbVP, _tbP, _tbV);
+  }
+  _proj(M, p, out) {
+    const x = p[0], y = p[1], z = p[2];
+    const cx = M[0] * x + M[4] * y + M[8] * z + M[12];
+    const cy = M[1] * x + M[5] * y + M[9] * z + M[13];
+    const cw = M[3] * x + M[7] * y + M[11] * z + M[15];
+    const cv = this.canvas;
+    out[0] = (cx / cw * 0.5 + 0.5) * cv.clientWidth;
+    out[1] = (1 - (cy / cw * 0.5 + 0.5)) * cv.clientHeight;
+    out[2] = cw;
+    return out;
+  }
+  pickStem(x, y, tolPx = 14) {
+    const M = this._vp();
+    const a = [0, 0, 0], b = [0, 0, 0];
+    let best = null, bestD = Infinity;
+    const pxPerUnit = this.canvas.clientHeight / (2 * Math.tan(this.cam.fov / 2));
+    for (const ax of this.plant.axes) {
+      const n = ax.pts.length;
+      if (n < 2) continue;
+      const mat = (ax.rest && ax.rest.length === n) ? ax.rest : ax.pts;
+      let arc = 0;
+      this._proj(M, ax.pts[0], a);
+      for (let i = 1; i < n; i++) {
+        const seg = v3len(v3sub(_tbA, mat[i], mat[i - 1]));
+        this._proj(M, ax.pts[i], b);
+        if (a[2] > 0.05 && b[2] > 0.05) {
+          const dx = b[0] - a[0], dy = b[1] - a[1];
+          const L2 = dx * dx + dy * dy;
+          const f = L2 > 1e-9 ? clamp(((x - a[0]) * dx + (y - a[1]) * dy) / L2, 0, 1) : 0;
+          const px = a[0] + dx * f - x, py = a[1] + dy * f - y;
+          const d = Math.hypot(px, py);
+          const rPx = (ax.radii[i] || 0.05) * pxPerUnit / Math.max(0.1, a[2]);
+          const tol = Math.max(tolPx, rPx + 6);
+          // nearer the pointer wins; a hair's preference for the stem in front
+          const score = d / tol + 0.0005 * a[2];
+          if (d < tol && score < bestD) {
+            bestD = score;
+            best = { ax, s: arc + seg * f, p: v3lerp(v3(), ax.pts[i - 1], ax.pts[i], f), i, f };
+          }
+        }
+        arc += seg;
+        a[0] = b[0]; a[1] = b[1]; a[2] = b[2];
+      }
+    }
+    return best;
+  }
+  // a stump is a cut axis's last point
+  pickStump(x, y, tolPx = 26) {
+    const M = this._vp();
+    const q = [0, 0, 0];
+    let best = null, bestD = tolPx;
+    for (const ax of this.plant.axes) {
+      if (!ax.cutInfo || !ax.pts.length) continue;
+      this._proj(M, ax.pts[ax.pts.length - 1], q);
+      if (q[2] <= 0.05) continue;
+      const d = Math.hypot(q[0] - x, q[1] - y);
+      if (d < bestD) { bestD = d; best = ax; }
+    }
+    return best;
+  }
+
+  // --------------------------------------------------------------------------
+  // THE THREE INSTRUMENTS
+  // THE POPULATION AN EXPERIMENT IS ABOUT: the buds below `s` on `ax` that the
+  // stream is holding asleep right now. A cut can only release those — the rest
+  // were let go long ago, and counting them would report the plant's ordinary
+  // branching as the experiment's result.
+  _heldBelow(ax, s) {
+    const P = this.plant, out = new Set();
+    for (const o of ax.organs) {
+      if (o.floral || o.shed || o.took || o.birthLen > s) continue;
+      if (ax.streamAt(o.birthLen, P.time, this.sp) > this.sp.branching) out.add(o);
+    }
+    return out;
+  }
+  doCut(pick, withPaste) {
+    const P = this.plant;
+    // the record keeps the cut to a thousandth of a unit, so the live cut is made
+    // at the same rounded place the replay will make it
+    pick.s = Math.round(pick.s * 1000) / 1000;
+    const idx = P.axes.indexOf(pick.ax);
+    const held = this._heldBelow(pick.ax, pick.s);
+    const c = P.cut(pick.ax, pick.s);
+    if (!c) return null;
+    this._rec([withPaste ? 'C' : 'c', P.time, idx, pick.s]);
+    this.cuttings.push(this._makeCutting(c));
+    this.hover = null;
+    if (this.slowCuts !== false) this.slowUntil = this.t + 2600;
+    this.holdUntil = this.t + 3400;
+    if (this.leanCuts !== false && !this._replayQ) {
+      // the stump's last point IS the cut — read it there rather than trusting the
+      // caller's pick, which a replay or a script fills in with the old tip
+      const ends = pick.ax.pts;
+      this.focusCut = { p: v3copy(v3(), ends[ends.length - 1]), t0: this.t,
+        dur: 3600, drop: Math.min(2.5, pick.s * 0.2) };
+    }
+    const removed = c.organs.length + c.axes.reduce((n, a) => n + a.organs.length, 0);
+    const trial = { t0: P.time, axis: pick.ax, s: pick.s, held, removed };
+    if (withPaste) {
+      // Thimann & Skoog's protocol, in one motion: the cut is dressed as it is made
+      P.paste(pick.ax, 1);
+      this.trials.paste = { ...trial, wipedAt: null };
+      this.results.paste = '';
+      this._say('cutpaste', { removed, held: held.size });
+    } else {
+      this.trials.cut = trial;
+      this.results.cut = '';
+      this._say('cut', { removed, held: held.size });
+    }
+    return c;
+  }
+  togglePaste(ax) {
+    const P = this.plant;
+    const on = ax.cutInfo.paste.some(p => p.off === Infinity);
+    this._rec([on ? 'w' : 'p', P.time, P.axes.indexOf(ax)]);
+    if (on) {
+      P.wipe(ax);
+      const tr = this.trials.paste;
+      if (tr && tr.axis === ax) tr.wipedAt = P.time;
+      this._say('wipe');
+    } else {
+      // dressing a stump that was cut a while ago: the population is whatever the
+      // stream is still holding below it
+      P.paste(ax, 1);
+      this.trials.paste = { t0: P.time, axis: ax, s: ax.cutInfo.s, held: this._heldBelow(ax, ax.cutInfo.s),
+        wipedAt: null };
+      this.results.paste = '';
+      this._say('paste');
+    }
+  }
+  setLamp(on) {
+    this.lamp.on = !!on;
+    if (on) this._startLightTrial(); else this.trials.light = null;
+  }
+
+  // --------------------------------------------------------------------------
+  // THE RECORD. A tended plant is a seed and what was done to it, and the engine
+  // is deterministic, so that is enough to grow it again exactly — every cut at
+  // the step it was made, the light where it was, step for step. This is what a
+  // shared link carries: no geometry, only the gardener's side of the story.
+  startLog(ff) {
+    this.log = { v: 1, sp: this.speciesName, seed: this.seed, ff, a: [] };
+  }
+  _rec(a) { if (this.log && this.log.a.length < 6000) this.log.a.push(a); }
+  // Move the simulation's lamp to the pointer's, in steps of at least 0.6 world
+  // units, snapped to 0.05, and write each move down. The drawn lamp follows the
+  // pointer exactly; the one the plant grows toward lags it by less than a step's
+  // worth of travel, which no tip can resolve anyway.
+  _commitLamp() {
+    const L = this.lamp, S = this.simLamp, t = this.plant.time;
+    if (!L.on) {
+      if (S.on) { S.on = false; this._rec(['o', t]); }
+      return;
+    }
+    const d = Math.hypot(L.pos[0] - S.pos[0], L.pos[1] - S.pos[1], L.pos[2] - S.pos[2]);
+    if (S.on && d < 0.6) return;
+    const q = (x) => Math.round(x * 20) / 20;
+    v3set(S.pos, q(L.pos[0]), q(L.pos[1]), q(L.pos[2]));
+    S.on = true;
+    this._rec(['L', t, S.pos[0], S.pos[1], S.pos[2]]);
+  }
+  // Grow a record: the specimen from its seed, then every action at its step.
+  // Fast, but visibly — the plant regrows in front of the person it was sent to.
+  replay(log) {
+    this.newSpecimen(log.sp, log.seed);
+    for (let i = 0; i < log.ff; i++) this.plant.step(1);
+    this.age = log.ff; this.bbS = null;
+    this.startLog(log.ff);
+    this._replayQ = log.a.slice().sort((x, y) => x[1] - y[1]);
+    this._replayEnd = this._replayQ.length ? this._replayQ[this._replayQ.length - 1][1] + 1 : this.plant.time;
+    if (!this._replayQ.length) this._replayQ = null;
+  }
+  _replayActions() {
+    const P = this.plant, Q = this._replayQ;
+    while (Q.length && Q[0][1] <= P.time) {
+      const a = Q.shift();
+      const ax = P.axes[a[2]];
+      if (a[0] === 'c' || a[0] === 'C') {
+        if (ax) this.doCut({ ax, s: a[3], p: ax.tipPos(), i: 1, f: 0 }, a[0] === 'C');
+      } else if (a[0] === 'p' || a[0] === 'w') {
+        if (ax && ax.cutInfo) this.togglePaste(ax);
+      } else if (a[0] === 'L') {
+        v3set(this.lamp.pos, a[2], a[3], a[4]); v3set(this.simLamp.pos, a[2], a[3], a[4]);
+        if (!this.lamp.on) this.setLamp(true);
+        this.simLamp.on = true; this._placed = true;
+        this._rec(['L', P.time, a[2], a[3], a[4]]);
+      } else if (a[0] === 'o') {
+        this.setLamp(false); this.simLamp.on = false;
+        this._rec(['o', P.time]);
+      }
+    }
+    if (!Q.length && P.time >= this._replayEnd) {
+      this._replayQ = null;
+      this._say('replayed');
+    }
+  }
+  // Carry the lamp to the pixel under the pointer, on the plane through where it
+  // already is and facing the camera: dragging moves it across the frame, and
+  // turning the camera and dragging again moves it in depth.
+  moveLamp(x, y, fresh) {
+    const c = this.cam, cv = this.canvas;
+    const fwd = v3norm(_tbA, v3sub(_tbA, c.target, c.eye));
+    const right = v3norm(_tbB, v3cross(_tbB, fwd, TB_UP));
+    const up2 = v3cross(_tbC, right, fwd);
+    const ty = Math.tan(c.fov / 2), tx = ty * cv.clientWidth / Math.max(1, cv.clientHeight);
+    const nx = (x / cv.clientWidth) * 2 - 1, ny = 1 - (y / cv.clientHeight) * 2;
+    const dir = v3(fwd[0] + right[0] * nx * tx + up2[0] * ny * ty,
+      fwd[1] + right[1] * nx * tx + up2[1] * ny * ty,
+      fwd[2] + right[2] * nx * tx + up2[2] * ny * ty);
+    const anchor = fresh ? c.target : this.lamp.pos;
+    const depth = v3dot(v3sub(_tbD, anchor, c.eye), fwd);
+    const t = depth / Math.max(1e-4, v3dot(dir, fwd));
+    const g = this.plant.origin[1];
+    v3set(this.lamp.pos, c.eye[0] + dir[0] * t, Math.max(g + 0.6, c.eye[1] + dir[1] * t),
+      c.eye[2] + dir[2] * t);
+  }
+
+  // --------------------------------------------------------------------------
+  // A CUTTING. What left the plant, as it was, falling through the same gravity
+  // a shed blade falls through: it tips off the stump about the cut, falls,
+  // settles on the ground, wilts and goes. The branch is rigid — its shape is
+  // the one it grew, nothing bends it — and the wilting is the shipped
+  // senescence drawing, driven by `sen` on organs nobody else owns now.
+  _makeCutting(c) {
+    const axes = [];
+    const wrap = (pts, radii, organs, fruit, gen) => {
+      const o = { pts: pts.map(p => v3(p[0], p[1], p[2])), radii: radii.slice(), organs,
+        fruit, gen, alive: false, meristem: null, kids: [],
+        _p0: pts.map(p => v3(p[0], p[1], p[2])) };
+      for (const g of organs) {
+        g._f0 = { o: v3copy(v3(), g.frame.o), x: v3copy(v3(), g.frame.x),
+          y: v3copy(v3(), g.frame.y), z: v3copy(v3(), g.frame.z) };
+      }
+      axes.push(o);
+    };
+    wrap(c.pts, c.radii, c.organs, c.fruit, c.gen);
+    for (const a of c.axes) { a.meristem = null; wrap(a.pts, a.radii, a.organs, a.fruit, a.gen); }
+    // mass: stem as radius squared times length, blades by area — the same two
+    // proportionalities the bend solver loads a stem with
+    let m = 0;
+    const com = v3();
+    for (const ax of axes) {
+      for (let i = 1; i < ax.pts.length; i++) {
+        const w = ax.radii[i] * ax.radii[i] * v3len(v3sub(_tbA, ax.pts[i], ax.pts[i - 1])) * 40;
+        v3addScaled(com, com, v3lerp(_tbB, ax.pts[i], ax.pts[i - 1], 0.5), w); m += w;
+      }
+      for (const g of ax.organs) {
+        const w = 0.02 * (g.len || 0) * (g.len || 0);
+        v3addScaled(com, com, g.frame.o, w); m += w;
+      }
+    }
+    const P0 = v3(c.pts[0][0], c.pts[0][1], c.pts[0][2]);
+    if (m > 0) v3scale(com, com, 1 / m); else v3copy(com, c.pts[c.pts.length - 1]);
+    const arm = v3sub(v3(), com, P0);
+    const armL = Math.max(0.2, v3len(arm));
+    const h = v3(arm[0], 0, arm[2]);
+    if (v3len(h) < 0.04 * armL) {
+      // a cutting standing dead upright tips the way its last segment leaned
+      const n = c.pts.length;
+      v3sub(h, c.pts[n - 1], c.pts[Math.max(0, n - 2)]); h[1] = 0;
+      if (v3len(h) < 1e-5) v3set(h, 1, 0, 0.3);
+    }
+    v3norm(h, h);
+    const a = v3norm(v3(), v3cross(v3(), TB_UP, h));
+    const phi0 = Math.acos(clamp(arm[1] / armL, -1, 1));
+    return {
+      axes, P0, com0: com, a, armL, phi0,
+      S: { plant: { axes }, pal: this.pal, petalPal: this.petalPal, innerPals: this.innerPals, sp: this.sp },
+      th: 0, om: 0.0015, X: v3copy(v3(), com), V: v3(), phase: 'topple', t: 0, vis: 1, thFlat: null, age: 0,
+    };
+  }
+  // where a material point of the cutting is now
+  _cutPt(C, q, out) {
+    v3sub(_tbE, q, C.P0);
+    v3rotAxis(out, _tbE, C.a, C.th);
+    v3add(out, out, C.P0);
+    if (C.phase !== 'topple') {
+      // free: the centre of mass has its own track, the body turns about it
+      v3sub(_tbE, C.com0, C.P0);
+      v3rotAxis(_tbD, _tbE, C.a, C.th);
+      out[0] += C.X[0] - (_tbD[0] + C.P0[0]);
+      out[1] += C.X[1] - (_tbD[1] + C.P0[1]);
+      out[2] += C.X[2] - (_tbD[2] + C.P0[2]);
+    }
+    return out;
+  }
+  _lowest(C) {
+    let low = Infinity;
+    const q = _tbC;
+    for (const ax of C.axes) {
+      for (const p of ax._p0) { this._cutPt(C, p, q); if (q[1] < low) low = q[1]; }
+      for (const g of ax.organs) {
+        if (g.shed) continue;
+        v3addScaled(_tbA, g._f0.o, g._f0.x, (g.len || 0) * 0.9);
+        this._cutPt(C, _tbA, q); if (q[1] < low) low = q[1];
+      }
+    }
+    return low;
+  }
+  _stepCuttings(dt) {
+    const ground = this.plant.origin[1];
+    for (const C of this.cuttings) {
+      C.t += dt;
+      C.age += dt;
+      // nothing flows in a cut piece: it goes out like a light rather than
+      // lingering as bright as the plant it left, and starts to wilt at once
+      C.vis = Math.min(C.vis, 1 - 0.55 * smoothstep(0, 90, C.age));
+      for (const ax of C.axes) for (const g of ax.organs) g.sen = Math.min(1, (g.sen || 0) + dt / 700);
+      if (C.phase === 'topple') {
+        // a pendulum about the cut: the arm is to the centre of mass, and the
+        // 1.35 is the radius of gyration of a leafy spray about its base,
+        // squared, over the arm squared — a stick is 4/3
+        const alpha = TB_G / (1.35 * C.armL) * Math.sin(C.phi0 + C.th);
+        C.om += alpha * dt; C.th += C.om * dt;
+        if (C.th > 0.5 || C.t > 90) {
+          // it slides off the stump: free now, carrying the spin it had
+          C.phase = 'fall';
+          v3sub(_tbE, C.com0, C.P0);
+          v3rotAxis(_tbD, _tbE, C.a, C.th);
+          v3add(C.X, _tbD, C.P0);
+          v3cross(C.V, C.a, _tbD); v3scale(C.V, C.V, C.om);
+        }
+      } else if (C.phase === 'fall') {
+        // leafy things fall on their drag, not on g: a light linear drag keeps a
+        // spray from dropping like a stone without pretending to be aerodynamics
+        C.V[1] -= TB_G * dt;
+        v3scale(C.V, C.V, 1 - 0.012 * dt);
+        v3addScaled(C.X, C.X, C.V, dt);
+        C.th += C.om * dt; C.om *= 1 - 0.004 * dt;
+        const low = this._lowest(C);
+        if (low <= ground) {
+          C.X[1] += ground - low;
+          C.phase = 'land'; C.t = 0;
+          // it comes to rest lying down, whichever way it was already going
+          const side = C.phi0 + C.th;
+          C.thFlat = C.th + clamp(Math.PI / 2 - side, -0.6, 0.9);
+        }
+      } else if (C.phase === 'land') {
+        C.th = lerp(C.th, C.thFlat, 1 - Math.exp(-0.08 * dt));
+        const low = this._lowest(C);
+        C.X[1] += ground - low;
+        if (C.t > 80) { C.phase = 'rest'; C.t = 0; }
+      } else {
+        C.vis = Math.min(C.vis, 0.45 * (1 - smoothstep(160, 420, C.t)));
+      }
+      for (const ax of C.axes) for (const g of ax.organs) if (g.fall && !g.fall.done) fallStep(g.fall, dt);
+    }
+    this.cuttings = this.cuttings.filter(C => !(C.phase === 'rest' && C.t > 420));
+  }
+  _poseCutting(C) {
+    for (const ax of C.axes) {
+      for (let i = 0; i < ax._p0.length; i++) this._cutPt(C, ax._p0[i], ax.pts[i]);
+      for (const g of ax.organs) {
+        const f = g._f0;
+        this._cutPt(C, f.o, g.frame.o);
+        v3rotAxis(g.frame.x, f.x, C.a, C.th);
+        v3rotAxis(g.frame.y, f.y, C.a, C.th);
+        v3rotAxis(g.frame.z, f.z, C.a, C.th);
+      }
+    }
+    if (C.vis < 1) {
+      C.S.pal = tbFadePal(this.pal, C.vis);
+      C.S.petalPal = tbFadePal(this.petalPal, C.vis);
+      C.S.innerPals = this.innerPals.map(p => tbFadePal(p, C.vis));
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // THE STREAM, DRAWN. Each living axis's stations are read off `streamAt` once a
+  // frame; the stem's own tube then carries it as emission through the
+  // `stemGlow` hook in `drawSpecimen`. What a person sees is the quantity that
+  // decides which buds wake — nothing here is shaped to look like a flow.
+  _prepGlow() {
+    const P = this.plant, t = P.time, sp = this.sp;
+    for (const ax of P.axes) {
+      const n = ax.pts.length;
+      if (!this.showStream || n < 2) { ax._glow = null; continue; }
+      const g = ax._glow && ax._glow.length === n ? ax._glow : (ax._glow = new Float32Array(n));
+      const mat = (ax.rest && ax.rest.length === n) ? ax.rest : ax.pts;
+      let arc = 0;
+      for (let i = 0; i < n; i++) {
+        if (i > 0) arc += v3len(v3sub(_tbA, mat[i], mat[i - 1]));
+        g[i] = ax.streamAt(Math.min(arc, ax.length), t, sp);
+      }
+    }
+  }
+  // The glow is the stream measured against the one number that decides
+  // anything, `branching`: a stem lit is a stem whose buds are being held
+  // asleep, a stem dark is one whose buds are free to go. Scaled that way the
+  // drain front after a cut is a boundary moving down the stem, which is the
+  // thing worth seeing — the raw sum saturated to white wherever two branches'
+  // streams met.
+  _glowAt(ax, t) {
+    const g = ax._glow;
+    if (!g) return 0;
+    const f = t * (g.length - 1), i = Math.min(g.length - 2, Math.floor(f));
+    const v = i < 0 ? g[0] : lerp(g[i], g[i + 1], f - i);
+    const u = clamp(v / (2 * this.sp.branching), 0, 1);
+    return this.glowGain * u * u * (3 - 2 * u);
+  }
+
+  buildScene() {
+    const B = this.B;
+    B.reset();
+    const px = 2 * Math.tan(this.cam.fov / 2) / Math.max(1, this.renderer.H);
+    setView(this.cam.eye, this.cam.dist * px * 1.5, this.veinLOD === false ? 0 : px);
+    this.detail = 0;
+    this.setBladeLOD([this.hero]);
+    this._prepGlow();
+    this.drawSpecimen(B, this.hero, null);
+    for (const C of this.cuttings) { this._poseCutting(C); this.drawSpecimen(B, C.S, null); }
+    this._drawBench(B);
+    for (const s of this.spores) B.point(s.p, this.pal.spore, s.s * 0.9);
+    this.renderer.upload(B);
+  }
+
+  // --------------------------------------------------------------------------
+  // THE STREAM, MOVING. `streamAt` is a sum over sources of auxin that left each
+  // source at some time and has travelled some distance; this draws that sum as
+  // what it is made of. Every source — a living apex, the auxin still in the stem
+  // when a cut went in, paste on a stump — sends motes rootward down its own
+  // path and on through every parent below it, at `patSpeed`, fading over
+  // `dominance`, and a mote exists only if its source was on when it left. So a
+  // cut does not dim anything: the last mote to pass the cut is the tail of the
+  // stream, and a person watches it run down the stem past the buds. The spacing
+  // is the only thing chosen here — how many motes a unit of stream is drawn as.
+  _arcTable(ax) {
+    const n = ax.pts.length;
+    const mat = (ax.rest && ax.rest.length === n) ? ax.rest : ax.pts;
+    const a = ax._arcT && ax._arcT.length === n ? ax._arcT : (ax._arcT = new Float32Array(n));
+    a[0] = 0;
+    for (let i = 1; i < n; i++) a[i] = a[i - 1] + v3len(v3sub(_tbA, mat[i], mat[i - 1]));
+    return a;
+  }
+  _pointAt(ax, s, out) {
+    const a = ax._arcT, n = ax.pts.length;
+    if (!a || n < 2) { v3copy(out, ax.pts[0]); return 0.05; }
+    let lo = 0, hi = n - 1;
+    if (s <= 0) { v3copy(out, ax.pts[0]); return ax.radii[0]; }
+    if (s >= a[n - 1]) { v3copy(out, ax.pts[n - 1]); return ax.radii[n - 1]; }
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (a[m] <= s) lo = m; else hi = m; }
+    const f = (s - a[lo]) / Math.max(1e-6, a[hi] - a[lo]);
+    v3lerp(out, ax.pts[lo], ax.pts[hi], f);
+    return lerp(ax.radii[lo], ax.radii[hi], f);
+  }
+  _drawMotes(B) {
+    const P = this.plant, t = P.time, sp = this.sp, v = P.patV, lam = sp.dominance, tau = P.tauCommit;
+    const vein = this.pal.vein, eye = this.cam.eye;
+    const SP = 0.42;                           // world units between motes
+    const phase = (t * v) % SP;
+    // a mote's identity is when it left its source, which does not change as it
+    // travels; hashing it gives each one a fixed jitter, so a stream reads as
+    // particles and not as a dotted line
+    const base = Math.floor(t * v / SP);
+    const hsh = (i) => { let h = Math.imul(i ^ 0x9e3779b9, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+    for (const ax of P.axes) this._arcTable(ax);
+    const col = [0, 0, 0], q = v3();
+    // one source: starts at arc `s0` of `ax`, strength `k` (or `k(te)` for a
+    // source whose output was still rising when that mote left it), on over [on, off)
+    const trace = (ax, s0, k, on, off) => {
+      let X = ax, sHi = s0, d0 = 0;
+      while (X) {
+        // motes on this stretch sit at path distances d0 .. d0 + sHi
+        const first = Math.ceil((d0 - phase) / SP);
+        for (let j = Math.max(0, first - 1); ; j++) {
+          const id = base - j;
+          const h1 = hsh(id), h2 = hsh(id + 7919);
+          const d = j * SP + phase + (h1 - 0.5) * 0.6 * SP;
+          if (d > d0 + sHi) break;
+          if (d < d0) continue;
+          const te = t - d / v;
+          if (te < on || te >= off) continue;
+          const b = (typeof k === 'function' ? k(te) : k) * Math.exp(-d / lam);
+          if (b < 0.04) { if (typeof k === 'function') continue; break; }
+          const r = this._pointAt(X, sHi - (d - d0), q);
+          // lift it off the stem's centreline toward the eye, or the tube hides it
+          v3sub(_tbB, eye, q); v3norm(_tbB, _tbB);
+          v3addScaled(q, q, _tbB, r * 1.15);
+          // capped below white, so a mote keeps the plant's own hue
+          const g = Math.min(0.95, b * 1.05) * (0.75 + 0.5 * h2);
+          col[0] = vein[0] * g; col[1] = vein[1] * g; col[2] = vein[2] * g;
+          B.point(q, col, Math.max(0.04, r * 1.1) * (0.65 + 0.55 * h2) * (0.7 + 0.3 * Math.min(1, b)));
+        }
+        d0 += sHi;
+        if (!X.parent) break;
+        sHi = X.attachLen();
+        X = X.parent;
+      }
+    };
+    for (const ax of P.axes) {
+      // a bud that has come free exports on a ramp — the rising stream that puts
+      // the buds below it back to sleep is visible as motes leaving it
+      if (ax.freeBuds) for (const o of ax.freeBuds) {
+        const f0 = o.freeAt, vg = ax.vigour;
+        trace(ax, o.birthLen, (te) => Math.min(1, (te - f0) / tau) * vg, f0, o.stopAt === undefined ? Infinity : o.stopAt);
+      }
+      if (ax.alive && ax.meristem) trace(ax, ax.length, ax.vigour, ax.bornAt, Infinity);
+      else if (ax.cutInfo) {
+        const c = ax.cutInfo;
+        if (t - c.t < (c.s + 40) / v) trace(ax, c.s, c.level, -Infinity, c.t);
+        for (const p of c.paste) trace(ax, c.s, p.dose, p.on, p.off);
+      } else if (ax.offAt !== undefined && t - ax.offAt < (ax.length + 40) / v) {
+        trace(ax, ax.length, ax.vigour, ax.bornAt, ax.offAt);
+      }
+    }
+  }
+
+  // Buds, the lamp, the blade's preview, stumps and the moment a bud wakes.
+  _drawBench(B) {
+    const P = this.plant, sp = this.sp, pal = this.pal, t = P.time;
+    const accent = pal.vein;
+    const col = [0, 0, 0];
+    if (this.showStream) this._drawMotes(B);
+    // BUDS. Every axil that could still grow a shoot, drawn by what the stream
+    // is doing to it: held (bright), let go and dormant (faint), waiting to be
+    // old enough (between). These are the dots the whole experiment is about.
+    if (this.showStream) {
+      for (const ax of P.axes) {
+        for (const org of ax.organs) {
+          if (org.floral || org.shed || org.took || (org.dev || 0) < 0.25) continue;
+          const free = org.freeAt !== undefined && org.stopAt === undefined;
+          let k, grow = 1;
+          if (free) {
+            // free, and racing: bright, pulsing, and swelling toward the moment it
+            // either commits or is put back to sleep
+            const u = clamp((t - org.freeAt) / P.tauCommit, 0, 1);
+            k = (1.1 + 0.45 * Math.sin(this.t * 0.016 + org.birthLen * 3)) * (1.0 + 0.9 * u);
+            grow = 1.9 + 1.1 * u;
+          } else if (org.armed || ax.streamAt(org.birthLen, t, sp) > sp.branching) {
+            k = 0.42;                                // held asleep by the stream
+          } else {
+            k = 0.08;                                // let go and not growing: dormant
+          }
+          col[0] = accent[0] * k; col[1] = accent[1] * k; col[2] = accent[2] * k;
+          const r = Math.max(0.05, (org.radius || 0.05) * 1.1);
+          v3addScaled(_tbA, org.frame.o, org.frame.x, r * 1.2);
+          B.point(_tbA, col, r * 2.3 * grow);
+        }
+      }
+    }
+    // STUMPS: the wound, and the paste on it
+    for (const ax of P.axes) {
+      if (!ax.cutInfo || !ax.pts.length) continue;
+      const e = ax.pts[ax.pts.length - 1];
+      const pasted = ax.cutInfo.paste.some(p => p.off === Infinity);
+      const r = Math.max(0.05, ax.radii[ax.radii.length - 1] || 0.05);
+      const hot = this.hoverStump === ax ? 1.6 : 1;
+      if (pasted) {
+        B.point(e, [TB_LAMP[0] * 1.6 * hot, TB_LAMP[1] * 1.45 * hot, TB_LAMP[2] * 1.1 * hot], r * 3.2);
+      } else {
+        const age = t - ax.cutInfo.t;
+        const fresh = 1 + 2.5 * Math.exp(-age / 60);
+        B.point(e, [0.75 * fresh * hot, 0.82 * fresh * hot, 0.80 * fresh * hot], r * 2.2);
+      }
+    }
+    // THE BLADE'S PREVIEW: a ring where it will go in, and everything that
+    // would leave the plant traced over in pale light
+    const hv = (this.tool === 'shears' || this.tool === 'paste') ? this.hover : null;
+    if (hv && P.axes.indexOf(hv.ax) >= 0) {
+      const ax = hv.ax, n = ax.pts.length;
+      const i = clamp(hv.i, 1, n - 1);
+      v3norm(_tbA, v3sub(_tbA, ax.pts[i], ax.pts[i - 1]));
+      v3norm(_tbB, v3cross(_tbB, Math.abs(_tbA[1]) > 0.9 ? v3(1, 0, 0) : TB_UP, _tbA));
+      v3cross(_tbC, _tbA, _tbB);
+      const r = Math.max(0.06, (ax.radii[i] || 0.05) * 2.2);
+      for (let k = 0; k < 18; k++) {
+        const th = k / 18 * TAU;
+        const q = v3(hv.p[0] + (_tbB[0] * Math.cos(th) + _tbC[0] * Math.sin(th)) * r,
+          hv.p[1] + (_tbB[1] * Math.cos(th) + _tbC[1] * Math.sin(th)) * r,
+          hv.p[2] + (_tbB[2] * Math.cos(th) + _tbC[2] * Math.sin(th)) * r);
+        B.point(q, [1.4, 1.45, 1.5], r * 0.45);
+      }
+      // wider than the stem, so what shows is a halo round everything that
+      // would leave the plant — the tube hides the ribbon's middle
+      const ghost = [0.62, 0.68, 0.72];
+      const up = [hv.p], ur = [(ax.radii[i] || 0.05) * 1.9];
+      for (let k = i; k < n; k++) { up.push(ax.pts[k]); ur.push(ax.radii[k] * 1.9); }
+      stemRibbon(B, up, ur, ghost, 0.55);
+      const walk = (a) => { stemRibbon(B, a.pts, a.radii.map(r => r * 1.9), ghost, 0.55); for (const k of a.kids) walk(k); };
+      for (const k of ax.kids) if (k.attachLen() > hv.s) walk(k);
+    }
+    // A BUD WAKING: a brief light where it happened
+    for (const f of this.flashes) {
+      const u = f.t / 1600;
+      const k = (1 - u) * (1 - u) * 2.2;
+      B.point(f.p, [accent[0] * k, accent[1] * k, accent[2] * k], 0.12 + 0.5 * u);
+    }
+    // THE LAMP
+    if (this.lamp.on) {
+      const L = this.lamp.pos;
+      B.point(L, [TB_LAMP[0] * 3.2, TB_LAMP[1] * 3.2, TB_LAMP[2] * 3.2], 0.55);
+      B.point(L, [TB_LAMP[0] * 0.35, TB_LAMP[1] * 0.3, TB_LAMP[2] * 0.22], 3.2);
+    }
+  }
+
+  // The lamp is the key light while it is on: every blade is shaded from where
+  // the person is holding it. Restored after the draw — the palette belongs to
+  // the specimen, and the same save-and-restore `App.render` uses for views.
+  render() {
+    const p = this.pal, L = this.lamp;
+    const k0 = p.key, c0 = p.keyCol;
+    if (L && L.on) {
+      const b = this.bbS || this.plant.bounds();
+      const d = v3norm(v3(), v3(L.pos[0] - b.cx, L.pos[1] - b.cy, L.pos[2] - b.cz));
+      p.key = [d[0], d[1], d[2]];
+      p.keyCol = [lerp(c0[0], 1.05, 0.6), lerp(c0[1], 0.80, 0.6), lerp(c0[2], 0.52, 0.6)];
+    }
+    super.render();
+    p.key = k0; p.keyCol = c0;
+  }
+
+  // --------------------------------------------------------------------------
+  // WHAT HAPPENED, MEASURED. Every sentence the page adds after a person does
+  // something is computed here off the plant, never written in advance.
+  _readEvents() {
+    const ev = this.plant.events;
+    // the plant keeps the last 64; each is marked as it is read, so a trimmed list
+    // cannot be read twice
+    for (const e of ev) {
+      if (e._read) continue;
+      e._read = true;
+      if (e.kind !== 'bud' && e.kind !== 'free' && e.kind !== 'resleep') continue;
+      const org = e.org;
+      if (e.kind === 'bud' && org) this.flashes.push({ p: v3copy(v3(), org.frame.o), t: 0 });
+      // only the buds an experiment was about, and only after it started — a
+      // plant grown synchronously leaves a queue of older events behind it
+      for (const tr of [this.trials.cut, this.trials.paste]) {
+        if (!tr || e.from !== tr.axis || e.t < tr.t0 || !tr.held.has(org)) continue;
+        const phase = tr.wipedAt === undefined || tr.wipedAt === null || e.t < tr.wipedAt ? 'a' : 'b';
+        const rec = tr[phase] || (tr[phase] = { freed: new Set(), slept: new Set(), woke: [] });
+        if (e.kind === 'free') rec.freed.add(org);
+        else if (e.kind === 'resleep') rec.slept.add(org);
+        else rec.woke.push({ t: e.t, s: e.s });
+      }
+      if (e.kind === 'bud') this._say('bud', { gen: e.axis.gen });
+      else if (e.kind === 'free') this._say('free');
+    }
+  }
+  _startLightTrial() { this.trials.light = { t0: this.plant.time }; }
+  _measure() {
+    const P = this.plant;
+    const cm = (u) => Math.max(1, Math.round(u * WORLD.unitM * 100));
+    const buds = (n) => n === 1 ? 'one bud' : n + ' buds';
+    // PLANT TIME, calibrated by the drain. The front runs at `patV` world units a
+    // step, and a real one at about a centimetre an hour (Morris et al. 2005), so a
+    // step is about patV * unitM * 100 hours of a plant's life — close to an hour
+    // on a Cathedral Fern, which makes one second on screen about five days.
+    const hrs = (n) => {
+      const h = n * P.patV * WORLD.unitM * 100;
+      return h < 36 ? `about ${Math.max(1, Math.round(h))} hour${Math.round(h) === 1 ? '' : 's'}`
+        : `about ${Math.round(h / 24)} days`;
+    };
+    // THE LEAN, NOT THE ANGLE TO THE LAMP. The first version reported how much the
+    // angle between a tip's heading and the lamp had closed, and it said "turned
+    // away" while the leader visibly arched over toward the lamp: a tip that grows
+    // up past the lamp's height changes the direction TO the lamp faster than it
+    // turns. What Darwin measured, and what reads, is the lean: how far from
+    // vertical the tip now points, signed by whether that lean faces the lamp.
+    const tl = this.trials.light;
+    if (tl && this.lamp.on) {
+      let n = 0, lean = 0;
+      const L = this.simLamp.on ? this.simLamp.pos : this.lamp.pos;
+      for (const ax of P.axes) {
+        if (!ax.alive || !ax.meristem) continue;
+        const d = ax.dir, tip = ax.tipPos();
+        const hx = L[0] - tip[0], hz = L[2] - tip[2], hl = Math.hypot(hx, hz) || 1;
+        const dh = Math.hypot(d[0], d[2]);
+        const a = Math.atan2(dh, d[1]) * 180 / Math.PI;
+        const facing = dh > 1e-4 ? (d[0] * hx + d[2] * hz) / (dh * hl) : 0;
+        lean += a * Math.sign(facing || 1); n++;
+      }
+      const dt = P.time - tl.t0;
+      if (n && dt > 60) {
+        const m = lean / n;
+        this.results.light = `${n === 1 ? 'The growing tip leans' : n + ' growing tips lean, on average,'} `
+          + `${Math.abs(m).toFixed(0)}° from upright, ${m >= 0 ? 'toward' : 'away from'} the lamp — lit for ${hrs(dt)}.`;
+      } else if (!n && dt > 60) {
+        this.results.light = 'No tip is growing, so nothing can turn. Cut a stem and let a bud grow out, then light it.';
+      }
+    }
+    const tc = this.trials.cut;
+    if (tc) {
+      const K = tc.held.size, rec = tc.a;
+      if (!K) {
+        this.results.cut = 'Nothing below this cut was being held asleep, so there was nothing to release. Cut where the stem is lit.';
+      } else if (P.time - tc.t0 > 20) {
+        const F = rec ? rec.freed.size : 0, C = rec ? rec.woke.length : 0, Z = rec ? rec.slept.size : 0;
+        if (!F) this.results.cut = `The tip was holding ${buds(K)} asleep below the cut. The auxin is draining down to them.`;
+        else if (!C) this.results.cut = `The drain has freed ${F} of the ${buds(K)} the tip was holding. Now they race: the first to hold its own long enough grows out.`;
+        else {
+          const f = rec.woke[0];
+          this.results.cut = `The drain freed ${F} of the ${buds(K)} the tip was holding. `
+            + `${C === 1 ? 'One' : C} grew out, the first ${cm(tc.s - f.s)} cm below the cut, ${hrs(f.t - tc.t0)} after it`
+            + (Z ? `, and put ${Z === 1 ? 'one' : Z} back to sleep.` : '.');
+        }
+      }
+    }
+    const tp = this.trials.paste;
+    if (tp) {
+      const K = tp.held.size, A = tp.a, Bq = tp.b;
+      const under = A ? A.freed.size + A.woke.length : 0;
+      if (!K) {
+        this.results.paste = 'Nothing below this stump is being held asleep, so the auxin has nothing to hold. Dress a fresh cut higher up.';
+      } else if (tp.wipedAt === null) {
+        this.results.paste = `Auxin back on the cut ${hrs(P.time - tp.t0)} ago, with ${buds(K)} below it. `
+          + (under === 0 ? 'Not one has come free.' : `${under} came free all the same.`);
+      } else {
+        const F = Bq ? Bq.freed.size : 0, C = Bq ? Bq.woke.length : 0;
+        this.results.paste = `Under the auxin, ${under === 0 ? 'not one bud came free' : under + ' came free'}. `
+          + (C ? `Taken away: ${F} freed, ${C === 1 ? 'one' : C} grew out ${hrs(Bq.woke[0].t - tp.wipedAt)} later.`
+            : F ? `Taken away: ${F} freed, racing to grow out.` : `Taken away ${hrs(P.time - tp.wipedAt)} ago; the auxin is draining.`);
+      }
+    }
+  }
+  _say(kind, data) { if (this.onEvent) this.onEvent(kind, data || {}); }
+
+  // --------------------------------------------------------------------------
+  // HANDS. Look drags the camera round; the lamp follows the pointer while it
+  // is pressed; the shears and the paste act on a click, so a drag with either
+  // still turns the camera instead of cutting something by accident.
+  _bindInput() {
+    const c = this.canvas;
+    let drag = null, pinch = 0;
+    const orbit = (dx, dy) => {
+      this.cam.az -= dx * 0.006;
+      this.cam.el = clamp(this.cam.el + dy * 0.005, -0.35, 1.3);
+    };
+    c.addEventListener('pointerdown', e => {
+      c.setPointerCapture(e.pointerId);
+      const x = e.clientX, y = e.clientY;
+      const alt = e.button === 1 || e.button === 2;
+      if (!alt && this.tool === 'lamp') {
+        const fresh = !this.lamp.on && !this._placed;
+        this.moveLamp(x, y, fresh);
+        this._placed = true;
+        if (!this.lamp.on) this.setLamp(true);
+        drag = { mode: 'lamp' };
+        return;
+      }
+      drag = { mode: 'orbit', x, y, x0: x, y0: y, alt };
+      this.focusCut = null;
+    });
+    c.addEventListener('pointermove', e => {
+      const x = e.clientX, y = e.clientY;
+      this.pointer = [x, y];
+      if (!drag) {
+        if (this.tool === 'shears') this.hover = this.pickStem(x, y, e.pointerType === 'touch' ? 24 : 14);
+        else if (this.tool === 'paste') {
+          this.hoverStump = this.pickStump(x, y, 18);
+          this.hover = this.hoverStump ? null : this.pickStem(x, y, 14);
+        }
+        return;
+      }
+      if (drag.mode === 'lamp') { this.moveLamp(x, y, false); return; }
+      orbit(x - drag.x, y - drag.y);
+      drag.x = x; drag.y = y;
+    });
+    const end = (e) => {
+      if (drag && drag.mode === 'orbit' && !drag.alt && e && e.type === 'pointerup') {
+        const moved = Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0);
+        if (moved < 6) {
+          if (this.tool === 'shears') {
+            const pk = this.pickStem(e.clientX, e.clientY, e.pointerType === 'touch' ? 24 : 14);
+            if (pk) this.doCut(pk);
+          } else if (this.tool === 'paste') {
+            const st = this.pickStump(e.clientX, e.clientY, e.pointerType === 'touch' ? 30 : 18);
+            if (st) this.togglePaste(st);
+            else {
+              const pk = this.pickStem(e.clientX, e.clientY, e.pointerType === 'touch' ? 24 : 14);
+              if (pk) this.doCut(pk, true); else this._say('nostump');
+            }
+          }
+        }
+      }
+      drag = null;
+    };
+    c.addEventListener('pointerup', end);
+    c.addEventListener('pointercancel', () => { drag = null; });
+    c.addEventListener('pointerleave', () => { if (!drag) { this.hover = null; this.hoverStump = null; } });
+    c.addEventListener('contextmenu', e => e.preventDefault());
+    c.addEventListener('wheel', e => {
+      e.preventDefault();
+      this.focusCut = null;
+      this.zoom = clamp(this.zoom * (1 + Math.sign(e.deltaY) * 0.08), 0.25, 3);
+    }, { passive: false });
+    c.addEventListener('touchstart', e => {
+      if (e.touches.length === 2) {
+        pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        drag = null;
+      }
+    }, { passive: true });
+    c.addEventListener('touchmove', e => {
+      if (e.touches.length === 2 && pinch) {
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        this.zoom = clamp(this.zoom * (pinch / Math.max(1, d)), 0.25, 3);
+        pinch = d;
+      }
+    }, { passive: true });
+    c.addEventListener('touchend', () => { pinch = 0; }, { passive: true });
+  }
+}
+
+// ===================== tend/30_page.js =====================
+// ---------------------------------------------------------------------------
+// The page: four instruments, the experiments in the order they were done, a
+// readout of the specimen as measured, and the loop.
+//
+// URL parameters, for people and for the capture tools alike:
+//   ?species=Ember%20Creeper  ?seed=21   which plant
+//   ?ff=600                   grow this many steps before the first frame
+//   ?speed=0|0.5|1|2          the clock
+//   ?tool=look|lamp|shears|paste
+//   ?lamp=x,y,z               a lamp already lit, in world units
+// ---------------------------------------------------------------------------
+
+const tbEl = (id) => document.getElementById(id);
+let tbApp;
 try {
-  app = new App(canvas, null);
+  tbApp = new TendApp(tbEl('c'));
 } catch (e) {
-  $('fatal').style.display = 'block';
-  $('fatal').textContent = 'Could not start: ' + e.message;
+  tbEl('fatal').style.display = 'block';
+  tbEl('fatal').textContent = 'Could not start: ' + e.message;
   throw e;
 }
-window.__app = app;
-// the view table, so a capture script can enumerate them rather than keep its
-// own list and quietly stop covering the one that was added last
-window.__VIEWS = VIEWS;
-// The species table, for the same reason and one more: a preset A/B is only
-// honest if both specimens are grown in ONE browser session on ONE GL backend,
-// and a tool that has to rebuild the bundle between candidates cannot do that.
-// `newSpecimen` reads this table, so a tool can patch a preset and regrow.
-window.__SPECIES = SPECIES;
-// The agent table (15_pathogen.js), so `plant.inoculate()` is discoverable from
-// the console rather than requiring you to read the source for the names. An
-// agent is the one thing in the piece with no UI at all — it is an event in the
-// environment, so nothing on the page implies one, and without this a person
-// looking at an infected plant has no way to find out what to type.
-window.__AGENTS = AGENTS;
-// The floral form table, same argument as the three above: `app.floralForm`
-// is settable from the console, so its legal values should be enumerable.
-window.__FORMS = FLORAL_FORMS;
+window.__tend = tbApp;
+// the capture tools in tools/ drive `window.__app`; this page answers to it too
+window.__app = tbApp;
+window.__TEND = { TEND_SPECIES, TEND_EXPERIMENTS, tendProgram };
 
-// --- the specimen label ----------------------------------------------------
-let lastHud = 0;
-function hud(now) {
-  if (now - lastHud < 220) return;
-  lastHud = now;
-  const c = app.plant.card();
-  $('cardName').textContent = 'no. ' + app.specimenNo + ' · ' + app.speciesName;
-  $('cLeaves').textContent = c.leaves || '—';
-  $('cTeeth').textContent = c.teeth || '—';
-  $('cFlowers').textContent = c.flowers || '—';
-  $('cPetals').textContent = c.petals || '—';
-  $('cSeeds').textContent = c.seeds || '—';
-  $('cFlowered').textContent = c.floweredAt ? c.floweredAt + ' leaves' : '—';
-  $('cDiv').textContent = c.divergence
-    ? c.divergence.toFixed(0) + '° ±' + c.divergenceSd.toFixed(0) : '—';
-  // The agent rows appear only once something has been injected — a healthy
-  // plant should say nothing about a disease it does not have, so the row
-  // showing up IS the notification. `burden` is what tells you it actually took:
-  // inoculate() can succeed and the agent still fail to establish, because
-  // invasion has a real threshold at R0 = r/clr and nothing schedules it.
-  const ag = app.plant.agentBurden && app.plant.agentBurden();
-  $('cAgentRow').style.display = ag ? '' : 'none';
-  $('cBurdenRow').style.display = ag ? '' : 'none';
-  if (ag) {
-    $('cAgent').textContent = ag.agent;
-    $('cBurden').textContent = ag.axes
-      ? ag.axes + (ag.axes === 1 ? ' apex' : ' apices') + ' · peak ' + ag.peak.toFixed(2)
-      : 'cleared';
+const tbQ = new URLSearchParams(location.search);
+const tbRgb = (c, k = 1) => 'rgb(' + c.map(v => Math.round(Math.min(1, v * k) * 255)).join(',') + ')';
+
+// --- the specimen ----------------------------------------------------------
+function tbGrow(name, seed) {
+  tbApp.newSpecimen(name, seed);
+  // a bench opens on a seedling that is already up, not on bare soil
+  const ff = Math.max(0, Math.min(4000, +(tbQ.get('ff') || 260) | 0));
+  for (let i = 0; i < ff; i++) tbApp.plant.step(1);
+  tbApp.age = ff;
+  tbApp.bbS = null;
+  tbApp.startLog(ff);
+  document.documentElement.style.setProperty('--accent', tbRgb(tbApp.pal.vein, 0.95));
+  for (const b of document.querySelectorAll('.chip')) b.classList.toggle('on', b.dataset.name === name);
+  tbSyncCard(true);
+}
+
+// --- the instruments -------------------------------------------------------
+function tbSetTool(tool) {
+  if (!TEND_TOOLS[tool]) return;
+  // pressing the lamp while it is already in hand puts it out, or lights it
+  if (tool === 'lamp' && tbApp.tool === 'lamp') {
+    tbApp.setLamp(!tbApp.lamp.on);
+    if (tbApp.lamp.on && !tbApp._placed) tbApp.moveLamp(innerWidth * 0.72, innerHeight * 0.38, true);
+    tbSay(tbApp.lamp.on ? 'The lamp is lit.' : 'The lamp is out.');
   }
-  const st = c.stage;
-  for (const el of document.querySelectorAll('#stage span'))
-    el.classList.toggle('on', el.dataset.s === st);
-  $('fps').textContent = app.fps.toFixed(0);
-  // A FULL BUFFER USED TO BE INVISIBLE. It drops geometry and carries on, so
-  // the symptom is a picture that is merely missing things — twice now that
-  // has been diagnosed the long way round. `Buffers` counts what it threw
-  // away; this is the only place a person would see it.
-  const sat = app.B.saturated();
-  $('sat').textContent = sat
-    ? `dropped ${sat.tri} tri / ${sat.line} line / ${sat.pt} pt` : '';
-  document.body.classList.toggle('driving', !!app.userDriving);
+  tbApp.tool = tool;
+  tbApp.hover = null; tbApp.hoverStump = null;
+  document.body.dataset.tool = tool;
+  for (const b of document.querySelectorAll('.tool')) {
+    const on = b.dataset.tool === tool;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  tbEl('hint').textContent = TEND_TOOLS[tool].hint;
+  for (const li of document.querySelectorAll('.exp')) {
+    const ex = TEND_EXPERIMENTS.find(e => e.key === li.dataset.key);
+    const on = ex.tool === tool;
+    li.classList.toggle('on', on);
+    if (on) li.classList.add('open');
+  }
+}
+for (const b of document.querySelectorAll('.tool')) b.onclick = () => tbSetTool(b.dataset.tool);
+
+// --- the experiments, as a timeline ----------------------------------------
+const tbList = tbEl('exps');
+for (const ex of TEND_EXPERIMENTS) {
+  const li = document.createElement('li');
+  li.className = 'exp' + (ex.key === 'stream' ? ' open' : '');
+  li.dataset.key = ex.key;
+  li.tabIndex = 0;
+  li.innerHTML = `<span class="yr">${ex.year}</span><h2></h2><p class="story"></p><div class="res"></div>`;
+  li.querySelector('h2').textContent = ex.title;
+  li.querySelector('.story').textContent = ex.story;
+  if (ex.key === 'stream') {
+    const sw = document.createElement('button');
+    sw.className = 'btn on sw';
+    sw.id = 'streamSw';
+    sw.textContent = 'auxin shown';
+    sw.onclick = (e) => { e.stopPropagation(); tbToggleStream(); };
+    li.appendChild(sw);
+  }
+  const act = () => {
+    if (ex.tool) tbSetTool(ex.tool);
+    li.classList.toggle('open', ex.tool ? true : !li.classList.contains('open'));
+  };
+  li.onclick = act;
+  li.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } };
+  tbList.appendChild(li);
+}
+function tbToggleStream() {
+  tbApp.showStream = !tbApp.showStream;
+  tbEl('streamBtn').classList.toggle('on', tbApp.showStream);
+  const sw = tbEl('streamSw');
+  if (sw) { sw.classList.toggle('on', tbApp.showStream); sw.textContent = tbApp.showStream ? 'auxin shown' : 'auxin hidden'; }
+}
+tbEl('streamBtn').onclick = tbToggleStream;
+
+// --- what just happened ----------------------------------------------------
+// How long a line stays up is measured on the page's own clock, not with a
+// timer, so a film rendered a frame at a time holds it for the same length of
+// film as a person would see it held.
+let tbSayUntil = 0;
+function tbSay(text) {
+  const el = tbEl('say');
+  el.textContent = text;
+  el.classList.add('on');
+  // the instruction line steps aside while something is being said, so the two
+  // never overprint — which they did on a phone, where the saying wraps
+  document.body.classList.add('saying');
+  tbSayUntil = tbApp.t + Math.min(7000, Math.max(2600, text.length * 45));
+}
+function tbSayTick() {
+  if (tbSayUntil && tbApp.t > tbSayUntil) {
+    tbSayUntil = 0;
+    tbEl('say').classList.remove('on');
+    document.body.classList.remove('saying');
+  }
+}
+let tbBudSaidAt = -1e9, tbFreeSaidAt = -1e9;
+tbApp.onEvent = (kind, d) => {
+  if (kind === 'cut') tbSay('Cut. Watch the last of the auxin run down past the buds — slowed so you can see it.');
+  else if (kind === 'cutpaste') tbSay('Cut, and auxin put back on the cut. The stump is a source again, as if the tip were still there.');
+  else if (kind === 'paste') tbSay('Auxin back on the stump. It is a source again, as if the tip were still there.');
+  else if (kind === 'wipe') tbSay('Taken away. The last of that auxin is on its way down the stem.');
+  else if (kind === 'nostump') tbSay('Click a stem to cut it and put auxin on the cut, or click a dressed stump.');
+  else if (kind === 'free' && tbApp.t - tbFreeSaidAt > 4000) { tbFreeSaidAt = tbApp.t; tbSay('The drain has reached the buds. They are free — and racing each other.'); }
+  else if (kind === 'replayed') tbSay('That is the plant as it was sent. It is yours now — carry on tending it.');
+  else if (kind === 'bud' && tbApp.t - tbBudSaidAt > 1500) { tbBudSaidAt = tbApp.t; tbSay('A bud grew out. Its own auxin now holds the ones below it.'); }
+};
+
+// --- the readout -----------------------------------------------------------
+let tbCardAt = 0;
+function tbSyncCard(force) {
+  const now = performance.now();
+  if (!force && now - tbCardAt < 250) return;
+  tbCardAt = now;
+  const P = tbApp.plant, sp = tbApp.sp, t = P.time;
+  let leaves = 0, tips = 0, held = 0, free = 0, dorm = 0, top = P.origin[1];
+  for (const ax of P.axes) {
+    if (ax.alive && ax.meristem) tips++;
+    for (const p of ax.pts) if (p[1] > top) top = p[1];
+    for (const o of ax.organs) {
+      if (o.floral || o.shed) continue;
+      leaves++;
+      if (o.took) continue;
+      if (o.freeAt !== undefined && o.stopAt === undefined) free++;
+      else if (ax.streamAt(o.birthLen, t, sp) > sp.branching) held++;
+      else if (!o.armed) dorm++;
+    }
+  }
+  tbEl('cardName').textContent = tbApp.speciesName;
+  tbEl('cardSeed').textContent = 'seed ' + tbApp.seed;
+  tbEl('cHeight').textContent = Math.round((top - P.origin[1]) * WORLD.unitM * 100) + ' cm';
+  tbEl('cLeaves').textContent = leaves;
+  tbEl('cTips').textContent = tips;
+  tbEl('cHeld').textContent = held;
+  tbEl('cFree').textContent = free;
+  tbEl('cDorm').textContent = dorm;
+  tbEl('cStage').textContent = P.stage();
+  for (const li of document.querySelectorAll('.exp')) {
+    const r = tbApp.results[li.dataset.key] || '';
+    const el = li.querySelector('.res');
+    if (el.textContent !== r) el.textContent = r;
+  }
+  // the caption (?clean&caption) is the measured sentence of whichever
+  // experiment the instrument in hand belongs to
+  const ex = TEND_EXPERIMENTS.find(e => e.tool === tbApp.tool);
+  const cap = ex ? tbApp.results[ex.key] || '' : '';
+  if (tbEl('caption').textContent !== cap) tbEl('caption').textContent = cap;
 }
 
-// --- loop ------------------------------------------------------------------
-let last = performance.now(), frames = 0, fpsT = 0;
-function loop(now) {
-  const dt = Math.min(64, now - last); last = now;
-  frames++; fpsT += dt;
-  if (fpsT > 500) { app.fps = frames * 1000 / fpsT; frames = 0; fpsT = 0; }
-  app.step(dt);
-  if (app.fps > 42 || app.frame % 2 === 0) app.buildScene();
-  app.frame++;
-  app.render();
-  hud(now);
-  requestAnimationFrame(loop);
+// --- share: a link that regrows this plant ---------------------------------
+// The record is a seed and what was done to it (see `TendApp.startLog`), packed
+// into the URL's fragment, so nothing leaves the browser that the person does
+// not paste somewhere themselves. Deflated where the browser can, plain where it
+// cannot; either way it is text the page parses and checks, never code.
+const tbB64 = {
+  enc(bytes) { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); },
+  dec(str) { const b = atob(str.replace(/-/g, '+').replace(/_/g, '/')); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; },
+};
+async function tbPack(obj) {
+  const raw = new TextEncoder().encode(JSON.stringify(obj));
+  if (typeof CompressionStream === 'undefined') return 'j' + tbB64.enc(raw);
+  const z = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+  return 'z' + tbB64.enc(z);
 }
-requestAnimationFrame(loop);
+async function tbUnpack(str) {
+  const kind = str[0], bytes = tbB64.dec(str.slice(1));
+  let raw = bytes;
+  if (kind === 'z') raw = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+  else if (kind !== 'j') throw new Error('unknown record');
+  return JSON.parse(new TextDecoder().decode(raw));
+}
+// A record from a URL is untrusted input: every field is checked, every number
+// finite and bounded, and a record that would take the page more than a few
+// seconds to regrow is refused rather than run.
+function tbValid(r) {
+  if (!r || r.v !== 1 || TEND_SPECIES.indexOf(r.sp) < 0) return null;
+  const seed = r.seed >>> 0, ff = Math.max(0, Math.min(4000, r.ff | 0));
+  if (!Array.isArray(r.a) || r.a.length > 6000) return null;
+  const a = [];
+  for (const x of r.a) {
+    if (!Array.isArray(x) || typeof x[0] !== 'string' || !Number.isFinite(x[1])) return null;
+    const t = x[1] | 0;
+    if (t < 0 || t > 20000) return null;
+    if (x[0] === 'c' || x[0] === 'C') { if (!Number.isInteger(x[2]) || !Number.isFinite(x[3])) return null; a.push([x[0], t, x[2], +x[3]]); }
+    else if (x[0] === 'p' || x[0] === 'w') { if (!Number.isInteger(x[2])) return null; a.push([x[0], t, x[2]]); }
+    else if (x[0] === 'L') { if (![x[2], x[3], x[4]].every(Number.isFinite)) return null; a.push(['L', t, +x[2], +x[3], +x[4]]); }
+    else if (x[0] === 'o') a.push(['o', t]);
+    else return null;
+  }
+  return { v: 1, sp: r.sp, seed, ff, a };
+}
+tbEl('shareBtn').onclick = async () => {
+  try {
+    const url = location.href.split('#')[0].split('?')[0] + '#r=' + await tbPack(tbApp.log);
+    await navigator.clipboard.writeText(url);
+    tbSay(tbApp.log.a.length
+      ? 'Link copied. It regrows this plant from its seed, cut for cut, with the lamp where you held it.'
+      : 'Link copied. Nothing has been done to this plant yet — it will grow the same seed untouched.');
+  } catch (e) {
+    tbSay('Could not copy the link: ' + e.message);
+  }
+};
 
-// --- species ---------------------------------------------------------------
-// The rail lives in the bottom bar, not behind the controls sheet: the catalogue
-// is the first thing worth trying, so it should not need a menu opened first.
-const chips = $('species');
-const rgb = (c) => 'rgb(' + c.map(v => Math.round(Math.min(1, v) * 255)).join(',') + ')';
-for (const name of Object.keys(SPECIES)) {
+// --- species, speed, seed --------------------------------------------------
+const tbChips = tbEl('species');
+for (const name of TEND_SPECIES) {
   const b = document.createElement('button');
-  b.className = 'chip' + (name === app.speciesName ? ' on' : '');
-  b.title = name;
-  // the swatch is the species' own vein colour, read off its palette — the same
-  // number the renderer uses, so the chip cannot drift from the plant
+  b.className = 'chip';
+  b.dataset.name = name;
   const dot = document.createElement('i');
-  dot.style.background = dot.style.color = rgb(SPECIES[name].pal.vein);
+  dot.style.background = dot.style.color = tbRgb(SPECIES[name].pal.vein);
   b.append(dot, document.createTextNode(name));
-  b.onclick = () => {
-    app.newSpecimen(name);
-    [...chips.children].forEach(x => x.classList.remove('on'));
-    b.classList.add('on');
-    b.scrollIntoView({ block: 'nearest', inline: 'center' });
-    syncSliders();
-    $('regrowBtn').classList.remove('urge');
-  };
-  chips.appendChild(b);
+  b.onclick = () => tbGrow(name, (Math.random() * 1e6) | 0);
+  tbChips.appendChild(b);
 }
-// a fresh specimen of the same species leaves the rail alone; a species change
-// is the only thing that moves it
-chips.querySelector('.chip.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+function tbSetSpeed(v) {
+  tbApp.speedMul = v;
+  for (const b of document.querySelectorAll('#speed button')) b.classList.toggle('on', +b.dataset.v === v);
+}
+for (const b of document.querySelectorAll('#speed button')) b.onclick = () => tbSetSpeed(+b.dataset.v);
+tbEl('newBtn').onclick = () => tbGrow(tbApp.speciesName, (Math.random() * 1e6) | 0);
+tbEl('benchBtn').onclick = () => document.body.classList.toggle('benchOpen');
 
-// --- the view rail ---------------------------------------------------------
-// Which channels of the simulation reach the screen.
-//
-// IN THE BAR, NOT IN THE SHEET, and the reason is the whole argument for where
-// any control goes. It started in the controls sheet on the theory that a view
-// is something you choose once and then watch. That was wrong the first time
-// anyone used it: the sheet is 560px wide and up to 70vh tall, so opening it to
-// change the view covers the thing whose view you are changing. **A control that
-// hides its own subject cannot be judged.** Switching views is now one click and
-// nothing moves over the plant.
-//
-// The copy matters more here than on the other controls, so it goes through
-// `showTip` — the same channel the sliders use to say what they just did, and it
-// gets out of the way on its own. Every one of these is the same plant, the same
-// solver and the same frame; what changes is how much of what the simulation
-// knows is allowed through. Somebody who reads "cells" as a stylised filter has
-// been told the opposite of the truth.
-const VIEW_NOTE = {
-  natural: 'The plant standing in light. Opaque tissue, the canalised veins glowing inside it.',
-  cells: 'No lamina at all — every leaf, growing point and ovary wall drawn at the resolution the solver runs at. Each disc is one cell holding the auxin it actually holds; each needle is the wall it has loaded its pumps onto. About 67,000 of them on a Cathedral Fern.',
-  flux: 'The organism as one transport network. Drop the cells and keep what they are doing: veins and pump directions, nothing else. Tip, leaf and fruit end up in the same language, because they are the same solver on different geometry.',
-  field: 'An instrument, not a picture. Auxin concentration on one ramp, the species colours discarded, no bloom or grade. Two species look alike in here — which is the point, since a species is only a parameter set.',
-};
-const viewsEl = $('views');
-for (const name of Object.keys(VIEWS)) {
-  const b = document.createElement('button');
-  if (name === app.viewName) b.className = 'on';
-  b.textContent = VIEWS[name].label || name;
-  b.title = VIEW_NOTE[name] || name;
-  b.onclick = () => {
-    if (app.viewName === name) return;          // no tip for a no-op
-    app.setRenderView(name);
-    for (const x of viewsEl.children) x.classList.remove('on');
-    b.classList.add('on');
-    showTip(VIEW_NOTE[name] || '');
-  };
-  viewsEl.appendChild(b);
-}
+addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+  const k = e.key.toLowerCase();
+  if (k === '1') tbSetTool('look');
+  else if (k === '2') tbSetTool('lamp');
+  else if (k === '3') tbSetTool('shears');
+  else if (k === '4') tbSetTool('paste');
+  else if (k === 'a') tbToggleStream();
+  else if (k === 'n') tbGrow(tbApp.speciesName, (Math.random() * 1e6) | 0);
+  else if (k === ' ' && e.target === document.body) { e.preventDefault(); tbSetSpeed(tbApp.speedMul > 0 ? 0 : 1); }
+});
 
-// --- controls that show you their own effect -------------------------------
-let tipT = 0;
-function showTip(text) {
-  const t = $('tip');
-  t.textContent = text;
-  t.classList.add('on');
-  clearTimeout(tipT);
-  // HOW LONG IT STAYS UP IS A FUNCTION OF HOW MUCH THERE IS TO READ. This was a
-  // flat 3800ms, which suits the shortest slider tip and no other: the view
-  // notes run to 260 characters, and 3.8 seconds of that is 68 characters a
-  // second, roughly three times a reading pace. 38ms a character is about 315
-  // words a minute — brisk, but the tip is a nudge rather than a document, and
-  // the floor keeps a short one from flashing past.
-  tipT = setTimeout(() => t.classList.remove('on'),
-    Math.min(10000, Math.max(3800, text.length * 38)));
-}
-
-const SLIDERS = [
-  ['transport', v => { app.prm.T = v; }, () => app.prm.T, 8, 90, 1,
-    'How hard each cell pumps auxin at its neighbours. Turn it down far enough and the maxima stop forming — the plant runs out of leaves.'],
-  ['diffusion', v => { app.prm.D = v; }, () => app.prm.D, 1, 14, 0.1,
-    'How much auxin leaks between cells. This sets how far a new leaf reaches to keep the next one away from it.'],
-  ['tip growth', v => { for (const a of app.plant.axes) if (a.meristem) a.meristem.o.G = v; },
-    () => { for (const a of app.plant.axes) if (a.meristem) return a.meristem.o.G; return app.mo.G; },
-    0.0008, 0.010, 0.0002,
-    'How fast the growing point expands. Faster means gaps open sooner, so leaves come thicker and faster.'],
-  ['sharpness', v => { app.prm.b = v; }, () => app.prm.b, 1.5, 5, 0.1,
-    'How decisively a cell commits to its richest neighbour. High values make hard, isolated maxima; low ones smear them out.'],
-  ['generative ring', v => {
-    for (const a of app.plant.axes) if (a.meristem) a.meristem.o.rOut = v > 0 ? a.meristem.o.rCZ + v : 0;
-    app.ringWidth = v;
-  }, () => app.ringWidth ?? 0, 0, 5, 0.2,
-    'How wide a band may found a leaf. Narrow it and the divergence angle tightens — and the shoot nearly stops making leaves. That trade-off is a real result.'],
-  // The weather, in metres per second at a metre off the ground — the one number in
-  // the mechanics that is a composition choice rather than a measurement, so it is the
-  // one that belongs on a slider. The band edges are Beaufort's: 0 is a dead calm and
-  // costs exactly nothing, 1.6 is where leaves start to rustle, 3.4 is "leaves and
-  // small twigs in constant motion", 5.5 raises dust. Everything downstream of it —
-  // gust strength, gust frequencies, the height profile — is rebaked from it, so this
-  // cannot put the air into a state the physics disagrees with.
-  ['wind', v => { app.setWind(v); }, () => app.plant.wind.o.uRef, 0, 8, 0.1,
-    'How hard it is blowing, in metres per second. Beaufort 2 (1.6-3.3) is leaves rustling; 3.4 and up is constant motion. The gusts get faster as well as stronger, because an eddy\'s frequency is how quickly the wind carries it past.'],
-  ['time', v => { app.speedMul = v; }, () => app.speedMul, 0, 4, 0.25,
-    'How fast the simulation runs.'],
-];
-// Two controls act on the whole standing plant rather than on the growing point, so
-// they must not yank the camera to the apex the way the chemistry sliders do — you
-// cannot judge sway through a macro lens on a meristem.
-const WHOLE_PLANT = new Set(['time', 'wind']);
-const slidersEl = $('sliders');
-const sliderRefs = [];
-for (const [label, set, get, min, max, step, tip] of SLIDERS) {
-  const row = document.createElement('div');
-  row.className = 'row';
-  row.innerHTML = '<label>' + label + '<span></span></label>' +
-    '<input type="range" min="' + min + '" max="' + max + '" step="' + step + '">';
-  slidersEl.appendChild(row);
-  const inp = row.querySelector('input');
-  const out = row.querySelector('span');
-  inp.oninput = () => {
-    set(parseFloat(inp.value));
-    out.textContent = inp.value;
-    // take the viewer to where this control's effect is actually visible
-    if (!WHOLE_PLANT.has(label)) {
-      app.takeOver();
-      setCellFocus('apex');       // sets autoRot for us
-      app.cam.idle = 9999;
-      showTip(tip);
-      $('regrowBtn').classList.add('urge');
-    } else if (label === 'wind') {
-      // Nothing to regrow — the weather changes what the plant is doing, not what it
-      // grew into — but the tip is still worth showing, because "the gusts get faster
-      // as well as stronger" is the non-obvious half of moving this control.
-      showTip(tip);
-    }
-  };
-  sliderRefs.push({ inp, out, get });
-}
-function syncSliders() {
-  for (const s of sliderRefs) {
-    const v = s.get();
-    s.inp.value = v;
-    s.out.textContent = (Math.round(v * 10000) / 10000).toString();
+// --- boot ------------------------------------------------------------------
+{
+  const name = tbQ.get('species') || 'Cathedral Fern';
+  const seed = tbQ.has('seed') ? (+tbQ.get('seed') >>> 0) : ((Math.random() * 1e6) | 0);
+  tbGrow(TEND_SPECIES.indexOf(name) >= 0 ? name : TEND_SPECIES[0], seed);
+  if (tbQ.has('speed')) tbSetSpeed(+tbQ.get('speed'));
+  if (tbQ.has('lamp')) {
+    const v = tbQ.get('lamp').split(',').map(Number);
+    if (v.length === 3 && v.every(Number.isFinite)) { v3set(tbApp.lamp.pos, v[0], v[1], v[2]); tbApp.setLamp(true); tbApp._placed = true; }
   }
-}
-syncSliders();
-
-// --- buttons ---------------------------------------------------------------
-$('newBtn').onclick = () => { app.newSpecimen(); app.giveBack(); syncSliders(); $('regrowBtn').classList.remove('urge'); };
-$('regrowBtn').onclick = () => {
-  app.newSpecimen(app.speciesName);
-  app.giveBack();
-  $('regrowBtn').classList.remove('urge');
-  showTip('Same chemistry, new specimen — the shape follows from the settings you just changed.');
-};
-$('pruneBtn').onclick = () => {
-  if (app.plant.prune()) {
-    showTip('Apex removed. The auxin it was sending down drains away past the buds it was holding; they come free, and the first to grow out holds the rest back. tend.html has the whole experiment.');
+  tbSetTool(TEND_TOOLS[tbQ.get('tool')] ? tbQ.get('tool') : 'look');
+  if (tbQ.has('clean')) document.body.classList.add('clean');
+  if (tbQ.has('caption')) document.body.classList.add('caption');
+  // a shared record regrows in front of the person it was sent to
+  if (location.hash.startsWith('#r=')) {
+    tbUnpack(location.hash.slice(3)).then((r) => {
+      const log = tbValid(r);
+      if (!log) throw new Error('that link does not hold a plant this page can grow');
+      tbApp.replay(log);
+      document.documentElement.style.setProperty('--accent', tbRgb(tbApp.pal.vein, 0.95));
+      for (const b of document.querySelectorAll('.chip')) b.classList.toggle('on', b.dataset.name === log.sp);
+      tbSay(`Regrowing a ${log.sp} someone tended — ${log.a.length} thing${log.a.length === 1 ? '' : 's'} done to it.`);
+    }).catch((e) => tbSay('Could not regrow that plant: ' + e.message));
   }
-};
-
-// --- inject something ------------------------------------------------------
-// The one control here that perturbs the plant's CHEMISTRY mid-life rather than
-// its parameters. Deliberately does NOT move the camera: an agent's effect is
-// whole-plant and slow, so yanking to the apex the way the chemistry sliders do
-// would frame out the thing you just caused. Same reasoning as WHOLE_PLANT above.
-const AGENT_TIP = {
-  gall: 'Auxin production, raised wherever the agent has reached — the direct analogue of the genes Agrobacterium injects. Watch the LEAF, not the shoot: the blade keeps canalising, but with every cell a source there is no gradient left to build a hierarchy out of, so traffic spreads over a hundred strands instead of ten.',
-  lesion: 'The same auxin source, but slow, and with the two things the literature says really happen: the host conjugates away the excess, and the auxin closes the plasmodesmata the agent is spreading through. It stops. Where it stops is not written down anywhere — it is where a slow front got to before the blade finished developing.',
-  chlorosis: 'A sink rather than a source: the agent degrades auxin where it sits. The specimen thins out and founds fewer organs, because there is less signal to sharpen into a maximum.',
-  blind: 'Polarisation competence knocked out. The tissue still carries auxin perfectly well — it just cannot sharpen it into a peak any more, and founding a leaf IS sharpening a peak. Expect the growing point to keep going and stop producing.',
-  invert: 'Polarity REVERSED. Below zero the competence term stops pulling a cell toward uniform and reflects it through: PIN goes to the wall the gradient rule would have avoided. The most drastic thing here — expect a bare whip with its leaves at the foot, arrested before it ever flowers.',
-  leafygall: 'FALSIFIED, and kept so it stays re-measurable. It was meant to reproduce Rhodococcus — new competent domains, so more organs and iterated shoots. It does not: competence sharpens the maxima that exist rather than creating new ones. Expect roughly nothing, and that is the result.',
-  systemic: 'Rides the auxin transport field instead of crawling. ⚠ No evidence supports this — nothing pathogenic actually moves in the polar transport stream — so it is kept as our own construction and labelled, not as physics.',
-};
-const agentSel = $('agentSel');
-for (const name of Object.keys(AGENTS)) {
-  const o = document.createElement('option');
-  o.value = name; o.textContent = name;
-  agentSel.appendChild(o);
+  // the first thing to say is what to pick up, not how to turn the camera
+  if (!tbQ.has('tool')) tbEl('hint').textContent = 'Pick up the lamp or the shears below. Drag to turn around the plant.';
 }
-agentSel.value = 'invert';   // the one whose effect is unmistakable
-// THERE IS A WINDOW OF SUSCEPTIBILITY, AND NOTHING SCHEDULES IT. Measured over
-// eight seeds, an `invert` inoculation takes 8/8 at 200 steps, 7/8 at 400, 4/8
-// at 600, 1/8 at 800 and 0/8 at 1000 — after which the specimen finishes with
-// exactly the organ count it would have had untouched. A meristem is growing,
-// advecting tissue: every cell it makes starts clean, so late on the plant
-// simply outruns the agent, and the leader converts to a flower before a titre
-// can build. That is a real property and not a failure, but it makes for a
-// miserable demo, so the button says which side of the window you are on.
-const SUSCEPTIBLE_UNTIL = 700;
-function infect(name) {
-  const inf = app.plant.inoculate(name);
-  if (!inf) {
-    // A herb's leader converts to a flower early and `setFruit` takes its
-    // growing point with it, leaving nothing living to inject into. Say so
-    // rather than appearing to work — the first browser capture written against
-    // this API infected nothing four times in silence.
-    showTip('Nothing to inject into — every growing point on this specimen has already converted or arrested. An agent needs living meristem. Use "fresh + inject" instead.');
-    return false;
-  }
-  const late = app.age > SUSCEPTIBLE_UNTIL;
-  showTip((AGENT_TIP[name] || ('Injected ' + name + '.')) + (late
-    ? '  ⚠ This specimen is past its window — an inoculation this late usually washes out, and the burden row will fall back to "cleared". That is real, not a bug: a meristem makes clean cells faster than the agent can take them. Use "fresh + inject" to see the effect.'
-    : '  Watch the burden row on the card — if it climbs, it took.'));
-  return true;
-}
-$('infectBtn').onclick = () => infect(agentSel.value);
 
-// --- grow with a floral form ------------------------------------------------
-// The other kind of identity change: a homeotic PROGRAM rather than an agent.
-// One button, not an "apply" pair like the agent's, because whorl identity is
-// read at each organ's founding — a standing plant that has flowered cannot
-// be re-formed, so the honest verb is to grow one under the program. The
-// setting is scene-level and sticky: "new specimen" and a garden planted
-// while it is set stay in the chosen form until it is put back to wild.
-const FORM_TIP = {
-  wild: 'The species as shipped — whatever floral plan its own chemistry settles into.',
-  abc: 'The full ABC model: identity banded outermost-to-innermost on the one coordinate the floral meristem already makes as it consumes itself. A green calyx, a corolla, a ring of filaments carrying anthers, a central pistil.',
-  double: 'The C-class mutant — the doubled rose. Organs that would have been stamens are founded as petals and the apex keeps founding: 20-odd petals in nested whorls, graded outer-large to inner-small.',
-  daisy: 'A composite head. The florets ride the tip of a bolting peduncle and the head becomes the disc the meristem actually was — phyllaries at the rim, rays, disc florets, a fruit at the centre. Costs more organs; a garden grown under it is a heavier garden.',
-  columbine: 'The spurred plan’s architecture: a showy outer whorl, nested inner whorls on a small receptacle, each flower carried clear on its own pedicel. The nectar spur itself and the bicolor live in flowers.html’s petal renderer — here you see the body plan.',
-};
-const formSel = $('formSel');
-for (const name of Object.keys(FLORAL_FORMS)) {
-  const o = document.createElement('option');
-  o.value = name; o.textContent = name;
-  formSel.appendChild(o);
+function tbFrame(dt) {
+  tbApp.step(dt);
+  if (tbApp.fps > 40 || tbApp.frame % 2 === 0 || tbFilm) tbApp.buildScene();
+  tbApp.frame++;
+  tbApp.render();
+  tbSyncCard(tbFilm);
+  tbSayTick();
 }
-formSel.value = 'wild';
-$('formBtn').onclick = () => {
-  app.floralForm = formSel.value === 'wild' ? null : formSel.value;
-  app.newSpecimen(app.speciesName);
-  app.giveBack();
-  syncSliders();
-  $('regrowBtn').classList.remove('urge');
-  showTip(FORM_TIP[formSel.value] || '');
-};
-// The reliable demo path: a new specimen, run forward to the middle of its
-// susceptible window, and injected there. Stepping synchronously is fine — this
-// is a few hundred steps on a seedling, not a grown plant.
-$('infectNewBtn').onclick = () => {
-  app.newSpecimen(app.speciesName);
-  app.giveBack();
-  for (let i = 0; i < 260; i++) app.plant.step(1);
-  app.age = 260;
-  syncSliders();
-  $('regrowBtn').classList.remove('urge');
-  infect(agentSel.value);
-};
-// The close-up is a tour of two places, not one: the tip, where needles
-// converge and that convergence IS a leaf, and the blade, where the same
-// needles fall into line and that line IS a vein. One button walks the viewer
-// through both rather than adding a fourth control to a full bar.
-const CELL_LABEL = { null: 'into the cells', apex: 'into a leaf', leaf: 'pull back' };
-function setCellFocus(f) {
-  app.enterFocus(f);
-  // The tip is a dome and orbiting it shows more of the spiral; a blade is
-  // flat, and orbiting one only carries the camera round to its edge, where
-  // the whole cell sheet collapses onto a line.
-  app.cam.autoRot = f !== 'leaf';
-  $('cellsBtn').textContent = CELL_LABEL[f === null ? 'null' : f];
+// ?film: the page does not run its own loop. A script advances it one frame at a
+// time — `window.__tendFrame(ms)` — and photographs each, so a clip is as smooth
+// as its frame rate and the same every time (tools/tend_film.mjs).
+const tbFilm = tbQ.has('film');
+if (tbFilm) {
+  document.body.classList.add('film');
+  tbApp.fps = 60;
+  window.__tendFrame = (ms) => tbFrame(ms);
+} else {
+  let tbLast = performance.now(), tbFrames = 0, tbFpsT = 0;
+  const tbLoop = (now) => {
+    const dt = Math.min(64, now - tbLast); tbLast = now;
+    tbFrames++; tbFpsT += dt;
+    if (tbFpsT > 500) { tbApp.fps = tbFrames * 1000 / tbFpsT; tbFrames = 0; tbFpsT = 0; }
+    tbFrame(dt);
+    requestAnimationFrame(tbLoop);
+  };
+  requestAnimationFrame(tbLoop);
 }
-$('cellsBtn').onclick = () => {
-  app.takeOver();
-  app.cam.idle = 9999;
-  if (app.focus === null) {
-    setCellFocus('apex');
-    showTip('The growing tip, one cell at a time. Every needle is a cell aiming its pumps — where they agree, a leaf begins.');
-  } else if (app.focus === 'apex') {
-    // nothing to show until a blade has actually opened
-    if (!app.watchOrgan()) {
-      setCellFocus(null);
-      showTip('No blade has opened yet — let this one grow a little, then look again.');
-    } else {
-      setCellFocus('leaf');
-      showTip('The same cells, the same needles, in a leaf. Where they fall into line the auxin gets a road, and that road is a vein — brightness is the traffic it carries.');
-    }
-  } else setCellFocus(null);
-};
-$('sheetBtn').onclick = () => {
-  document.body.classList.toggle('sheet');
-  $('sheetBtn').textContent = document.body.classList.contains('sheet') ? 'close' : 'controls';
-};
-$('handover').onclick = () => { app.giveBack(); $('cellsBtn').textContent = CELL_LABEL.null; };
-$('cineBtn').onclick = () => {
-  document.body.classList.add('cinema');
-  document.body.classList.remove('sheet');
-  $('sheetBtn').textContent = 'controls';
-  app.giveBack();
-};
-$('exitCine').onclick = () => document.body.classList.remove('cinema');
-$('aboutBtn').onclick = () => $('about').classList.toggle('show');
-$('aboutClose').onclick = () => $('about').classList.remove('show');
-
-addEventListener('resize', () => app.renderer.resize());
-setTimeout(() => { const h = $('hint'); if (h) h.style.opacity = 0; }, 8000);
-
-// --- first run: the mechanism before anything else -------------------------
-setCellFocus('apex');
-showTip('This is the growing tip, one cell at a time. Every needle is a cell aiming its pumps — where they agree, a leaf begins.');
+addEventListener('resize', () => tbApp.renderer.resize());
 
 </script>
 </body>

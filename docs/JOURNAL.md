@@ -3665,3 +3665,140 @@ freeze (`speedMul = 0`) before the shutter. And stage polling cannot be made fin
 in headless at all — the app takes up to 12 simulation steps per frame and
 software rendering makes frames long, so a specimen crosses fruiting, ripe and
 senescing inside one 200ms poll whatever `speedMul` says. Stop at `flowering`.
+
+## Tend: the prune button never pruned, and the three experiments that found auxin (2026-09-22)
+
+A fresh pair of eyes asked what would make a new kind of thing out of this engine
+rather than another view of the same one. The answer that came back was **agency**:
+every feature so far has been something to watch, and the audience's own
+suggestion — "inject viruses into the plants" — was already a request to *do*
+something to a plant. `15_pathogen.js` answered it and turned out to be invisible.
+So: a page where a person cannot draw the plant, but can do what a plant
+physiologist does — move the light, cut the tip, put the tip's hormone back on the
+cut — and watch the chemistry answer. `tend.html`, built by `tend/build.js`.
+
+### The shipped `prune()` froze the plant it was meant to release
+
+The main page has had a "cut the apex" button since before the garden, with the
+tooltip *"the auxin that was suppressing the buds below it is gone, so one of them
+will take over"*. Measured before anything else was written: it does the opposite.
+A young Cathedral Fern cut at step 500 stood at **one axis and thirteen organs
+forever**; three species cut at two ages, and **not one bud woke in any of them**.
+
+The cause is two lines. `prune()` set the tallest axis to not-alive, and
+`Axis.step` returned from its `!alive` branch before the branching loop, so a
+decapitated axis never looked at its buds again — and the shipped dominance rule
+measures suppression from the axis's *own* tip, which a decapitated axis does not
+have. Thimann & Skoog's result, the oldest experiment in auxin biology, had been a
+button in the piece the whole time, and it killed the plant. `test/tend.mjs`
+section 2 is the regression test; the button now makes a real cut.
+
+### The mechanism: one stream, three readings
+
+`Axis.streamAt(s, t)` sums every auxin source whose rootward path passes arc `s`:
+the axis's own apex, every apex in every branch attached above `s`, a bud that has
+come free and begun to export, paste on a stump. Each is attenuated over the same
+`dominance` the shipped rule and `statocyteIAA` already use, and each is subject to
+a **front**: auxin leaving a source at `t0` reaches a point `d` below it at
+`t0 + d/v`. A cut does not dim anything; the auxin already in the stem keeps
+arriving until its tail has passed, and that tail is the drain front. The page
+draws it literally — motes leaving every source at `v`, fading over `dominance`,
+existing only if their source was on when they left — so what a person watches run
+down the stem after a cut is `streamAt`, drawn, not an effect designed to look
+like a flow.
+
+### The literature sweep corrected the design in five places
+
+Briefed before building rather than after, per the rule this project learned on the
+conifer. `docs/research_9_22_26_tend.md`, flagged `[D]`/`[I]`/`[OURS]`/`⚠`.
+
+- **Thimann & Skoog used agar, not lanolin.** Blocks of agar renewed every six
+  hours on decapitated broad beans; the buds grew "as soon as the application ...
+  was stopped". Lanolin is Laibach 1933 and the later textbook versions. The page's
+  copy was wrong in its first draft and says agar now.
+- **The depletion front is real but it does not start release.** Pea buds 40 cm
+  below a cut grow within 2.5 h, faster than any auxin front; the first flush is
+  sugar and cytokinin (Mason 2014; Cao 2023). Auxin decides the *next* step, from
+  about a day on: which freed bud **commits** and which is pushed back into
+  dormancy (Morris 2005; Balla 2016). So a bud here has three states — held, free,
+  committed — and nothing grows until auxin says so. The engine has no sugar, and
+  it does not pretend to show the first flush.
+- **The first draft committed a freed bud instantly and so always produced exactly
+  one winner.** That is the limit τ_commit = 0 of the canalisation model, which
+  releases several buds exactly when commitment is slow against the drain. A freed
+  bud now exports on a ramp for `tauCommit` before it commits, and the ones below it
+  that its rising stream reaches are put back to sleep first. Measured on a
+  Cathedral Fern: 17 held, 17 freed, **one committed, sixteen put back to sleep** —
+  Balla 2016's "the upper bud won by day 3 and the loser was dormant by day 5".
+- **Polar-transport speed is a lookup.** Kramer 2011: 227 measured speeds over the
+  growth rate of the organ they run in, median **6.6** (range about 4-16). `patRatio`
+  is that, times the species' own growth; the first draft's hand-set 0.12 sat at 5.0.
+- **The light's gain is measured too.** Photo-to-gravi balances scale as irradiance
+  to the **0.4** (Bastien 2015 fitting Galland 2002), not the saturating curve the
+  draft used; the vector-sum steering direction the draft had turned out to be the
+  exact equilibrium of their additive sine laws.
+
+Two findings it produced that are warnings rather than fixes: **Snow 1931 measured
+inhibition *increasing* with distance from the apex** over 0.5-17 cm, so the
+exponential decay and its length are a dial with the only data point against them;
+and **retiring a bud forever on a failed coin flip has no support** — the stream
+path has no coin; commitment is decided by the competition.
+
+### Three bugs the harness caught, and the order they went in
+
+- **The discretisation window.** Two fronts travelling at the same speed — the drain
+  of the old apex and the arrival of the new shoot's stream — reach every lower bud
+  at the same instant in continuous time, and a step apart in the solver. Each lower
+  bud saw neither and woke. Dating the new source to the start of its step closed it.
+- **An age check placed before the arming check.** A bud younger than `budRelease`
+  was skipped before it could be marked as held, so by the time it was old enough the
+  drain had passed and it was never freed. A Sun Coral pruned at step 500 never
+  regrew. Held is a statement about the stream, not about the bud.
+- **The page's event list is bounded at 64**, so a harness counting frees undercounted
+  and reported more buds put back to sleep than had come free. Harnesses subscribe
+  through `Plant.onNote` now.
+
+And one from looking: a free bud flipped between free and held every two or three
+steps while several ramping sources hovered at the threshold. `BUD_BAND` (15%) is a
+numerical hysteresis for that and is labelled as numerical, not as a constant of
+biology.
+
+### What was measured
+
+`node test/tend.mjs` (all eight bench species, two seeds): every cut had buds held
+below it and every one ended in a commitment; where more than one came free, fewer
+committed than came free; **with auxin back on the cut, not one held bud came free
+on any plant**, and taking it away let one commit on every plant. The drain reaches
+the nearest held bud within one step of `t_cut + d/v` (predicted 700.23, freed at
+701) and it commits exactly `tauCommit` later. Under a lamp the tip settles within
+0.05° of `atan(k)`, k = photoGain·I^0.4. Uncut specimens are **bit-identical to
+`main`** — 4 species × 2 seeds through senescence, every stem point hashed every
+400 steps — because nothing on the shipped path reads the stream.
+
+`tools/tend_replay.mjs`: a live session in a browser — lamp dragged, a cut, a cut
+dressed with auxin, the auxin taken off — shared as a 499-character link and
+regrown in a second page to the **same fingerprint of every stem point at the same
+step**. The lamp is why that needed care: the pointer moves between frames, so the
+simulation reads a committed copy that moves in logged, quantised steps.
+
+### The clock, calibrated by the drain
+
+Development here is compressed ~10^4 against physical time, and until now nothing
+said by how much. The drain gives it: the front runs at `patV` world units a step,
+and a real one at about 1 cm/h (Morris 2005), so one step of a Cathedral Fern is
+about **an hour of a plant's life** and one second on screen about five days. The
+page reports every measured interval in those hours — "one grew out about 2 days
+after the cut" — and that is not a coincidence with the literature's 24-72 h: the
+commitment time was set from it (`commitReach`, 6 units ≈ 37 cm of front travel).
+
+### What it does not do, and says so
+
+- **The first flush.** Sugar-driven release is not computable here.
+- **Tip steering, not a bending growth zone.** The lamp pulls the tip at the shipped
+  `tropism` rate, which is not tied to growth; real stems curve the whole growth zone
+  and straighten from the tip down (Bastien 2013's AC model), and the engine's
+  gravitropism has always had the same limitation. The stem is a record of where the
+  light was while it grew, which is honest, but it is not how a real stem turns.
+- **A lower branch cannot inhibit an upper one** (Ongaro 2008): the stream only
+  flows rootward from sources above a bud.
+- **Light does not turn gravitropism down** (phyA; Lariguet 2004).

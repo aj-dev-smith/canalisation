@@ -254,7 +254,7 @@ $('regrowBtn').onclick = () => {
 };
 $('pruneBtn').onclick = () => {
   if (app.plant.prune()) {
-    showTip('Apex removed. The auxin that was suppressing the buds below it is gone, so one of them will take over.');
+    showTip('Apex removed. The auxin it was sending down drains away past the buds it was holding; they come free, and the first to grow out holds the rest back. tend.html has the whole experiment.');
   }
 };
 

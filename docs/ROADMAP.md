@@ -6,6 +6,34 @@ priority.** The list below is the priority.
 
 **Start here, in this order:**
 
+0t. **TEND — BUILT 2026-09-22, and it opened two things worth doing next.** `tend.html`
+   is a bench: a person moves a lamp, cuts stems, and puts auxin back on a cut, and the
+   engine answers through a new auxin stream (`Axis.streamAt`) with a drain front, bud
+   release, and a competition that decides which freed bud commits. It found and fixed
+   a shipped bug on the way — **the main page's prune button had always frozen the
+   plant it cut**. JOURNAL 2026-09-22 has the story, `docs/research_9_22_26_tend.md`
+   the literature, `test/tend.mjs` the checks. The follow-ons, in order:
+
+   - **The canalisation switch, run for real (the literature's "Level 1").** Bud
+     commitment here is a stated lag (`commitReach`, a lookup from pea) and a ramp on a
+     freed bud's export ([OURS]). Prusinkiewicz et al. 2009 get both, the winner, the
+     hysteresis and competition in BOTH directions, out of `stepAuxin` run on the
+     metamer chain with a flux-dependent PIN. ⚠ `38_shoot.js` is that network and was
+     falsified — but for leaf-abscission ORDER, not bud activation, and bud activation
+     is the one job the sweep says such a network does well. Read JOURNAL 2026-07-26
+     first, then the sweep's §1.4 and Part 4.
+   - **The AC model for every tropism.** Tip steering at a rate not tied to growth gets
+     either the timing or the shape right, never both. Bastien et al. 2013's model puts
+     curvature in the growth zone with a proprioceptive term, straightens from the tip
+     down, and overshoots once B > 2.8. It needs curvature in already-laid stem, which
+     nothing does yet, and its proprioception is **not auxin** (Haga & Iino 2006), so it
+     would be a stated term booked in SCIENCE.md. It would fix the lamp and the engine's
+     gravitropism at once.
+   - **The architecture view is half-built.** The bench draws the dominance field as
+     motes and a stem glow through `drawSpecimen`'s `stemGlow` hook. Porting it to the
+     main page is a `VIEWS` entry and that hook — 0z below, mostly paid for.
+
+
 0z0. ~~**WATCH THE INFECTED PLANT**~~ — **DONE 2026-08-03, and the verdict is "not
    seeing much here."** `src/15_pathogen.js` works: derived, measured against closed
    forms, drawn in ASCII, wired to a UI, and spanning +6.8% organs (`gall`) to −91.5%
