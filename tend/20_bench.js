@@ -757,12 +757,13 @@ class TendApp extends App {
           hv.p[2] + (_tbB[2] * Math.cos(th) + _tbC[2] * Math.sin(th)) * r);
         B.point(q, [1.4, 1.45, 1.5], r * 0.45);
       }
-      const ghost = [0.55, 0.62, 0.66];
-      // the part of this axis above the cut
-      const up = [hv.p];
-      for (let k = i; k < n; k++) up.push(ax.pts[k]);
-      stemRibbon(B, up, up.map(() => 0.02), ghost, 0.9);
-      const walk = (a) => { stemRibbon(B, a.pts, a.radii.map(() => 0.02), ghost, 0.9); for (const k of a.kids) walk(k); };
+      // wider than the stem, so what shows is a halo round everything that
+      // would leave the plant — the tube hides the ribbon's middle
+      const ghost = [0.62, 0.68, 0.72];
+      const up = [hv.p], ur = [(ax.radii[i] || 0.05) * 1.9];
+      for (let k = i; k < n; k++) { up.push(ax.pts[k]); ur.push(ax.radii[k] * 1.9); }
+      stemRibbon(B, up, ur, ghost, 0.55);
+      const walk = (a) => { stemRibbon(B, a.pts, a.radii.map(r => r * 1.9), ghost, 0.55); for (const k of a.kids) walk(k); };
       for (const k of ax.kids) if (k.attachLen() > hv.s) walk(k);
     }
     // A BUD WAKING: a brief light where it happened
@@ -849,18 +850,30 @@ class TendApp extends App {
       return h < 36 ? `about ${Math.max(1, Math.round(h))} hour${Math.round(h) === 1 ? '' : 's'}`
         : `about ${Math.round(h / 24)} days`;
     };
+    // THE LEAN, NOT THE ANGLE TO THE LAMP. The first version reported how much the
+    // angle between a tip's heading and the lamp had closed, and it said "turned
+    // away" while the leader visibly arched over toward the lamp: a tip that grows
+    // up past the lamp's height changes the direction TO the lamp faster than it
+    // turns. What Darwin measured, and what reads, is the lean: how far from
+    // vertical the tip now points, signed by whether that lean faces the lamp.
     const tl = this.trials.light;
     if (tl && this.lamp.on) {
-      let n = 0, turned = 0;
-      for (const e of tl.tips) {
-        if (!e.ax.alive || !e.ax.meristem || P.axes.indexOf(e.ax) < 0) continue;
-        turned += (e.a0 - this._tipToLamp(e.ax)) * 180 / Math.PI; n++;
+      let n = 0, lean = 0;
+      const L = this.simLamp.on ? this.simLamp.pos : this.lamp.pos;
+      for (const ax of P.axes) {
+        if (!ax.alive || !ax.meristem) continue;
+        const d = ax.dir, tip = ax.tipPos();
+        const hx = L[0] - tip[0], hz = L[2] - tip[2], hl = Math.hypot(hx, hz) || 1;
+        const dh = Math.hypot(d[0], d[2]);
+        const a = Math.atan2(dh, d[1]) * 180 / Math.PI;
+        const facing = dh > 1e-4 ? (d[0] * hx + d[2] * hz) / (dh * hl) : 0;
+        lean += a * Math.sign(facing || 1); n++;
       }
       const dt = P.time - tl.t0;
       if (n && dt > 60) {
-        const m = turned / n;
-        this.results.light = `${n === 1 ? 'The growing tip has' : n + ' growing tips have'} turned `
-          + `${Math.abs(m).toFixed(0)}° ${m >= 0 ? 'toward' : 'away from'} the lamp over ${hrs(dt)}.`;
+        const m = lean / n;
+        this.results.light = `${n === 1 ? 'The growing tip leans' : n + ' growing tips lean, on average,'} `
+          + `${Math.abs(m).toFixed(0)}° from upright, ${m >= 0 ? 'toward' : 'away from'} the lamp — lit for ${hrs(dt)}.`;
       } else if (!n && dt > 60) {
         this.results.light = 'No tip is growing, so nothing can turn. Cut a stem and let a bud grow out, then light it.';
       }

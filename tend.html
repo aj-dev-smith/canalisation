@@ -89,7 +89,10 @@
   /* the bar: which plant, how fast, and whether the hormone is shown */
   #bar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;align-items:center;justify-content:center;gap:10px;
     padding:8px 14px calc(10px + env(safe-area-inset-bottom));flex-wrap:nowrap}
-  #species{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;max-width:min(640px,58vw)}
+  #species{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;max-width:min(640px,58vw);
+    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%);
+    mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%);padding:0 10px}
+  body.saying #hint{opacity:0}
   #species::-webkit-scrollbar{display:none}
   .chip{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:4px 10px 4px 8px;border-radius:999px;cursor:pointer;
     background:transparent;border:1px solid var(--line);color:var(--dim);font-size:11.5px;white-space:nowrap}
@@ -113,18 +116,30 @@
   #fatal{display:none;position:fixed;inset:0;z-index:99;background:#04080a;color:#f99;padding:30px;font:13px/1.5 ui-monospace,monospace;white-space:pre-wrap}
 
   @media (max-width:760px){
-    :root{--dockH:78px}
+    /* a phone: the bar takes two rows — the species on their own, then the clock
+       and the buttons — and everything that floats above it moves up with it */
+    :root{--dockH:66px;--barH:86px}
     #title h1{font-size:30px}
     #title p{font-size:13.5px}
     #card{display:none}
-    #bench{display:none;left:12px;right:12px;width:auto;top:auto;bottom:calc(var(--dockH) + 110px);max-height:46vh;
+    #bar{flex-wrap:wrap;gap:6px;padding:6px 8px calc(8px + env(safe-area-inset-bottom))}
+    #species{order:-1;flex:1 1 100%;max-width:100%}
+    #dock{bottom:calc(var(--barH) + env(safe-area-inset-bottom))}
+    #hint{bottom:calc(var(--barH) + var(--dockH) + 22px + env(safe-area-inset-bottom))}
+    #say{bottom:calc(var(--barH) + var(--dockH) + 22px + env(safe-area-inset-bottom));font-size:14px}
+    #bench{display:none;left:12px;right:12px;width:auto;top:auto;
+      bottom:calc(var(--barH) + var(--dockH) + 20px + env(safe-area-inset-bottom));max-height:46vh;
       background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);
       border-radius:16px;padding:6px 14px}
     body.benchOpen #bench{display:block}
+    body.benchOpen #say,body.benchOpen #hint{opacity:0}
     #benchBtn{display:inline-block}
-    .tool{width:60px;height:54px}
-    #species{max-width:44vw}
-    #bar{gap:6px;padding-left:8px;padding-right:8px}
+    .tool{width:60px;height:52px}
+    /* two rows exactly: the auxin switch lives in the experiments sheet (1928)
+       and the half-speed step is the one a phone can spare */
+    #streamBtn,#speed button[data-v="0.5"]{display:none}
+    .btn{padding:4px 9px;font-size:11px}
+    .seg button{padding:4px 8px;font-size:11px}
   }
   @media (prefers-reduced-motion:reduce){ #say,#hint{transition:none} }
 </style>
@@ -11447,12 +11462,13 @@ class TendApp extends App {
           hv.p[2] + (_tbB[2] * Math.cos(th) + _tbC[2] * Math.sin(th)) * r);
         B.point(q, [1.4, 1.45, 1.5], r * 0.45);
       }
-      const ghost = [0.55, 0.62, 0.66];
-      // the part of this axis above the cut
-      const up = [hv.p];
-      for (let k = i; k < n; k++) up.push(ax.pts[k]);
-      stemRibbon(B, up, up.map(() => 0.02), ghost, 0.9);
-      const walk = (a) => { stemRibbon(B, a.pts, a.radii.map(() => 0.02), ghost, 0.9); for (const k of a.kids) walk(k); };
+      // wider than the stem, so what shows is a halo round everything that
+      // would leave the plant — the tube hides the ribbon's middle
+      const ghost = [0.62, 0.68, 0.72];
+      const up = [hv.p], ur = [(ax.radii[i] || 0.05) * 1.9];
+      for (let k = i; k < n; k++) { up.push(ax.pts[k]); ur.push(ax.radii[k] * 1.9); }
+      stemRibbon(B, up, ur, ghost, 0.55);
+      const walk = (a) => { stemRibbon(B, a.pts, a.radii.map(r => r * 1.9), ghost, 0.55); for (const k of a.kids) walk(k); };
       for (const k of ax.kids) if (k.attachLen() > hv.s) walk(k);
     }
     // A BUD WAKING: a brief light where it happened
@@ -11539,18 +11555,30 @@ class TendApp extends App {
       return h < 36 ? `about ${Math.max(1, Math.round(h))} hour${Math.round(h) === 1 ? '' : 's'}`
         : `about ${Math.round(h / 24)} days`;
     };
+    // THE LEAN, NOT THE ANGLE TO THE LAMP. The first version reported how much the
+    // angle between a tip's heading and the lamp had closed, and it said "turned
+    // away" while the leader visibly arched over toward the lamp: a tip that grows
+    // up past the lamp's height changes the direction TO the lamp faster than it
+    // turns. What Darwin measured, and what reads, is the lean: how far from
+    // vertical the tip now points, signed by whether that lean faces the lamp.
     const tl = this.trials.light;
     if (tl && this.lamp.on) {
-      let n = 0, turned = 0;
-      for (const e of tl.tips) {
-        if (!e.ax.alive || !e.ax.meristem || P.axes.indexOf(e.ax) < 0) continue;
-        turned += (e.a0 - this._tipToLamp(e.ax)) * 180 / Math.PI; n++;
+      let n = 0, lean = 0;
+      const L = this.simLamp.on ? this.simLamp.pos : this.lamp.pos;
+      for (const ax of P.axes) {
+        if (!ax.alive || !ax.meristem) continue;
+        const d = ax.dir, tip = ax.tipPos();
+        const hx = L[0] - tip[0], hz = L[2] - tip[2], hl = Math.hypot(hx, hz) || 1;
+        const dh = Math.hypot(d[0], d[2]);
+        const a = Math.atan2(dh, d[1]) * 180 / Math.PI;
+        const facing = dh > 1e-4 ? (d[0] * hx + d[2] * hz) / (dh * hl) : 0;
+        lean += a * Math.sign(facing || 1); n++;
       }
       const dt = P.time - tl.t0;
       if (n && dt > 60) {
-        const m = turned / n;
-        this.results.light = `${n === 1 ? 'The growing tip has' : n + ' growing tips have'} turned `
-          + `${Math.abs(m).toFixed(0)}° ${m >= 0 ? 'toward' : 'away from'} the lamp over ${hrs(dt)}.`;
+        const m = lean / n;
+        this.results.light = `${n === 1 ? 'The growing tip leans' : n + ' growing tips lean, on average,'} `
+          + `${Math.abs(m).toFixed(0)}° from upright, ${m >= 0 ? 'toward' : 'away from'} the lamp — lit for ${hrs(dt)}.`;
       } else if (!n && dt > 60) {
         this.results.light = 'No tip is growing, so nothing can turn. Cut a stem and let a bud grow out, then light it.';
       }
@@ -11788,8 +11816,12 @@ function tbSay(text) {
   const el = tbEl('say');
   el.textContent = text;
   el.classList.add('on');
+  // the instruction line steps aside while something is being said, so the two
+  // never overprint — which they did on a phone, where the saying wraps
+  document.body.classList.add('saying');
   clearTimeout(tbSayT);
-  tbSayT = setTimeout(() => el.classList.remove('on'), Math.min(7000, Math.max(2600, text.length * 45)));
+  tbSayT = setTimeout(() => { el.classList.remove('on'); document.body.classList.remove('saying'); },
+    Math.min(7000, Math.max(2600, text.length * 45)));
 }
 let tbBudSaidAt = -1e9, tbFreeSaidAt = -1e9;
 tbApp.onEvent = (kind, d) => {

@@ -108,8 +108,12 @@ function tbSay(text) {
   const el = tbEl('say');
   el.textContent = text;
   el.classList.add('on');
+  // the instruction line steps aside while something is being said, so the two
+  // never overprint — which they did on a phone, where the saying wraps
+  document.body.classList.add('saying');
   clearTimeout(tbSayT);
-  tbSayT = setTimeout(() => el.classList.remove('on'), Math.min(7000, Math.max(2600, text.length * 45)));
+  tbSayT = setTimeout(() => { el.classList.remove('on'); document.body.classList.remove('saying'); },
+    Math.min(7000, Math.max(2600, text.length * 45)));
 }
 let tbBudSaidAt = -1e9, tbFreeSaidAt = -1e9;
 tbApp.onEvent = (kind, d) => {

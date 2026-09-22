@@ -89,7 +89,10 @@
   /* the bar: which plant, how fast, and whether the hormone is shown */
   #bar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;align-items:center;justify-content:center;gap:10px;
     padding:8px 14px calc(10px + env(safe-area-inset-bottom));flex-wrap:nowrap}
-  #species{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;max-width:min(640px,58vw)}
+  #species{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;max-width:min(640px,58vw);
+    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%);
+    mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%);padding:0 10px}
+  body.saying #hint{opacity:0}
   #species::-webkit-scrollbar{display:none}
   .chip{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:4px 10px 4px 8px;border-radius:999px;cursor:pointer;
     background:transparent;border:1px solid var(--line);color:var(--dim);font-size:11.5px;white-space:nowrap}
@@ -113,18 +116,30 @@
   #fatal{display:none;position:fixed;inset:0;z-index:99;background:#04080a;color:#f99;padding:30px;font:13px/1.5 ui-monospace,monospace;white-space:pre-wrap}
 
   @media (max-width:760px){
-    :root{--dockH:78px}
+    /* a phone: the bar takes two rows — the species on their own, then the clock
+       and the buttons — and everything that floats above it moves up with it */
+    :root{--dockH:66px;--barH:86px}
     #title h1{font-size:30px}
     #title p{font-size:13.5px}
     #card{display:none}
-    #bench{display:none;left:12px;right:12px;width:auto;top:auto;bottom:calc(var(--dockH) + 110px);max-height:46vh;
+    #bar{flex-wrap:wrap;gap:6px;padding:6px 8px calc(8px + env(safe-area-inset-bottom))}
+    #species{order:-1;flex:1 1 100%;max-width:100%}
+    #dock{bottom:calc(var(--barH) + env(safe-area-inset-bottom))}
+    #hint{bottom:calc(var(--barH) + var(--dockH) + 22px + env(safe-area-inset-bottom))}
+    #say{bottom:calc(var(--barH) + var(--dockH) + 22px + env(safe-area-inset-bottom));font-size:14px}
+    #bench{display:none;left:12px;right:12px;width:auto;top:auto;
+      bottom:calc(var(--barH) + var(--dockH) + 20px + env(safe-area-inset-bottom));max-height:46vh;
       background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);
       border-radius:16px;padding:6px 14px}
     body.benchOpen #bench{display:block}
+    body.benchOpen #say,body.benchOpen #hint{opacity:0}
     #benchBtn{display:inline-block}
-    .tool{width:60px;height:54px}
-    #species{max-width:44vw}
-    #bar{gap:6px;padding-left:8px;padding-right:8px}
+    .tool{width:60px;height:52px}
+    /* two rows exactly: the auxin switch lives in the experiments sheet (1928)
+       and the half-speed step is the one a phone can spare */
+    #streamBtn,#speed button[data-v="0.5"]{display:none}
+    .btn{padding:4px 9px;font-size:11px}
+    .seg button{padding:4px 8px;font-size:11px}
   }
   @media (prefers-reduced-motion:reduce){ #say,#hint{transition:none} }
 </style>
