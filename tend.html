@@ -93,6 +93,7 @@
     -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%);
     mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%);padding:0 10px}
   body.saying #hint{opacity:0}
+  body.film *{transition:none!important}
   #species::-webkit-scrollbar{display:none}
   .chip{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:4px 10px 4px 8px;border-radius:999px;cursor:pointer;
     background:transparent;border:1px solid var(--line);color:var(--dim);font-size:11.5px;white-space:nowrap}
@@ -110,9 +111,15 @@
   .btn.on{color:var(--ink);border-color:var(--accent)}
 
   #benchBtn{display:none}
-  /* ?clean: the plant and nothing else, for recording */
-  body.clean #bench,body.clean #card,body.clean #dock,body.clean #bar,body.clean #hint,body.clean #say{display:none}
+  /* ?clean: the plant and nothing else, for recording. ?clean&caption keeps the
+     line that says what is happening and the sentence that says what was measured */
+  body.clean #bench,body.clean #card,body.clean #dock,body.clean #bar,body.clean #hint,body.clean #say,
+  body.clean #caption{display:none}
   body.clean #title p{display:none}
+  body.clean.caption #say{display:block;bottom:calc(64px + env(safe-area-inset-bottom));font-size:19px;width:min(760px,calc(100% - 48px))}
+  body.clean.caption #caption{display:block}
+  #caption{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom));z-index:6;
+    width:min(760px,calc(100% - 48px));text-align:center;font:14px/1.4 var(--sans);color:var(--accent);pointer-events:none}
   #fatal{display:none;position:fixed;inset:0;z-index:99;background:#04080a;color:#f99;padding:30px;font:13px/1.5 ui-monospace,monospace;white-space:pre-wrap}
 
   @media (max-width:760px){
@@ -169,6 +176,7 @@
 </section>
 
 <div id="say" role="status"></div>
+<div id="caption"></div>
 <div id="hint"></div>
 
 <nav id="dock" aria-label="Instruments">
@@ -10870,7 +10878,7 @@ class TendApp extends App {
       c.target[0] = lerp(c.target[0], p[0], lean);
       c.target[1] = lerp(c.target[1], p[1] - fc.drop, lean);
       c.target[2] = lerp(c.target[2], p[2], lean);
-      dist = lerp(c.fitDist, Math.max(3.5, c.fitDist * 0.42), lean);
+      dist = lerp(c.fitDist, Math.max(3.5, c.fitDist * 0.6), lean);
     }
     c.fogNear = Math.max(0, c.fitDist - Math.max(bs.h, bs.w) * 0.55);
     c.dofRange = Math.max(2.5, Math.max(bs.h, bs.w) * 0.75);
@@ -11811,7 +11819,10 @@ function tbToggleStream() {
 tbEl('streamBtn').onclick = tbToggleStream;
 
 // --- what just happened ----------------------------------------------------
-let tbSayT = 0;
+// How long a line stays up is measured on the page's own clock, not with a
+// timer, so a film rendered a frame at a time holds it for the same length of
+// film as a person would see it held.
+let tbSayUntil = 0;
 function tbSay(text) {
   const el = tbEl('say');
   el.textContent = text;
@@ -11819,9 +11830,14 @@ function tbSay(text) {
   // the instruction line steps aside while something is being said, so the two
   // never overprint — which they did on a phone, where the saying wraps
   document.body.classList.add('saying');
-  clearTimeout(tbSayT);
-  tbSayT = setTimeout(() => { el.classList.remove('on'); document.body.classList.remove('saying'); },
-    Math.min(7000, Math.max(2600, text.length * 45)));
+  tbSayUntil = tbApp.t + Math.min(7000, Math.max(2600, text.length * 45));
+}
+function tbSayTick() {
+  if (tbSayUntil && tbApp.t > tbSayUntil) {
+    tbSayUntil = 0;
+    tbEl('say').classList.remove('on');
+    document.body.classList.remove('saying');
+  }
 }
 let tbBudSaidAt = -1e9, tbFreeSaidAt = -1e9;
 tbApp.onEvent = (kind, d) => {
@@ -11869,6 +11885,11 @@ function tbSyncCard(force) {
     const el = li.querySelector('.res');
     if (el.textContent !== r) el.textContent = r;
   }
+  // the caption (?clean&caption) is the measured sentence of whichever
+  // experiment the instrument in hand belongs to
+  const ex = TEND_EXPERIMENTS.find(e => e.tool === tbApp.tool);
+  const cap = ex ? tbApp.results[ex.key] || '' : '';
+  if (tbEl('caption').textContent !== cap) tbEl('caption').textContent = cap;
 }
 
 // --- share: a link that regrows this plant ---------------------------------
@@ -11969,6 +11990,7 @@ addEventListener('keydown', (e) => {
   }
   tbSetTool(TEND_TOOLS[tbQ.get('tool')] ? tbQ.get('tool') : 'look');
   if (tbQ.has('clean')) document.body.classList.add('clean');
+  if (tbQ.has('caption')) document.body.classList.add('caption');
   // a shared record regrows in front of the person it was sent to
   if (location.hash.startsWith('#r=')) {
     tbUnpack(location.hash.slice(3)).then((r) => {
@@ -11984,19 +12006,33 @@ addEventListener('keydown', (e) => {
   if (!tbQ.has('tool')) tbEl('hint').textContent = 'Pick up the lamp or the shears below. Drag to turn around the plant.';
 }
 
-let tbLast = performance.now(), tbFrames = 0, tbFpsT = 0;
-function tbLoop(now) {
-  const dt = Math.min(64, now - tbLast); tbLast = now;
-  tbFrames++; tbFpsT += dt;
-  if (tbFpsT > 500) { tbApp.fps = tbFrames * 1000 / tbFpsT; tbFrames = 0; tbFpsT = 0; }
+function tbFrame(dt) {
   tbApp.step(dt);
-  if (tbApp.fps > 40 || tbApp.frame % 2 === 0) tbApp.buildScene();
+  if (tbApp.fps > 40 || tbApp.frame % 2 === 0 || tbFilm) tbApp.buildScene();
   tbApp.frame++;
   tbApp.render();
-  tbSyncCard(false);
+  tbSyncCard(tbFilm);
+  tbSayTick();
+}
+// ?film: the page does not run its own loop. A script advances it one frame at a
+// time — `window.__tendFrame(ms)` — and photographs each, so a clip is as smooth
+// as its frame rate and the same every time (tools/tend_film.mjs).
+const tbFilm = tbQ.has('film');
+if (tbFilm) {
+  document.body.classList.add('film');
+  tbApp.fps = 60;
+  window.__tendFrame = (ms) => tbFrame(ms);
+} else {
+  let tbLast = performance.now(), tbFrames = 0, tbFpsT = 0;
+  const tbLoop = (now) => {
+    const dt = Math.min(64, now - tbLast); tbLast = now;
+    tbFrames++; tbFpsT += dt;
+    if (tbFpsT > 500) { tbApp.fps = tbFrames * 1000 / tbFpsT; tbFrames = 0; tbFpsT = 0; }
+    tbFrame(dt);
+    requestAnimationFrame(tbLoop);
+  };
   requestAnimationFrame(tbLoop);
 }
-requestAnimationFrame(tbLoop);
 addEventListener('resize', () => tbApp.renderer.resize());
 
 </script>

@@ -165,7 +165,7 @@ class TendApp extends App {
       c.target[0] = lerp(c.target[0], p[0], lean);
       c.target[1] = lerp(c.target[1], p[1] - fc.drop, lean);
       c.target[2] = lerp(c.target[2], p[2], lean);
-      dist = lerp(c.fitDist, Math.max(3.5, c.fitDist * 0.42), lean);
+      dist = lerp(c.fitDist, Math.max(3.5, c.fitDist * 0.6), lean);
     }
     c.fogNear = Math.max(0, c.fitDist - Math.max(bs.h, bs.w) * 0.55);
     c.dofRange = Math.max(2.5, Math.max(bs.h, bs.w) * 0.75);

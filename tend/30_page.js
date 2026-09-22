@@ -103,7 +103,10 @@ function tbToggleStream() {
 tbEl('streamBtn').onclick = tbToggleStream;
 
 // --- what just happened ----------------------------------------------------
-let tbSayT = 0;
+// How long a line stays up is measured on the page's own clock, not with a
+// timer, so a film rendered a frame at a time holds it for the same length of
+// film as a person would see it held.
+let tbSayUntil = 0;
 function tbSay(text) {
   const el = tbEl('say');
   el.textContent = text;
@@ -111,9 +114,14 @@ function tbSay(text) {
   // the instruction line steps aside while something is being said, so the two
   // never overprint — which they did on a phone, where the saying wraps
   document.body.classList.add('saying');
-  clearTimeout(tbSayT);
-  tbSayT = setTimeout(() => { el.classList.remove('on'); document.body.classList.remove('saying'); },
-    Math.min(7000, Math.max(2600, text.length * 45)));
+  tbSayUntil = tbApp.t + Math.min(7000, Math.max(2600, text.length * 45));
+}
+function tbSayTick() {
+  if (tbSayUntil && tbApp.t > tbSayUntil) {
+    tbSayUntil = 0;
+    tbEl('say').classList.remove('on');
+    document.body.classList.remove('saying');
+  }
 }
 let tbBudSaidAt = -1e9, tbFreeSaidAt = -1e9;
 tbApp.onEvent = (kind, d) => {
@@ -161,6 +169,11 @@ function tbSyncCard(force) {
     const el = li.querySelector('.res');
     if (el.textContent !== r) el.textContent = r;
   }
+  // the caption (?clean&caption) is the measured sentence of whichever
+  // experiment the instrument in hand belongs to
+  const ex = TEND_EXPERIMENTS.find(e => e.tool === tbApp.tool);
+  const cap = ex ? tbApp.results[ex.key] || '' : '';
+  if (tbEl('caption').textContent !== cap) tbEl('caption').textContent = cap;
 }
 
 // --- share: a link that regrows this plant ---------------------------------
@@ -261,6 +274,7 @@ addEventListener('keydown', (e) => {
   }
   tbSetTool(TEND_TOOLS[tbQ.get('tool')] ? tbQ.get('tool') : 'look');
   if (tbQ.has('clean')) document.body.classList.add('clean');
+  if (tbQ.has('caption')) document.body.classList.add('caption');
   // a shared record regrows in front of the person it was sent to
   if (location.hash.startsWith('#r=')) {
     tbUnpack(location.hash.slice(3)).then((r) => {
@@ -276,17 +290,31 @@ addEventListener('keydown', (e) => {
   if (!tbQ.has('tool')) tbEl('hint').textContent = 'Pick up the lamp or the shears below. Drag to turn around the plant.';
 }
 
-let tbLast = performance.now(), tbFrames = 0, tbFpsT = 0;
-function tbLoop(now) {
-  const dt = Math.min(64, now - tbLast); tbLast = now;
-  tbFrames++; tbFpsT += dt;
-  if (tbFpsT > 500) { tbApp.fps = tbFrames * 1000 / tbFpsT; tbFrames = 0; tbFpsT = 0; }
+function tbFrame(dt) {
   tbApp.step(dt);
-  if (tbApp.fps > 40 || tbApp.frame % 2 === 0) tbApp.buildScene();
+  if (tbApp.fps > 40 || tbApp.frame % 2 === 0 || tbFilm) tbApp.buildScene();
   tbApp.frame++;
   tbApp.render();
-  tbSyncCard(false);
+  tbSyncCard(tbFilm);
+  tbSayTick();
+}
+// ?film: the page does not run its own loop. A script advances it one frame at a
+// time — `window.__tendFrame(ms)` — and photographs each, so a clip is as smooth
+// as its frame rate and the same every time (tools/tend_film.mjs).
+const tbFilm = tbQ.has('film');
+if (tbFilm) {
+  document.body.classList.add('film');
+  tbApp.fps = 60;
+  window.__tendFrame = (ms) => tbFrame(ms);
+} else {
+  let tbLast = performance.now(), tbFrames = 0, tbFpsT = 0;
+  const tbLoop = (now) => {
+    const dt = Math.min(64, now - tbLast); tbLast = now;
+    tbFrames++; tbFpsT += dt;
+    if (tbFpsT > 500) { tbApp.fps = tbFrames * 1000 / tbFpsT; tbFrames = 0; tbFpsT = 0; }
+    tbFrame(dt);
+    requestAnimationFrame(tbLoop);
+  };
   requestAnimationFrame(tbLoop);
 }
-requestAnimationFrame(tbLoop);
 addEventListener('resize', () => tbApp.renderer.resize());
