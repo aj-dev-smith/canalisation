@@ -732,6 +732,11 @@ export class App {
     // never sets it) is the shipped species exactly.
     if (this.floralForm && FLORAL_FORMS[this.floralForm])
       Object.assign(sp, FLORAL_FORMS[this.floralForm](name));
+    // A PAGE MAY GROW EVERY SPECIMEN UNDER A PROGRAM of its own — overrides on
+    // engine options that already exist, the same shape as a floral form. It is
+    // how tend.html grows a plant whose buds are held by the auxin stream rather
+    // than by the shipped single-apex rule. Undefined everywhere else.
+    if (this.program) Object.assign(sp, this.program(name, sp));
     return { name, seed, prm, mo, sp, pal, petalPal, innerPals,
       plant: new Plant(prm, mo, sp, seed) };
   }
@@ -1647,10 +1652,29 @@ export class App {
     // The cell channel is the only one a view repalettes, and it is read by
     // three different organs — build it once rather than per blade.
     const cpal = V.cellPal ? { ...pal, ...V.cellPal } : pal;
+    // A PAGE MAY LIGHT THE STEMS WITH A CHANNEL, in emission added on top of what
+    // always shipped: `stemGlow(ax, t, S)` returns extra emission at fraction `t`
+    // along the axis. It is how tend.html draws the auxin stream that decides bud
+    // release (ROADMAP 0z's argument: a computed-but-undrawn channel is a view
+    // waiting to happen). Undefined on every other page, so their stems are the
+    // stems they always were.
+    const sg = this.stemGlow;
     for (const ax of S.plant.axes) {
       const nseg = ax.pts.length;
       if (nseg > 1) {
-        if (V.stemSolid) {
+        if (V.stemSolid && sg) {
+          // the channel glows in the plant's own vein colour — it IS the vein
+          // colour's substance, auxin — so the tube is tinted toward it as it lights
+          tube(B, ax.pts, ax.radii, 7, (t) => {
+            const g = sg(ax, t, S), k = Math.min(1, g * 1.4);
+            return {
+              c: [lerp(lerp(pal.stem0[0], pal.stem1[0], t), pal.vein[0], k),
+                lerp(lerp(pal.stem0[1], pal.stem1[1], t), pal.vein[1], k),
+                lerp(lerp(pal.stem0[2], pal.stem1[2], t), pal.vein[2], k)],
+              e: (t > 0.93 && ax.alive ? (t - 0.93) * 5.0 * pal.glow : 0) + g,
+            };
+          });
+        } else if (V.stemSolid) {
           tube(B, ax.pts, ax.radii, 7, (t) => ({
             c: [lerp(pal.stem0[0], pal.stem1[0], t), lerp(pal.stem0[1], pal.stem1[1], t), lerp(pal.stem0[2], pal.stem1[2], t)],
             e: t > 0.93 && ax.alive ? (t - 0.93) * 5.0 * pal.glow : 0,

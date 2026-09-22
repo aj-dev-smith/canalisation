@@ -23,6 +23,10 @@ import {
   v3norm, v3len, v3lerp, v3rotAxis, TAU, clamp, lerp, smoothstep, mulberry32,
 } from './00_math.js';
 
+// How far above `branching` the stream has to rise to put a FREE bud back to
+// sleep. See `Axis.releaseBuds`: numerical, not a biological constant.
+const BUD_BAND = 1.15;
+
 // A frond hanging off one node of an axis.
 class Organ {
   constructor(node, angle, leaf, seed) {
@@ -268,6 +272,12 @@ class Axis {
     this.iaa = 0;
     this.attachOrgan = null;   // the organ in whose axil this shoot arose
     this.infection = null;     // an agent resident in this growing point, if any
+    // WHEN THIS APEX STARTED EXPORTING, and whether it has been cut. Both are only
+    // read by the auxin stream (`streamAt`), which is what a decapitated axis — and a
+    // specimen grown under `budField: 'stream'` — decides bud release on. Neither is
+    // read anywhere on the shipped path, so an uncut plant is unchanged step for step.
+    this.bornAt = plant.time || 0;
+    this.cutInfo = null;
     const P = plant.prm, M = { ...plant.mo };
     // a lateral shoot has a smaller growing point than the leader, which is
     // both true of real plants and considerably cheaper
@@ -306,6 +316,14 @@ class Axis {
         updateBend(org);
         if (!org.leaf) { org.leaf = org.petal ? this.plant.leaves.requestPetal(org.seed) : this.plant.leaves.request(org.seed); if (org.leaf) org.leafAt = org.age; }
       }
+      // A DECAPITATED AXIS STILL HAS BUDS, AND THEY ARE THE WHOLE POINT OF CUTTING.
+      // This branch used to return here unconditionally, which is why `prune()` froze
+      // the plant it was meant to release: the buds below a cut were never looked at
+      // again. Thimann & Skoog's result is that removing the apex wakes them; see
+      // `releaseBuds`. An axis that arrested on its own (budget, flower) is untouched
+      // on the shipped path — only a cut axis, or a specimen grown under the stream
+      // field, gets here.
+      if (this.cutInfo || sp.budField === 'stream') this.releaseBuds(sp);
       this.updateRadii(sp);
       return;
     }
@@ -336,6 +354,9 @@ class Axis {
       const cs = Math.cos(this.gsa), sn = Math.sin(this.gsa);
       v3set(want, this.azim[0] * sn, cs, this.azim[2] * sn);
     }
+    // PHOTOTROPISM — see `phototropicPull`. Null unless the scene holds a lamp,
+    // so every shipped specimen skips this line entirely.
+    if (this.plant.light) this.phototropicPull(want, tip, sp);
     // WANDER AND CIRCUMNUTATION ARE PERTURBATIONS OF THE TIP'S OWN DIRECTION,
     // not of the world's vertical, and until an axis could point somewhere other
     // than up there was no way to tell the difference. Both used to be added
@@ -445,7 +466,12 @@ class Axis {
     }
 
     // --- branching: an axillary bud escapes once the apex is far enough away ---
-    if (sp.branching > 0 && this.plant.axes.length < sp.maxAxes && this.gen < sp.maxGen) {
+    // Under the stream field the same decision is made on the auxin actually
+    // flowing past each bud, from every source above it — see `releaseBuds`. The
+    // shipped loop below is the single-source special case and is left exactly as
+    // it was, so no shipped species moves by a bud.
+    if (sp.budField === 'stream') this.releaseBuds(sp);
+    else if (sp.branching > 0 && this.plant.axes.length < sp.maxAxes && this.gen < sp.maxGen) {
       for (const org of this.organs) {
         if (org.branched || org.age < sp.budRelease) continue;
         // the apex suppresses buds below it; that suppression falls off with
@@ -486,11 +512,244 @@ class Axis {
         // is advected by `elongate` every step, so a stored number would drift
         // off the fork it names and the partition would divide at the wrong place
         ax.attachOrgan = org;
+        // which axil already carries a shoot, for the stream's release after a cut
+        // (`releaseBuds`); written here, read nowhere on the shipped path
+        org.took = ax;
         if (flowering) ax.goFloral(sp, true);
         break;
       }
     }
     this.updateRadii(sp);
+  }
+
+  // ---------------------------------------------------------------------------
+  // THE AUXIN STREAM, AND WHAT IT DECIDES ABOUT A BUD
+  //
+  // Every living apex makes auxin and exports it rootward down the stem — polar
+  // transport, the one direction PIN carries it in a shoot. A bud sits in that
+  // stream, and while enough is flowing past it, it cannot establish an export
+  // route of its own and stays asleep: apical dominance in the canalisation
+  // reading (Li & Bangerth 1999; Prusinkiewicz et al. 2009, PNAS 106:17431).
+  //
+  // The stream at arc `s` of this axis, at plant time `t`, is the sum over every
+  // source whose rootward path passes `s`: this axis's own apex, every apex in
+  // every branch attached above `s`, a bud above `s` that has come free and begun
+  // to export on its own, and paste on a cut stump. Each is attenuated over
+  // `dominance` along the path it travelled — the SAME decay length the shipped
+  // rule and `statocyteIAA` use, so this is one field read another way — and each
+  // is subject to a FRONT: auxin leaving a source at time t0 reaches a point a
+  // distance d down the stem at t0 + d / v. A new source's stream arrives, and a
+  // stopped one drains, at polar-transport speed rather than instantly.
+  //
+  // v is NOT a dial. The measured ratio of polar-transport speed to the growth
+  // rate of the organ it runs in has a median of 6.6 over 227 speeds from 95
+  // papers (Kramer, Rutschow & Mabie 2011, Trends Plant Sci 16:461), so it is
+  // `patRatio` times this species' own growth rate — see `Plant.patV`.
+  //
+  // ⚠ The decay length and the threshold it is compared with ARE dials, and the
+  // exponential form is a modelling choice: nobody has measured how inhibition
+  // falls with distance, and the one measurement there is (Snow 1931, Proc R Soc
+  // B 108:209) found it INCREASING over 0.5-17 cm. docs/research_9_22_26_tend.md
+  // §1.7. With a decay length much longer than the plant — which is how the bench
+  // grows its plants — the stream is nearly conserved down the stem and sums as
+  // branches join it, which is at least not the wrong sign.
+  // ---------------------------------------------------------------------------
+  streamAt(s, t, sp) {
+    const P = this.plant, lam = sp.dominance, v = P.patV, tau = P.tauCommit;
+    let a = 0;
+    if (this.alive && this.meristem) {
+      const d = Math.max(0, this.length - s);
+      if (t >= this.bornAt + d / v) a += this.vigour * Math.exp(-d / lam);
+    } else if (!this.cutInfo && this.offAt !== undefined) {
+      // an apex that stopped on its own — spent on a flower, or arrested on the
+      // budget — drains exactly as a cut one does: the auxin already in the stem
+      // does not know why its source went
+      const d = Math.max(0, this.length - s);
+      if (t < this.offAt + d / v) a += this.vigour * Math.exp(-d / lam);
+    } else if (this.cutInfo) {
+      const c = this.cutInfo, d = Math.max(0, c.s - s);
+      // the auxin already in the stem when the tip went keeps arriving until the
+      // last of it — which passed the cut at c.t — has gone by: the depletion front.
+      // `level` is what was flowing past the cut the moment before (`Plant.cut`).
+      if (t < c.t + d / v) a += c.level * Math.exp(-d / lam);
+      for (const p of c.paste) {
+        if (t >= p.on + d / v && t < p.off + d / v) a += p.dose * Math.exp(-d / lam);
+      }
+    }
+    // Buds above `s` that have come free: each exports on a ramp from the moment
+    // it came free, reaching an apex's worth as it commits (`releaseBuds`). A bud
+    // is not counted at its own position, only below it.
+    const fb = this.freeBuds;
+    if (fb) for (const o of fb) {
+      if (o.birthLen <= s) continue;
+      const d = o.birthLen - s, te = t - d / v;
+      if (te < o.freeAt || (o.stopAt !== undefined && te >= o.stopAt)) continue;
+      a += Math.min(1, (te - o.freeAt) / tau) * this.vigour * Math.exp(-d / lam);
+    }
+    for (const k of this.kids) {
+      const sk = k.attachLen();
+      if (sk <= s) continue;
+      const dd = sk - s;
+      a += Math.exp(-dd / lam) * k.streamAt(0, t - dd / v, sp);
+    }
+    return a;
+  }
+
+  // FREE, THEN COMMITTED — OR BACK TO SLEEP.
+  //
+  // RELEASE IS NOT COMMITMENT, and the literature is precise about which half of
+  // it auxin decides. In pea, buds all along the stem begin to grow within hours
+  // of decapitation — 40 cm below the cut within 2.5 h, faster than any auxin
+  // front could get there — and that first flush is sugar and cytokinin (Mason
+  // et al. 2014, PNAS 111:6092; Cao et al. 2023). What auxin decides, from about a
+  // day on, is which of the released buds COMMITS to becoming a branch and which
+  // is pushed back into dormancy (Morris et al. 2005; Balla et al. 2016, Sci Rep
+  // 6:35955: "dominance was not imposed immediately following decapitation", the
+  // upper bud won by day 3 and the loser was dormant again by day 5). This engine
+  // has no sugar, so it cannot honestly show the first flush, and it does not try:
+  // nothing grows here until the auxin says so.
+  //
+  // So a bud has three states. HELD while the stream past it is above
+  // `branching`. FREE once it falls below: a free bud begins to make and export
+  // its own auxin — Thimann & Skoog 1934: released buds "commence to synthesize
+  // growth substance on their own account" — ramping to an apex's worth over
+  // `tauCommit`. COMMITTED if it stays free that long: it becomes a shoot. If the
+  // stream past it rises above `branching` again before then, it goes back to
+  // being held — dormant, not dead, and free again if the stream falls again.
+  //
+  // What that buys is the competition, with nothing stating who wins. The bud
+  // nearest a cut comes free first, because the drain reaches it first; its own
+  // rising export then flows down over the buds that came free after it, and the
+  // ones within its reach are put back to sleep before they can commit. One
+  // takes over and the rest go dormant — "dominant because it was established
+  // first, rather than because of its apical position" (Prusinkiewicz 2009) — and
+  // cutting the winner releases a loser again, which is what Thimann & Skoog saw
+  // on day 35. The ramp's shape is [OURS]; its length is `commitReach` over v.
+  //
+  // THE SHIPPED COIN IS NOT HERE. `budTake` retired a bud forever on a failed
+  // flip, and there is no support for that: inhibited buds stay competent for
+  // weeks, and the only irreversible step is commitment (Chatfield et al. 2000,
+  // Plant J 24:159). It is still what the shipped single-apex rule uses, where
+  // nothing here runs.
+  releaseBuds(sp) {
+    if (!(sp.branching > 0) || this.gen >= sp.maxGen) return;
+    const P = this.plant, t = P.time;
+    const room = P.axes.length < sp.maxAxes && sp.organBudget - P.vegOrganCount() > 0;
+    const fb = this.freeBuds || (this.freeBuds = []);
+    let committed = false;
+    for (let i = this.organs.length - 1; i >= 0; i--) {
+      const org = this.organs[i];
+      if (org.floral || org.shed || org.took) continue;
+      const S = this.streamAt(org.birthLen, t, sp);
+      const free = org.freeAt !== undefined && org.stopAt === undefined;
+      // A free bud is put back to sleep only when the stream clears the threshold
+      // by `BUD_BAND`. That band is NUMERICAL, not biology: several ramping sources
+      // and the tails of stopped ones can hold the stream at a bud within a hair of
+      // `branching` for dozens of steps, and without a band the bud flipped between
+      // free and held every two or three steps (measured on an Ember Creeper after
+      // its paste was taken off). It does not move where a bud is held, only how
+      // decisively a free one has to be overruled.
+      if (S > sp.branching * (free ? BUD_BAND : 1)) {
+        org.armed = true;
+        if (free) {
+          // held again before it committed: its own export stops, and what it
+          // already sent down drains as any stopped source does
+          org.stopAt = t;
+          P.note({ kind: 'resleep', t, from: this, org, s: org.birthLen });
+        }
+        continue;
+      }
+      if (!free) {
+        if (!org.armed) continue;
+        // A bud has to exist before it can do anything: `budRelease` is how old an
+        // axil is before its bud is a meristem at all. Until then it stays armed —
+        // held is a statement about the stream, not about the bud's age — so a bud
+        // the drain passed while it was still forming comes free when it has formed.
+        // Checking age FIRST skipped the arming too, and every young bud below a cut
+        // near the tip was lost: a Sun Coral pruned at step 500 never regrew.
+        if (org.age < sp.budRelease) continue;
+        // it has come free
+        org.armed = false;
+        org.freeAt = t;
+        org.stopAt = undefined;
+        if (fb.indexOf(org) < 0) fb.push(org);
+        org.branched = true;
+        P.note({ kind: 'free', t, from: this, org, s: org.birthLen });
+        continue;
+      }
+      if (committed || !room || t - org.freeAt < P.tauCommit) continue;
+      // COMMITTED: the bud becomes a shoot, and the shoot's apex takes over the
+      // export the bud had built up
+      const flowering = P.florigen > sp.florigenThresh;
+      if (flowering && P.flowerCount() >= sp.maxFlowers) continue;
+      const dir = v3();
+      v3copy(dir, org.frame.x);
+      v3norm(dir, dir);
+      const ax = P.addAxis(org.frame.o, dir, this.gen + 1, org.vStem, this);
+      ax.attachOrgan = org;
+      org.took = ax;
+      org.stopAt = t;
+      ax.bornAt = t;
+      if (flowering) ax.goFloral(sp, true);
+      P.note({ kind: 'bud', t, axis: ax, from: this, org, s: org.birthLen });
+      committed = true;
+    }
+    // a bud's record is only needed while its last export can still be in the
+    // stem; after that it is noise in the sum
+    if (fb.length) {
+      const horizon = (this.length + 1) / P.patV + 1;
+      this.freeBuds = fb.filter(o => !(o.stopAt !== undefined && t - o.stopAt > horizon));
+    }
+  }
+
+  // Whether this axis still has a bud that could yet grow: held or free, and on
+  // a plant that could pay for it. What `Plant.spent` asks of a stump before it
+  // lets senescence start.
+  budsPending(sp) {
+    if (this.gen >= sp.maxGen || !(sp.branching > 0)) return false;
+    const P = this.plant;
+    if (P.axes.length >= sp.maxAxes || sp.organBudget - P.vegOrganCount() <= 0) return false;
+    for (const org of this.organs) {
+      if (org.floral || org.shed || org.took) continue;
+      if (org.armed || (org.freeAt !== undefined && org.stopAt === undefined)) return true;
+    }
+    return false;
+  }
+
+  // PHOTOTROPISM — the tip heads for where gravity's pull and the light's balance.
+  //
+  // Light and gravity combine as additive sine terms (Bastien, Douady & Moulia
+  // 2015, PLoS Comput Biol 11:e1004037, fitted to Galland 2002's photogravitropic
+  // equilibria): each stimulus is felt only through its component ACROSS the
+  // axis, and the tip settles where the two transverse pulls cancel. For unit
+  // vectors that direction is exactly
+  //
+  //     normalize(want_gravity + k * toward_light)
+  //
+  // which is all this adds. `k` is the photo-to-gravi ratio, 1/M in their terms,
+  // and its dependence on irradiance is MEASURED rather than chosen: M ~ I^-b with
+  // b between 0.36 and 0.44 across Galland's data, so k = photoGain * I^photoExp.
+  // `photoGain` itself is a genuine parameter — M spans roughly 0.1-2 across
+  // systems, set by phytochrome and cryptochrome history this engine does not
+  // compute — and SCIENCE.md books it. `test/tend.mjs` checks the equilibrium.
+  //
+  // ⚠ Two things flagged rather than hidden. The sine law for LIGHT has never been
+  // measured; every model assumes it. And this is tip steering at the shipped
+  // `tropism` rate, which is not tied to growth: real stems bend the whole growth
+  // zone and straighten from the tip down (the AC model, Bastien et al. 2013), and
+  // the engine's gravitropism has the same limitation. Nothing here draws a curve:
+  // the stem that results is a record of where the light was while it grew.
+  phototropicPull(want, tip, sp) {
+    const L = this.plant.light;
+    if (!L || !L.on || !(sp.photoGain > 0)) return;
+    const dx = L.pos[0] - tip[0], dy = L.pos[1] - tip[1], dz = L.pos[2] - tip[2];
+    const d = Math.hypot(dx, dy, dz);
+    if (d < 1e-4) return;
+    // irradiance falls with the square of distance, and enters as I^0.4
+    const I = (L.power || 1) / (d * d);
+    const k = sp.photoGain * Math.pow(I, sp.photoExp);
+    want[0] += k * dx / d; want[1] += k * dy / d; want[2] += k * dz / d;
+    v3norm(want, want);
   }
 
   // The floral meristem is a smaller, faster version of the same tissue. Organs
@@ -603,6 +862,9 @@ class Axis {
       this.plant._lastCells = m.F.n;
       this.plant._lastPl = m.plastochron;
     }
+    // when this apex stopped being a source, for the stream's drain front. Read
+    // only by `streamAt`, which nothing on the shipped path calls for an uncut axis
+    if (this.meristem && this.offAt === undefined) this.offAt = this.plant.time;
     this.meristem = null;
     // the agent lived in that cell field; it goes with it
     this.infection = null;
@@ -1285,6 +1547,35 @@ export const SPECIES_DEFAULTS = {
   // What fraction of the buds that escape suppression actually build a shoot.
   // 0.35 is the value this was hardcoded at, so nothing that shipped moves.
   budTake: 0.35,
+  // WHICH FIELD DECIDES BUD RELEASE. 'apex' is what shipped: a bud listens to its
+  // own axis's tip alone, by straight-line distance. 'stream' is the auxin
+  // actually flowing past it from every source above — own apex, every branch
+  // attached above it, paste on a stump — each draining or arriving at
+  // `patRatio` (see `Axis.streamAt`). A CUT axis uses the stream whatever this
+  // says, because a decapitated axis has no tip for the shipped rule to measure
+  // from — that is the bug `prune()` shipped with. Default 'apex': every shipped
+  // species is unchanged bud for bud.
+  budField: 'apex',
+  // POLAR AUXIN TRANSPORT SPEED, as a multiple of how fast this species' stem
+  // grows. A lookup, not a dial: median 6.6 over 227 measured speeds (Kramer,
+  // Rutschow & Mabie 2011, Trends Plant Sci 16:461, range about 4-16), and a
+  // ratio is the only form that means anything in an engine whose development is
+  // compressed against physical time. Only the stream field reads it; see
+  // `Plant.patV`.
+  patRatio: 6.6,
+  // HOW LONG A FREED BUD MUST STAY FREE TO COMMIT, stated as the distance the
+  // drain front travels meanwhile: in pea auxin's say begins about a day after
+  // decapitation and dominance is settled by day 3 (Morris et al. 2005; Balla et
+  // al. 2016), and at the measured ~1 cm/h front that is 24-72 cm. 6 units is
+  // 37.5 cm. `Plant.tauCommit` turns it into steps.
+  commitReach: 6.0,
+  // THE LIGHT. `photoGain` is the photo-to-gravi ratio at unit irradiance — 1/M,
+  // a genuine parameter (M ~ 0.1-2 across systems) — and `photoExp` how it scales
+  // with irradiance, measured (0.36-0.44; Bastien et al. 2015 on Galland 2002).
+  // Only read when the scene holds a lamp (`plant.light`), which no shipped page
+  // does, so neither moves anything that shipped. See `Axis.phototropicPull`.
+  photoGain: 1.0,
+  photoExp: 0.4,
   maxAxes: 5,
   maxGen: 2,
   leafBudget: 60,
@@ -1328,7 +1619,29 @@ export class Plant {
     // gust crosses the stand rather than arriving everywhere at once.
     this.origin = (this.sp.origin || [0, 0, 0]).slice();
     this.agent = null;   // set by inoculate(); see 15_pathogen.js
+    // A LAMP, IF THE SCENE HOLDS ONE: { pos: [x,y,z], power, on }. Environment,
+    // the same category as the wind — it says where light comes from, never what
+    // grows toward it. Null on every shipped page, and `Axis.step` skips the
+    // phototropic term entirely when it is.
+    this.light = null;
+    // What happened to this specimen that the page might want to say out loud — a
+    // bud waking, a cut. Bounded, because nothing on the shipped path reads it.
+    this.events = [];
+    // The auxin stream's two rates, in plant time. v is the measured ratio of
+    // polar-transport speed to growth (`patRatio`) times this species' own stem
+    // growth — tip extension plus the subapical stretch, whose integral over the
+    // growing zone is `internode * internodeSpan` — and the commitment time is the
+    // drain's travel time over `commitReach`. Only the stream reads either.
+    this.patV = this.sp.patRatio * (this.sp.elongation + this.sp.internode * this.sp.internodeSpan);
+    this.tauCommit = this.sp.commitReach / Math.max(1e-6, this.patV);
     this.addAxis(v3(this.origin[0], this.origin[1], this.origin[2]), v3(0, 1, 0), 0);
+  }
+  note(e) {
+    this.events.push(e);
+    if (this.events.length > 64) this.events.splice(0, this.events.length - 64);
+    // the list is bounded for the page; a harness that has to count every event
+    // subscribes instead
+    if (this.onNote) this.onNote(e);
   }
   // `parentNode` is the stem node of the organ this shoot came out of, so a
   // branch joins the transport stream where it physically joins the plant.
@@ -1433,6 +1746,13 @@ export class Plant {
   // investing in itself and does not dismantle its leaves.
   spent() {
     for (const a of this.axes) if (a.meristem) return false;
+    // A STUMP WHOSE BUDS HAVE NOT HAD THEIR CHANCE IS NOT FINISHED. Without this a
+    // plant cut back to one stem with no apex left anywhere reads as spent for the
+    // few steps it takes the depletion front to reach its buds, and senescence —
+    // which waits on exactly this — starts dismantling a plant that is about to
+    // resprout. Nothing that has not been cut ever has a `cutInfo`, so the shipped
+    // path returns where it always did.
+    for (const a of this.axes) if (a.cutInfo && a.budsPending(this.sp)) return false;
     return this.axes.length > 0;
   }
 
@@ -1457,14 +1777,115 @@ export class Plant {
     return n ? s / n : 0;
   }
 
-  // cut the apex off and watch dominance lift
+  // CUT THE APEX OFF AND WATCH DOMINANCE LIFT — which is what this always said it
+  // did, and did not. It set the tallest axis to not-alive, and a not-alive axis
+  // returned from `step` before its buds were ever looked at again, so the plant
+  // simply stopped where it stood. Measured 2026-09-22 on three species cut at two
+  // ages: not one bud woke, and a young Cathedral Fern cut at step 500 stood frozen
+  // at one axis and thirteen organs forever. It is a real cut now, one internode
+  // below the tip, and the buds below it release as the stream drains past them.
   prune() {
-    const live = this.axes.filter(a => a.alive);
+    const live = this.axes.filter(a => a.alive && a.meristem);
     if (!live.length) return false;
     let best = live[0];
     for (const a of live) if (a.tipPos()[1] > best.tipPos()[1]) best = a;
-    best.alive = false;
+    return !!this.cut(best, Math.max(0, best.length - this.sp.minInternode));
+  }
+
+  // ---------------------------------------------------------------------------
+  // CUT A STEM. `ax` is an axis of this plant, `s` a material arc position on it.
+  //
+  // Everything distal to the cut leaves the plant: the stem above `s`, every organ
+  // founded above it, and every branch that forks off above it with its whole
+  // subtree. What is left is a stump with no apex, and three things follow — none
+  // of them done here, all of them already in the plant:
+  //   - the stream drains (`Axis.streamAt`): the auxin that was flowing past the
+  //     cut goes on arriving below it until its tail has passed, at `patV`;
+  //   - the buds below wake as it passes them (`Axis.releaseBuds`), and the first
+  //     to grow is a new apex whose own stream puts the buds below it back to sleep;
+  //   - the organ budget gets back every leaf that was cut off, so the plant can
+  //     afford to regrow.
+  //
+  // Returns the CUTTING — what left, as it was in world space at the moment of the
+  // cut — so a scene can let it fall. The plant keeps no reference to it.
+  // ---------------------------------------------------------------------------
+  cut(ax, s) {
+    if (!ax || this.axes.indexOf(ax) < 0) return null;
+    const n = ax.pts.length;
+    if (n < 2) return null;
+    const sp = this.sp;
+    const mat = (ax.rest && ax.rest.length === n) ? ax.rest : ax.pts;
+    const arc = [0];
+    for (let i = 1; i < n; i++) arc.push(arc[i - 1] + v3len(v3sub(_zs0, mat[i], mat[i - 1])));
+    s = clamp(s, 0, arc[n - 1]);
+    // What is flowing past the cut point from above, the moment before: the level
+    // the depletion front drains from. Read before anything is removed, and read
+    // from the stream rather than off the apex, so a second cut lower down on a
+    // stump whose first front is still travelling drains what is actually there.
+    const level = ax.streamAt(s, this.time, sp);
+
+    let i = 1;
+    while (i < n - 1 && arc[i] < s) i++;
+    const f = clamp((s - arc[i - 1]) / Math.max(1e-9, arc[i] - arc[i - 1]), 0, 1);
+    const cutP = v3lerp(v3(), ax.pts[i - 1], ax.pts[i], f);
+    const cutR = lerp(ax.radii[i - 1], ax.radii[i], f);
+    // the cutting's own stem, from the cut up, copied: the stump keeps the originals
+    const upPts = [cutP.slice()];
+    const upRad = [cutR];
+    for (let k = i; k < n; k++) { upPts.push(ax.pts[k].slice()); upRad.push(ax.radii[k]); }
+    // the stump: everything below the cut, ending AT the cut
+    const keep = f < 1e-6 ? i : i + 1;
+    if (f >= 1e-6) {
+      ax.pts[i] = cutP;
+      if (ax.rest && ax.rest.length === n) ax.rest[i] = v3lerp(v3(), ax.rest[i - 1], ax.rest[i], f);
+    }
+    ax.pts.length = keep; ax.radii.length = keep;
+    if (ax.rest && ax.rest.length > keep) ax.rest.length = keep;
+
+    const gone = [], kept = [];
+    for (const o of ax.organs) (o.birthLen > s ? gone : kept).push(o);
+    ax.organs = kept;
+    const goneAxes = [];
+    const collect = (a) => { goneAxes.push(a); for (const k of a.kids) collect(k); };
+    ax.kids = ax.kids.filter(k => {
+      if (k.attachLen() > s) { collect(k); return false; }
+      return true;
+    });
+    const goneSet = new Set(goneAxes);
+    this.axes = this.axes.filter(a => !goneSet.has(a));
+
+    const fruit = ax.fruit;
+    ax.fruit = null;
+    if (ax.meristem) ax.retireMeristem();
+    ax.alive = false;
+    ax.arrested = true;
+    ax.length = s;
+    // a pedicel cut below its flower is a stump, not a flower
+    if (ax.floral && !kept.some(o => o.floral)) ax.floral = false;
+    ax.cutInfo = { s, t: this.time, level, paste: [] };
+    this.note({ kind: 'cut', t: this.time, axis: ax, s, organs: gone.length, axes: goneAxes.length });
+    return { from: ax, s, t: this.time, pts: upPts, radii: upRad, organs: gone,
+      fruit, gen: ax.gen, axes: goneAxes };
+  }
+
+  // AUXIN IN LANOLIN, ON THE STUMP — Thimann & Skoog's control. The stump becomes
+  // a source again, `dose` apices' worth, and its stream holds the buds below
+  // asleep exactly as the apex did, which is how that experiment showed the apex's
+  // hold on its buds was the hormone and not the wound. `wipe` takes it off, and a
+  // second depletion front sets off down the stem.
+  paste(ax, dose = 1) {
+    if (!ax || !ax.cutInfo) return false;
+    for (const p of ax.cutInfo.paste) if (p.off === Infinity) return false;
+    ax.cutInfo.paste.push({ on: this.time, off: Infinity, dose });
+    this.note({ kind: 'paste', t: this.time, axis: ax });
     return true;
+  }
+  wipe(ax) {
+    if (!ax || !ax.cutInfo) return false;
+    let any = false;
+    for (const p of ax.cutInfo.paste) if (p.off === Infinity) { p.off = this.time; any = true; }
+    if (any) this.note({ kind: 'wipe', t: this.time, axis: ax });
+    return any;
   }
 
   // ONE PASS THAT DECIDES HOW FAST EVERY APEX GROWS AND WHICH WAY IT POINTS.
