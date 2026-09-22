@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Tend — a plant you can only tend</title>
+<meta name="description" content="A plant grown from its own chemistry that you cannot draw, only tend. Move the light, cut a stem, dress the cut with auxin — the experiments that discovered the hormone, on a living simulation.">
+<meta name="theme-color" content="#04080a">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Tend — a plant you can only tend">
+<meta property="og:description" content="You can't draw this plant. Move the light, cut a stem, dress the cut: the three experiments that found auxin, on a plant grown from auxin.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:creator" content="@aj_dev_smith">
+<style>
+  /* TWO KINDS OF LIGHT AND NOTHING ELSE COLOURED.
+     --accent is the specimen's own vein colour, set by the page from the same
+     palette the renderer reads, so the interface is lit by the plant. --lamp is
+     the one light a person carries, and only the lamp's own controls use it. */
+  :root{
+    --ink:#e6efe9; --dim:#83958f; --faint:rgba(230,239,233,.42);
+    --line:rgba(200,230,220,.13); --panel:rgba(4,9,11,.66);
+    --accent:#7fe9da; --lamp:#ffc27a;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Charter,Georgia,serif;
+    --sans:ui-sans-serif,-apple-system,"SF Pro Text",Inter,system-ui,sans-serif;
+    --dockH:92px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:#04080a;color:var(--ink);font:13px/1.45 var(--sans)}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  body[data-tool="look"] #c:active{cursor:grabbing}
+  body[data-tool="lamp"] #c,body[data-tool="shears"] #c,body[data-tool="paste"] #c{cursor:crosshair}
+  button{font:inherit;color:inherit}
+  :focus-visible{outline:1.5px solid var(--accent);outline-offset:3px;border-radius:6px}
+
+  /* the title is the thesis, set as the piece's one line of display type */
+  #title{position:fixed;top:max(18px,env(safe-area-inset-top));left:22px;z-index:5;pointer-events:none;max-width:22em}
+  #title h1{margin:0;font:400 40px/1 var(--serif);letter-spacing:-.01em}
+  #title p{margin:8px 0 0;font:15px/1.35 var(--serif);color:var(--dim)}
+
+  /* THE BENCH: the experiments, in the order they were done. Years are the only
+     markers because the content is a timeline and nothing else is numbered. */
+  #bench{position:fixed;left:22px;top:calc(max(18px,env(safe-area-inset-top)) + 104px);z-index:5;width:292px;
+    max-height:calc(100% - 104px - var(--dockH) - 90px);overflow:auto;scrollbar-width:none}
+  #bench::-webkit-scrollbar{display:none}
+  #bench ol{list-style:none;margin:0;padding:0}
+  .exp{position:relative;padding:9px 0 10px 54px;border-top:1px solid var(--line);cursor:pointer}
+  .exp:last-child{border-bottom:1px solid var(--line)}
+  .exp .yr{position:absolute;left:0;top:11px;font:12px/1 var(--sans);color:var(--faint);font-variant-numeric:tabular-nums}
+  .exp h2{margin:0;font:400 17px/1.25 var(--serif);color:var(--ink);transition:color .2s}
+  .exp .story{display:none;margin:5px 0 0;font:13.5px/1.45 var(--serif);color:var(--dim)}
+  .exp .res{display:none;margin:7px 0 0;font:12px/1.4 var(--sans);color:var(--accent)}
+  .exp.open .story{display:block}
+  .exp .res:not(:empty){display:block}
+  .exp:hover h2{color:#fff}
+  .exp.on .yr{color:var(--accent)}
+  .exp[data-key="light"].on .yr{color:var(--lamp)}
+  .exp .sw{margin-top:7px;display:none}
+  .exp.open .sw{display:inline-flex}
+
+  /* the specimen, as measured */
+  #card{position:fixed;top:max(18px,env(safe-area-inset-top));right:22px;z-index:5;text-align:right;pointer-events:none;
+    font-variant-numeric:tabular-nums}
+  #cardName{font:400 16px/1.2 var(--serif)}
+  #cardSeed{font-size:11.5px;color:var(--faint);margin-top:2px}
+  #card table{border-collapse:collapse;margin:9px 0 0 auto;font-size:12px}
+  #card td{padding:1.5px 0 1.5px 16px;color:var(--dim);white-space:nowrap}
+  #card td.v{color:var(--ink)}
+  #card td.a{color:var(--accent)}
+
+  /* THE DOCK: four instruments. The lamp is the one place the page is warm. */
+  #hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--dockH) + 58px + env(safe-area-inset-bottom));
+    z-index:6;width:min(460px,calc(100% - 32px));text-align:center;font-size:12.5px;color:var(--dim);pointer-events:none;transition:opacity .3s}
+  #say{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--dockH) + 82px + env(safe-area-inset-bottom));
+    z-index:6;width:min(460px,calc(100% - 32px));text-align:center;font:15px/1.4 var(--serif);color:var(--ink);
+    pointer-events:none;opacity:0;transition:opacity .45s}
+  #say.on{opacity:1}
+  #dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(50px + env(safe-area-inset-bottom));z-index:7;
+    display:flex;gap:6px;padding:6px;border-radius:22px;background:var(--panel);border:1px solid var(--line);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .tool{width:70px;height:62px;border:0;border-radius:16px;background:transparent;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--dim);transition:background .15s,color .15s}
+  .tool svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .tool span{font-size:11.5px}
+  .tool:hover{color:var(--ink);background:rgba(255,255,255,.04)}
+  .tool.on{color:var(--ink);background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 1px var(--accent)}
+  .tool[data-tool="lamp"].on{box-shadow:inset 0 0 0 1px var(--lamp);color:var(--lamp)}
+  .tool[data-tool="lamp"].lit svg{fill:rgba(255,194,122,.25)}
+
+  /* the bar: which plant, how fast, and whether the hormone is shown */
+  #bar{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;align-items:center;justify-content:center;gap:10px;
+    padding:8px 14px calc(10px + env(safe-area-inset-bottom));flex-wrap:nowrap}
+  #species{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;max-width:min(640px,58vw)}
+  #species::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:4px 10px 4px 8px;border-radius:999px;cursor:pointer;
+    background:transparent;border:1px solid var(--line);color:var(--dim);font-size:11.5px;white-space:nowrap}
+  .chip i{width:7px;height:7px;border-radius:50%;opacity:.7}
+  .chip:hover{color:var(--ink)}
+  .chip.on{color:var(--ink);border-color:var(--accent)}
+  .chip.on i{opacity:1;box-shadow:0 0 6px currentColor}
+  .seg{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;flex:0 0 auto}
+  .seg button{border:0;background:transparent;color:var(--dim);font-size:11.5px;padding:4px 9px;cursor:pointer;font-variant-numeric:tabular-nums}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button.on{color:var(--ink);background:rgba(255,255,255,.07)}
+  .btn{flex:0 0 auto;border:1px solid var(--line);background:transparent;color:var(--dim);border-radius:999px;padding:4px 11px;
+    font-size:11.5px;cursor:pointer;white-space:nowrap}
+  .btn:hover{color:var(--ink)}
+  .btn.on{color:var(--ink);border-color:var(--accent)}
+
+  #benchBtn{display:none}
+  /* ?clean: the plant and nothing else, for recording */
+  body.clean #bench,body.clean #card,body.clean #dock,body.clean #bar,body.clean #hint,body.clean #say{display:none}
+  body.clean #title p{display:none}
+  #fatal{display:none;position:fixed;inset:0;z-index:99;background:#04080a;color:#f99;padding:30px;font:13px/1.5 ui-monospace,monospace;white-space:pre-wrap}
+
+  @media (max-width:760px){
+    :root{--dockH:78px}
+    #title h1{font-size:30px}
+    #title p{font-size:13.5px}
+    #card{display:none}
+    #bench{display:none;left:12px;right:12px;width:auto;top:auto;bottom:calc(var(--dockH) + 110px);max-height:46vh;
+      background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);
+      border-radius:16px;padding:6px 14px}
+    body.benchOpen #bench{display:block}
+    #benchBtn{display:inline-block}
+    .tool{width:60px;height:54px}
+    #species{max-width:44vw}
+    #bar{gap:6px;padding-left:8px;padding-right:8px}
+  }
+  @media (prefers-reduced-motion:reduce){ #say,#hint{transition:none} }
+</style>
+</head>
+<body data-tool="look">
+<canvas id="c"></canvas>
+
+<header id="title">
+  <h1>Tend</h1>
+  <p>You can’t draw this plant. You can only tend it.</p>
+</header>
+
+<aside id="bench" aria-label="The experiments"><ol id="exps"></ol></aside>
+
+<section id="card" aria-live="off">
+  <div id="cardName">specimen</div>
+  <div id="cardSeed"></div>
+  <table>
+    <tr><td>height</td><td class="v" id="cHeight">—</td></tr>
+    <tr><td>leaves</td><td class="v" id="cLeaves">—</td></tr>
+    <tr><td>growing tips</td><td class="v" id="cTips">—</td></tr>
+    <tr><td>buds held asleep</td><td class="a" id="cHeld">—</td></tr>
+    <tr><td>buds racing</td><td class="a" id="cFree">—</td></tr>
+    <tr><td>buds dormant</td><td class="v" id="cDorm">—</td></tr>
+    <tr><td>stage</td><td class="v" id="cStage">—</td></tr>
+  </table>
+</section>
+
+<div id="say" role="status"></div>
+<div id="hint"></div>
+
+<nav id="dock" aria-label="Instruments">
+  <button class="tool on" data-tool="look" title="Look (1)" aria-pressed="true">
+    <svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="4.2"/><path d="M12 7.8V4.4"/><path d="M18.6 9.3l2.2-1.1"/><circle cx="12" cy="12" r="1.3"/></svg>
+    <span>Look</span></button>
+  <button class="tool" data-tool="lamp" title="Lamp (2)" aria-pressed="false">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></svg>
+    <span>Lamp</span></button>
+  <button class="tool" data-tool="shears" title="Shears (3)" aria-pressed="false">
+    <svg viewBox="0 0 24 24"><circle cx="6.5" cy="17.5" r="2.8"/><circle cx="17.5" cy="17.5" r="2.8"/><path d="M8.6 15.6L18.5 3.8M15.4 15.6L5.5 3.8"/></svg>
+    <span>Shears</span></button>
+  <button class="tool" data-tool="paste" title="Auxin on the cut (4)" aria-pressed="false">
+    <svg viewBox="0 0 24 24"><path d="M12 3.5c3.4 4.2 5.4 7.4 5.4 10a5.4 5.4 0 01-10.8 0c0-2.6 2-5.8 5.4-10z"/><path d="M9.6 14.4a2.6 2.6 0 002.4 2.4"/></svg>
+    <span>Auxin</span></button>
+</nav>
+
+<footer id="bar">
+  <div id="species" role="group" aria-label="Species"></div>
+  <div class="seg" id="speed" role="group" aria-label="Speed">
+    <button data-v="0" title="Pause (space)">&#10074;&#10074;</button><button data-v="0.5">½×</button><button data-v="1" class="on">1×</button><button data-v="2">2×</button>
+  </div>
+  <button class="btn on" id="streamBtn" title="Show the auxin stream (A)">auxin</button>
+  <button class="btn" id="newBtn" title="Grow a new seed of this species (N)">new seed</button>
+  <button class="btn" id="shareBtn" title="Copy a link that regrows this plant, cut for cut">share</button>
+  <button class="btn" id="benchBtn">experiments</button>
+</footer>
+
+<div id="fatal"></div>
+<script>
+/* __BUNDLE__ */
+</script>
+</body>
+</html>
