@@ -58,7 +58,6 @@ class TendApp extends App {
     this.zoom = 1;
     this.speedMul = 1;
     this.cam.el = 0.16; this.cam.az = 0.55;
-    this._evSeen = 0;
     this.onEvent = null;     // the page's hook for anything worth saying
   }
 
@@ -72,7 +71,6 @@ class TendApp extends App {
     this.cuttings = [];
     this.flashes = [];
     this.hover = null; this.hoverStump = null;
-    this._evSeen = 0;
     this.bbS = null;
     if (this.trials) {
       this.trials = { light: null, cut: null, paste: null };
@@ -801,9 +799,8 @@ class TendApp extends App {
   // something is computed here off the plant, never written in advance.
   _readEvents() {
     const ev = this.plant.events;
-    // the plant keeps the last 64; `_evSeen` counts what has been read since the
-    // specimen was made, and events carry their own time, so a trimmed list
-    // cannot be double-read
+    // the plant keeps the last 64; each is marked as it is read, so a trimmed list
+    // cannot be read twice
     for (const e of ev) {
       if (e._read) continue;
       e._read = true;
@@ -824,19 +821,7 @@ class TendApp extends App {
       else if (e.kind === 'free') this._say('free');
     }
   }
-  _startLightTrial() {
-    const tips = [];
-    for (const ax of this.plant.axes) {
-      if (!ax.alive || !ax.meristem) continue;
-      tips.push({ ax, a0: this._tipToLamp(ax) });
-    }
-    this.trials.light = { t0: this.plant.time, tips };
-  }
-  _tipToLamp(ax) {
-    const tip = ax.tipPos(), L = this.lamp.pos;
-    v3norm(_tbA, v3sub(_tbA, L, tip));
-    return Math.acos(clamp(v3dot(_tbA, ax.dir), -1, 1));
-  }
+  _startLightTrial() { this.trials.light = { t0: this.plant.time }; }
   _measure() {
     const P = this.plant;
     const cm = (u) => Math.max(1, Math.round(u * WORLD.unitM * 100));

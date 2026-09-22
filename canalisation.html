@@ -6404,8 +6404,8 @@ const SPECIES_DEFAULTS = {
   // WHICH FIELD DECIDES BUD RELEASE. 'apex' is what shipped: a bud listens to its
   // own axis's tip alone, by straight-line distance. 'stream' is the auxin
   // actually flowing past it from every source above — own apex, every branch
-  // attached above it, paste on a stump — each draining or arriving at
-  // `patRatio` (see `Axis.streamAt`). A CUT axis uses the stream whatever this
+  // attached above it, paste on a stump — each draining or arriving at polar-
+  // transport speed (see `Axis.streamAt`). A CUT axis uses the stream whatever this
   // says, because a decapitated axis has no tip for the shipped rule to measure
   // from — that is the bug `prune()` shipped with. Default 'apex': every shipped
   // species is unchanged bud for bud.
@@ -6699,6 +6699,9 @@ class Plant {
     const gone = [], kept = [];
     for (const o of ax.organs) (o.birthLen > s ? gone : kept).push(o);
     ax.organs = kept;
+    // a freed bud that left with the cutting is not a source on the stump any more;
+    // what it had already sent down is in `level`, measured above
+    if (ax.freeBuds) ax.freeBuds = ax.freeBuds.filter(o => o.birthLen <= s);
     const goneAxes = [];
     const collect = (a) => { goneAxes.push(a); for (const k of a.kids) collect(k); };
     ax.kids = ax.kids.filter(k => {
